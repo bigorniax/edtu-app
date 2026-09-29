@@ -2042,7 +2042,12 @@
 <div id="accessOverlay"><div class="ao-text">PROCESSING</div></div>
 <div id="denyOverlay"><div class="deny-text">⛔ ACCESO DENEGADO</div></div>
 <audio id="alarmAudio" src="alarm.mp3" preload="auto"></audio>
-<audio id="approveAudio" src="approve.mp3" preload="auto"></audio>
+<!-- 🔇 Sin src a propósito: approve.mp3 no existe en el repo, y con src puesto el
+     navegador intentaba descargarlo en cada carga y soltaba un 404 en la consola.
+     playApprove() ya tiene plan B: si no hay audio, sintetiza el sonido con osciladores
+     (approveSound), que suena igual de bien y no pesa nada. Si algún día aparece el
+     archivo, basta con volver a ponerle el src. -->
+<audio id="approveAudio" preload="none"></audio>
 <audio id="mandoAudio" src="edturush.mp3?v=3" loop preload="auto"></audio>
 
 <div class="toast" id="toast"></div>
