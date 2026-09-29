@@ -730,6 +730,18 @@
   #robotFs .rb-center{display:flex;flex-direction:column;align-items:center;gap:8px;min-width:190px}
   #robotFs .rb-stick.sm{width:66px;height:66px}
   #robotFs .rb-sysrow{display:flex;justify-content:space-between;align-items:flex-end;font-size:11px;color:#8fb9ab;letter-spacing:.12em;margin-top:2px;padding:0 4px}
+  /* 🌈 el panel del LED RGB */
+  #robotFs .rb-rgbbox{margin-top:10px;padding:10px;border:1px solid #1e4f42;border-radius:12px;background:#07130f}
+  #robotFs .rb-rgbhead{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#8fb9ab;letter-spacing:.1em;margin-bottom:8px}
+  #robotFs .rb-rgbnow{display:flex;align-items:center;gap:7px;font-size:12px}
+  /* el puntito que enseña el color en el que va, para poder comparar de un vistazo
+     lo que dice la app con lo que se ve de verdad en el robot */
+  #robotFs #rbRgbDot{width:15px;height:15px;border-radius:50%;background:#000;border:1px solid #2a6b59;box-shadow:0 0 9px currentColor;transition:background .12s}
+  /* 15 por fila: los 20 fuertes ocupan fila y un tercio, los 10 suaves cierran abajo */
+  #robotFs .rb-rgbgrid{display:grid;grid-template-columns:repeat(15,1fr);gap:4px}
+  #robotFs .rb-rgbgrid button{aspect-ratio:1;border-radius:6px;border:1px solid #14342c;cursor:pointer;padding:0;transition:transform .09s}
+  #robotFs .rb-rgbgrid button:hover{transform:scale(1.22);z-index:2}
+  #robotFs .rb-rgbgrid button.on{outline:2px solid #fff;outline-offset:1px;transform:scale(1.12)}
   #robotFs .rb-sys b{color:#19ff85;font-size:12px}
   #robotFs .perfbars{display:flex;align-items:flex-end;gap:2px;height:20px;margin-top:2px}
   #robotFs .perfbars i{width:5px;background:#19ff85;box-shadow:0 0 5px rgba(25,255,133,.5);opacity:.8}
@@ -1392,6 +1404,32 @@
       <button class="rb-btn warn" id="rbEmerg">🔥 NITRO <small>(Y)</small></button>
       <button class="rb-btn" id="rbAvoid">🧭 Esquivar <small>(A)</small></button>
     </div>
+    <!-- 🌈 EL PANEL DEL LED RGB.
+         Nace de un problema muy concreto: David montó el LED y no podía comprobar si
+         estaba bien cableado, porque el único control que le prometí era el R stick...
+         y el R stick ya movía el cuello del radar. Con botones en pantalla puede probar
+         cada color con el dedo, sin mando y sin adivinar. -->
+    <div class="rb-rgbbox">
+      <div class="rb-rgbhead">
+        <span>🌈 LED RGB</span>
+        <span class="rb-rgbnow" id="rbRgbNow"><i id="rbRgbDot"></i><b id="rbRgbName">apagado</b></span>
+      </div>
+      <!-- el espectro: los 26 colores de la paleta, uno por botón -->
+      <div class="rb-rgbgrid" id="rbRgbGrid"></div>
+      <div class="rb-row rb-lights" style="margin-top:8px">
+        <button class="rb-btn" id="rbRgbPrev">◀ Anterior</button>
+        <button class="rb-btn" id="rbRgbNext">Siguiente ▶</button>
+        <button class="rb-btn" id="rbRgbOff">⚫ Apagar</button>
+      </div>
+      <div class="rb-row rb-lights">
+        <button class="rb-btn" id="rbRgbPatrol">🚨 Patrulla</button>
+        <button class="rb-btn" id="rbRgbRainbow">🌈 Arcoíris</button>
+        <button class="rb-btn" id="rbRgbPulse">💓 Latido</button>
+        <button class="rb-btn" id="rbRgbStrobe">⚡ Estrobo</button>
+      </div>
+      <div class="rr-tip">Con el <b>stick derecho</b>: <b>⟷</b> mueve el cuello del radar · <b>↕</b> cambia de color · <b>clic (R3)</b> = arcoíris on/off.</div>
+    </div>
+
     <div class="rb-sysrow">
       <div class="rb-sys">SISTEMA<br><b>• ESTABLE</b></div>
       <div class="rb-perf">RENDIMIENTO<div class="perfbars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
@@ -1403,7 +1441,7 @@
     </div>
 
     <div class="rb-help">
-      🎮 <b>Stick L</b> = manejar · <b>A</b> = esquivar · <b>X</b> = faros del. · <b>B</b> = trasero · <b>LB</b> = 🔢 DICE 67 · <b>RB</b> = 📯 BOCINA (mantén) · <b>RT</b> = TODO · <b>LT</b> = apagar · <b>Y</b> = 🔥 NITRO · <b>L3</b> = 🏁 carrera<br>
+      🎮 <b>Stick L</b> = manejar · <b>A</b> = esquivar · <b>X</b> = faros del. · <b>B</b> = trasero · <b>LB</b> = 🔢 DICE 67 · <b>RB</b> = 📯 BOCINA (mantén) · <b>RT</b> = TODO · <b>LT</b> = apagar · <b>Y</b> = 🔥 NITRO · <b>L3</b> = 🏁 carrera · <b>Stick R</b> ⟷ = 📡 radar, ↕ = 🌈 colores, <b>R3</b> = 🌈 arcoíris<br>
       ⌨️ <b>WASD</b>/Flechas = manejar · <b>Espacio</b> = parar · <b>G</b> = esquivar · <b>L</b> = faros · <b>O</b> = todo ON · <b>P</b> = apagar (teclado)<br>
       Requiere <b>Chrome/Edge en PC</b> y el HC-05 emparejado en Windows.<br>
       Ábrela en <b>http://localhost:8080</b> (corre <b>server.ps1</b>) para que el navegador permita el puerto Bluetooth.
@@ -5057,6 +5095,57 @@ const Robot = {
     const dz=0.30;
     let x=gp.axes[0]||0, y=gp.axes[1]||0;
     this._rx = gp.axes[2]||0;   // R stick horizontal -> radar (servo del ultrasonido)
+
+    /* 🌈 EL STICK DERECHO HACE DOS COSAS A LA VEZ, UNA POR EJE.
+     *
+     *     ⟷ horizontal  ->  mueve el cuello del radar (como siempre)
+     *     ↕  vertical    ->  cambia de color
+     *
+     * Idea de David, y es mejor que la primera que monté (mantener R3 apretado): en
+     * plena batalla no tienes dedos libres para mantener botones. Así solo mueves el
+     * pulgar y los dos ejes son independientes — puedes apuntar el radar y cambiar de
+     * color al mismo tiempo, sin que uno estorbe al otro.
+     *
+     * Arriba avanza en la paleta, abajo retrocede. (El eje vertical de los mandos viene
+     * al revés: -1 es arriba. Por eso el signo va cambiado.)
+     *
+     * La ZONA MUERTA de 0.45 es clave: sin ella, la inclinación normal del stick al
+     * apuntar el radar te cambiaría el color sin querer. Hay que empujar a propósito. */
+    const ry = gp.axes[3] || 0;                           // vertical del stick derecho
+    if(Math.abs(ry) > 0.45){
+      const ahora = performance.now();
+      // cuanto más inclinado, más rápido pasan los colores (de 190 a 70 ms por color)
+      const espera = 190 - Math.min(1, (Math.abs(ry)-0.45)/0.55) * 120;
+      if(ahora - this._rgbUlt >= espera){
+        this._rgbUlt = ahora;
+        // si venías del arcoíris, elegir un color a mano lo apaga solo: pediste un color
+        // concreto, así que quedarte en arcoíris sería ignorarte
+        this.rgbArco = false;
+        this.rgbSet(this.rgbColor + (ry < 0 ? 1 : -1), true);   // ry<0 = arriba = avanzar
+      }
+    } else {
+      this._rgbUlt = 0;   // stick al centro -> el siguiente empujón cambia al instante
+    }
+
+    /* 🌈 R3 (clic del stick derecho) = ARCOÍRIS on/off.
+     *
+     * Queda al lado de su stick: con el mismo pulgar eliges color moviendo ↕, y si te
+     * cansas de buscar, un clic y el LED hace el arcoíris solo.
+     *
+     * Es un interruptor, no un botón de ida: si el arcoíris ya está puesto, otro clic lo
+     * devuelve al color en el que estabas. Si no, tendrías que bajar al panel de la app
+     * para salir del efecto, que es justo lo que David no puede hacer en plena batalla.
+     *
+     * Detecta el FLANCO (apretar), no el estar apretado: sin eso, mantenerlo medio
+     * segundo lo encendería y apagaría treinta veces. */
+    const r3 = !!(gp.buttons[11] && gp.buttons[11].pressed);
+    if(r3 && !this._r3Prev){
+      this.rgbArco = !this.rgbArco;
+      if(this.rgbArco){ this.cmd("%Y#"); this.log("🌈 Arcoíris ON"); }
+      else            { this.rgbSet(this.rgbColor); this.log("🌈 Arcoíris OFF — vuelve a "+(RGB_PALETA[this.rgbColor]||["","?"])[1]); }
+    }
+    this._r3Prev = r3;
+
     if(gp.buttons[12] && gp.buttons[12].pressed) y=-1;   // cruceta ↑
     if(gp.buttons[13] && gp.buttons[13].pressed) y=1;    // cruceta ↓
     if(gp.buttons[14] && gp.buttons[14].pressed) x=-1;   // cruceta ←
@@ -5321,6 +5410,92 @@ $("rbAllOff").onclick     = ()=>Robot.cmd("%X#");   // apagar todo
 })();   // 🔥 NITRO = mantener presionado
 $("rbAvoid").onclick      = ()=>Robot.cmd("%A#");   // esquivar
 $("rbRadarAuto").onclick  = ()=>Robot.toggleRadarAuto();   // 📡 barrido automático on/off
+
+/* 🌈 EL ESPECTRO DEL LED RGB.
+ *
+ * Esta paleta es la MISMA que la del firmware, en el mismo orden. Si cambias una,
+ * cambia la otra: el comando %C7# manda el número 7, no el color, así que si las dos
+ * listas no coinciden, pides naranja y sale morado.
+ *
+ * Son los 360° de la rueda de color de 15 en 15, más blanco y apagado. 24 pasos y no
+ * 100 porque David pidió cambiar de color RÁPIDO en mitad de la batalla: con 24 das la
+ * vuelta entera en poco más de un segundo y cada paso se distingue del anterior. */
+/* ⚠️ Los botones se pintan con el color que SE VE EN EL ROBOT, no con el número que se
+ * manda. No es lo mismo: al LED se le manda "rojo 255, verde 38" y en el robot eso se ve
+ * naranja, pero si pintaras el botón con ese mismo 255,38,0 saldría casi rojo en la
+ * pantalla. Entonces el botón mentiría.
+ *
+ * Por eso cada entrada lleva DOS cosas: el color de pantalla (para que el botón se vea
+ * como el LED) y el nombre. El número del color es su posición en la lista, y ESO sí
+ * tiene que cuadrar exactamente con la PALETA del firmware. */
+const RGB_PALETA = [
+  // ── FUERTES ──
+  ["#ff2a1a","rojo"],          ["#ff4a1a","rojo fuego"],    ["#ff6a1a","naranja"],
+  ["#ff8320","naranja claro"], ["#ffa025","ámbar"],         ["#ffc130","dorado"],
+  ["#ffe63a","amarillo"],      ["#b8f030","lima"],          ["#25e63a","verde"],
+  ["#25e688","verde menta"],   ["#25e6c0","turquesa"],      ["#25d0ff","cyan"],
+  ["#2596ff","azul cielo"],    ["#3a52ff","azul"],          ["#8a45ff","violeta"],
+  ["#b845ff","morado"],        ["#ff45e0","magenta"],       ["#ff4590","rosa"],
+  ["#ffb0a0","blanco cálido"], ["#fff0e8","BLANCO"],
+  // ── SUAVES (media luz, tipo neón) ──
+  ["#8a1a12","rojo suave"],    ["#8a3512","naranja suave"], ["#8a5a18","ámbar suave"],
+  ["#188a25","verde suave"],   ["#188a78","turquesa suave"],["#2a35a0","azul suave"],
+  ["#6a2a9a","morado suave"],  ["#8a1a4a","rosa suave"],    ["#9a7a68","blanco suave"],
+  ["#101010","apagado"],
+];
+
+Robot.rgbColor = 0;          // en qué color de la paleta va
+Robot._rgbUlt  = 0;          // cuándo cambió de color por última vez (para no pasarse de largo)
+Robot.rgbArco  = false;      // ¿está puesto el arcoíris? (lo enciende y apaga el clic de R3)
+Robot._r3Prev  = false;      // ¿estaba apretado R3 la vuelta anterior? (para ver el flanco)
+
+/* Pinta el estado en el panel: el puntito de color y su nombre. Sirve para comparar de
+ * un vistazo lo que CREE la app con lo que se ve de verdad en el robot. Si no coinciden,
+ * es que el cable de ese color está suelto. */
+Robot.rgbPinta = function(){
+  const [hex,nom] = RGB_PALETA[this.rgbColor] || ["#000","?"];
+  const dot = $("rbRgbDot"); if(dot){ dot.style.background = hex; dot.style.color = hex; }
+  const nm  = $("rbRgbName"); if(nm) nm.textContent = this.rgbArco ? "arcoíris 🌈" : nom;
+  document.querySelectorAll("#rbRgbGrid button").forEach((b,i)=>b.classList.toggle("on", !this.rgbArco && i===this.rgbColor));
+  const ar = $("rbRgbRainbow"); if(ar) ar.classList.toggle("primary", !!this.rgbArco);
+};
+
+/* Manda un color concreto al robot. El firmware lo entiende como %C<n>#. */
+Robot.rgbSet = function(n, callar){
+  if(n < 0) n = RGB_PALETA.length - 1;              // si te pasas por abajo, das la vuelta
+  if(n >= RGB_PALETA.length) n = 0;                 // y si te pasas por arriba, también
+  this.rgbColor = n;
+  this.rgbArco = false;                             // pedir un color concreto sale del arcoíris
+  this.cmd("%C"+n+"#");
+  this.rgbPinta();
+  if(!callar) this.log("🌈 "+RGB_PALETA[n][1]);
+};
+
+// 🎨 Construir el espectro: un botón por color, pintado de su propio color.
+(function(){
+  const g = $("rbRgbGrid"); if(!g) return;
+  RGB_PALETA.forEach(([hex,nom],i)=>{
+    const b = document.createElement("button");
+    b.style.background = hex;
+    b.title = nom;
+    b.onclick = ()=>Robot.rgbSet(i);
+    g.appendChild(b);
+  });
+  Robot.rgbPinta();
+})();
+
+$("rbRgbPrev").onclick    = ()=>Robot.rgbSet(Robot.rgbColor - 1);
+$("rbRgbNext").onclick    = ()=>Robot.rgbSet(Robot.rgbColor + 1);
+$("rbRgbOff").onclick     = ()=>{ Robot.rgbArco=false; Robot.cmd("%T#"); Robot.rgbPinta(); Robot.log("🌈 RGB apagado"); };
+$("rbRgbPatrol").onclick  = ()=>{ Robot.rgbArco=false; Robot.cmd("%Q#"); Robot.rgbPinta(); Robot.log("🚨 Patrulla"); };
+// el mismo interruptor que el clic de R3, para que los dos digan siempre lo mismo
+$("rbRgbRainbow").onclick = ()=>{
+  Robot.rgbArco = !Robot.rgbArco;
+  if(Robot.rgbArco){ Robot.cmd("%Y#"); Robot.rgbPinta(); Robot.log("🌈 Arcoíris ON"); }
+  else Robot.rgbSet(Robot.rgbColor);
+};
+$("rbRgbPulse").onclick   = ()=>{ Robot.rgbArco=false; Robot.cmd("%U#"); Robot.rgbPinta(); Robot.log("💓 Latido"); };
+$("rbRgbStrobe").onclick  = ()=>{ Robot.rgbArco=false; Robot.cmd("%Z#"); Robot.rgbPinta(); Robot.log("⚡ Estrobo"); };
 // D-pad en pantalla (toque/clic) → mismo camino que el mando
 document.querySelectorAll("#robotFs .rb-pad button").forEach(btn=>{
   const cmd=btn.getAttribute("data-cmd");

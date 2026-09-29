@@ -1,0 +1,7 @@
+# 🔀 Qué hacer con una dirección que no existe.
+#
+# El servidor viejo (server.js en Heroku) devolvía index.html para cualquier ruta rara. Esto hace
+# lo mismo en Cloudflare Pages: si alguien escribe /loquesea, ve EDTU en vez de un error.
+#
+# El "200" del final es importante: significa "enséñale la portada SIN cambiarle la dirección".
+/*    /index.html   200

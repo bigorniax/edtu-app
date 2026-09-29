@@ -1,0 +1,17 @@
+# 🧠 La memoria del navegador.
+#
+# Estas son las mismas reglas que tenía server.js, traducidas a lo que entiende Cloudflare Pages.
+#
+# La idea es sencilla: EDTU cambia mucho, así que el navegador NO debe guardarse las páginas —o
+# verías la versión de ayer cada vez que entras. La única excepción es la base de conocimiento de
+# WALLY, que es un archivo enorme y casi nunca cambia: esa sí se guarda una semana, y así WALLY
+# arranca rápido en vez de bajarse un mega cada vez.
+
+/*
+  Cache-Control: no-store, no-cache, must-revalidate
+
+/wally-kb.js
+  Cache-Control: public, max-age=604800
+
+/kb-preguntas.json
+  Cache-Control: public, max-age=604800
