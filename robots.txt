@@ -1,0 +1,8 @@
+# 🤖 robots.txt — le dice a Google (y a todos los buscadores) que SÍ
+# pueden entrar y mirar toda la página, para poder mostrarla en las búsquedas.
+
+User-agent: *
+Allow: /
+
+# Dónde está el mapa del sitio (la lista de páginas para Google)
+Sitemap: https://www.edtu.cl/sitemap.xml

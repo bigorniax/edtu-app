@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 🗺️ El mapa del sitio: la lista de todas las páginas de EDTU para que
+     Google las encuentre todas, no solo la portada. Cada <url> es una página. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://www.edtu.cl/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url><loc>https://www.edtu.cl/tennis.html</loc><priority>0.8</priority></url>
+  <url><loc>https://www.edtu.cl/starwars.html</loc><priority>0.8</priority></url>
+  <url><loc>https://www.edtu.cl/canela.html</loc><priority>0.8</priority></url>
+  <url><loc>https://www.edtu.cl/turbo.html</loc><priority>0.8</priority></url>
+  <url><loc>https://www.edtu.cl/rubik.html</loc><priority>0.8</priority></url>
+  <url><loc>https://www.edtu.cl/jurassic.html</loc><priority>0.8</priority></url>
+  <url><loc>https://www.edtu.cl/notagame.html</loc><priority>0.8</priority></url>
+  <url><loc>https://www.edtu.cl/scream.html</loc><priority>0.8</priority></url>
+</urlset>
