@@ -8,8 +8,16 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <link rel="manifest" href="manifest.json" />
-<link rel="apple-touch-icon" href="icon-192.png?v=3" />
-<link rel="icon" type="image/png" href="icon-192.png?v=3" />
+<!-- 🎮 EL FAVICON (el iconito que sale en la pestaña y en Google, al lado del
+     resultado de búsqueda). Google tiene manías: quiere un favicon declarado
+     en la raíz, cuadrado, y de al menos 48x48. Por eso lo declaramos de varias
+     formas, para que SÍ o SÍ use el logo de EDTU y no el planeta gris genérico.
+     El ?v=4 obliga a Google y al navegador a bajar el nuevo, no el viejo. -->
+<link rel="icon" href="/favicon.ico?v=4" sizes="any" />
+<link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png?v=4" />
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png?v=4" />
+<link rel="apple-touch-icon" href="/icon-192.png?v=4" />
+<link rel="shortcut icon" href="/icon-192.png?v=4" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
 <!-- ═══════════════════════════════════════════════════════════════
