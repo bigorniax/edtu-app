@@ -154,7 +154,7 @@
   .lnd-me .lnd-mename{color:#dff;font-family:"Consolas",monospace;font-weight:700;font-size:14px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
   /* Panel de crear cuenta / entrar */
-  #authFs{position:fixed;inset:0;z-index:200;display:none;align-items:center;justify-content:center;
+  #authFs{position:fixed;inset:0;z-index:500;display:none;align-items:center;justify-content:center;
     background:rgba(2,6,16,.82);backdrop-filter:blur(6px)}
   #authFs.show{display:flex}
   #authFs .auth-card{position:relative;width:min(400px,92vw);background:linear-gradient(160deg,#0a1428,#060c18);
@@ -11834,9 +11834,18 @@ document.addEventListener("keydown",e=>{
     e.preventDefault(); e.stopPropagation(); return;
   }
   if($("bioFs").classList.contains("show")){ if(e.key==="Escape") Secret.bioClose(); return; }
+  // 👤 Si el panel de CUENTAS (Sign up / Sign in) está abierto, NO tocar nada:
+  // el jugador está escribiendo su correo y su contraseña, hay que dejarlo.
+  if($("authFs") && $("authFs").classList.contains("show")){
+    if(e.key==="Escape") $("authFs").classList.remove("show");
+    return;
+  }
   if(!Secret.landingVisible()) return;   // dentro de la app / lock real: no intervenir
-  // PORTADA visible: si el foco quedó en el PIN escondido, le robamos la tecla
+  // PORTADA visible: si el foco quedó en el PIN escondido, le robamos la tecla.
+  // PERO solo si ese input es el oculto, NO los campos de la cuenta de jugador.
   const t=e.target, typing=t&&(t.tagName==="INPUT"||t.tagName==="TEXTAREA"||t.isContentEditable);
+  const esCampoCuenta = t && (t.id==="authEmail" || t.id==="authPass");
+  if(esCampoCuenta) return;   // dejar escribir correo y contraseña tranquilo
   const k=(e.key||"").toLowerCase();
   if(typing && (k.length===1 || e.key==="Enter" || e.key==="Backspace")){
     e.preventDefault(); e.stopPropagation();
