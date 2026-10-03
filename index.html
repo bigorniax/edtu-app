@@ -139,6 +139,36 @@
     background:radial-gradient(circle at 50% 20%,#20063a,#050011 70%)}
   #landing.gaming{z-index:110}   /* al pulsar PLAY: la portada baja debajo de los juegos (para que se vean) */
   #landing .lnd-card{display:flex;flex-direction:column;align-items:center;padding:34px 30px;max-width:92vw}
+
+  /* 👤 Botones Sign up / Sign in arriba a la derecha de la portada */
+  .lnd-auth, .lnd-me{position:absolute;top:16px;right:64px;display:flex;gap:10px;align-items:center;z-index:145}
+  .lnd-authbtn{
+    font-family:"Consolas",ui-monospace,monospace;font-size:13px;font-weight:700;letter-spacing:.04em;
+    color:#dff;background:rgba(10,20,40,.55);border:1.5px solid rgba(80,200,255,.5);
+    border-radius:10px;padding:9px 16px;cursor:pointer;transition:all .15s;backdrop-filter:blur(4px);
+  }
+  .lnd-authbtn:hover{border-color:var(--ncy,#2fd0ff);box-shadow:0 0 12px rgba(47,208,255,.5);transform:translateY(-1px)}
+  .lnd-authbtn.primary{color:#021018;background:linear-gradient(90deg,#39ff14,#2fd0ff);border-color:transparent;font-weight:900}
+  .lnd-me .lnd-meava{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-weight:900;color:#021018;background:linear-gradient(135deg,#39ff14,#2fd0ff);font-size:16px}
+  .lnd-me .lnd-mename{color:#dff;font-family:"Consolas",monospace;font-weight:700;font-size:14px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  /* Panel de crear cuenta / entrar */
+  #authFs{position:fixed;inset:0;z-index:200;display:none;align-items:center;justify-content:center;
+    background:rgba(2,6,16,.82);backdrop-filter:blur(6px)}
+  #authFs.show{display:flex}
+  #authFs .auth-card{position:relative;width:min(400px,92vw);background:linear-gradient(160deg,#0a1428,#060c18);
+    border:1.5px solid rgba(80,200,255,.4);border-radius:18px;padding:30px 26px;
+    box-shadow:0 0 40px rgba(47,208,255,.25)}
+  #authFs h2{margin:0 0 4px;color:#2fd0ff;letter-spacing:.1em;text-shadow:0 0 12px rgba(47,208,255,.5)}
+  #authFs .v-sub{opacity:.55;font-size:11px;margin-bottom:18px}
+  .auth-lbl{display:block;color:#9fd;font-size:11px;letter-spacing:.08em;margin:12px 0 5px;opacity:.8}
+  .auth-inp{width:100%;box-sizing:border-box;background:rgba(5,12,24,.8);border:1.5px solid rgba(80,200,255,.3);
+    border-radius:10px;padding:12px 14px;color:#eff;font-size:15px;font-family:inherit;outline:none;transition:border .15s}
+  .auth-inp:focus{border-color:#2fd0ff;box-shadow:0 0 10px rgba(47,208,255,.3)}
+  .auth-switch{text-align:center;margin-top:16px;font-size:12px;opacity:.75}
+  .auth-switch a{color:#39ff14;cursor:pointer;text-decoration:underline;margin-left:5px}
+  #authMsg{text-align:center;margin-top:12px;min-height:18px;font-size:13px}
   #landing .lnd-logo{font-size:12px;letter-spacing:.35em;color:var(--npu);text-shadow:0 0 10px var(--npu);opacity:.9;margin-bottom:6px}
   #landing .lnd-btn{width:min(340px,86vw);font-size:17px;padding:15px 20px;margin-top:12px}
   /* botón PLAY con pulso gamer continuo (morado <-> rojo neón) */
@@ -957,9 +987,43 @@
   <span class="hletter mono" id="hlH" data-l="h">H</span>
   <span class="hletter mono" id="hlA" data-l="a">A</span>
   <span class="hletter mono" id="hlL" data-l="l">L</span>
+  <!-- 👤 Cuentas de jugadores: Sign up / Sign in arriba a la derecha de la portada -->
+  <div class="lnd-auth" id="lndAuth">
+    <button class="lnd-authbtn" id="btnSignin">Sign in</button>
+    <button class="lnd-authbtn primary" id="btnSignup">Sign up</button>
+  </div>
+  <!-- Cuando YA entraste, en vez de los botones sale tu nombre -->
+  <div class="lnd-me" id="lndMe" style="display:none">
+    <span class="lnd-meava" id="lndMeAva">?</span>
+    <span class="lnd-mename" id="lndMeName">jugador</span>
+    <button class="lnd-authbtn" id="btnSignout">Salir</button>
+  </div>
+
   <div class="lnd-card">
     <button class="btn lnd-btn play-neon" id="lndPlay">▶ PLAY</button>
     <div class="mono" style="font-size:10px;opacity:.45;margin-top:20px">www.edtu.cl</div>
+  </div>
+</div>
+
+<!-- ============ PANEL DE CUENTAS (Sign up / Sign in) ============ -->
+<div id="authFs">
+  <div class="auth-card">
+    <button class="v-close" id="authClose" title="Cerrar">✕</button>
+    <h2 class="mono" id="authTitle">CREAR CUENTA</h2>
+    <div class="v-sub mono" id="authSub">Tu correo del colegio y una contraseña</div>
+
+    <label class="auth-lbl mono">Correo</label>
+    <input class="auth-inp" id="authEmail" type="email" autocomplete="email" placeholder="tunombre@snm.cl" />
+
+    <label class="auth-lbl mono">Contraseña</label>
+    <input class="auth-inp" id="authPass" type="password" autocomplete="current-password" placeholder="mínimo 6 letras o números" />
+
+    <button class="btn btn-primary" id="authGo" style="width:100%;margin-top:14px">CREAR CUENTA</button>
+    <div class="auth-switch mono">
+      <span id="authSwitchTxt">¿Ya tienes cuenta?</span>
+      <a id="authSwitch">Entra aquí</a>
+    </div>
+    <div class="v-msg mono" id="authMsg"></div>
   </div>
 </div>
 
@@ -2230,6 +2294,128 @@ function readImageScaled(file, max, cb){
 function paintAvatar(el, photo, initial){
   if(photo){ el.style.backgroundImage=`url(${photo})`; el.textContent=""; }
   else { el.style.backgroundImage=""; el.textContent=initial||"?"; }  // "" → vuelve al degradado del CSS
+}
+
+/* ============================================================
+   👤 CUENTAS DE JUGADORES (Sign up / Sign in)
+
+   Para que los amigos del cole se creen una cuenta con su correo,
+   y que sus récords los sigan a cualquier computador (no solo al suyo).
+
+   Usa Supabase Auth: las contraseñas las guarda Supabase ENCRIPTADAS,
+   nadie las puede leer. Nosotros solo vemos el correo y el nombre.
+
+   OJO: esto es SEPARADO del login de espías (el de escribir HOLA + rostro).
+   Son dos cosas distintas que conviven sin molestarse.
+   ============================================================ */
+const Cuenta = {
+  sb: null,            // cliente de Supabase (se crea al arrancar)
+  user: null,          // el jugador que entró (o null si nadie entró)
+  modo: "signup",      // "signup" (crear) o "signin" (entrar)
+
+  // Arranca el cliente de Supabase y mira si ya había alguien con sesión abierta.
+  async init(){
+    if(!(window.SB_URL && window.SB_KEY && window.supabase && String(SB_URL).indexOf("http")===0)) return;
+    // persistSession:true -> que la sesión aguante aunque cierres y vuelvas a abrir
+    this.sb = window.supabase.createClient(SB_URL, SB_KEY, { auth:{ persistSession:true, autoRefreshToken:true } });
+    try{
+      const { data } = await this.sb.auth.getSession();
+      if(data && data.session){ this.user = data.session.user; }
+    }catch(e){}
+    this.pinta();
+  },
+
+  // Crear cuenta nueva.
+  async registrar(email, pass){
+    if(!this.sb) throw new Error("Las cuentas no están disponibles ahora mismo.");
+    const { data, error } = await this.sb.auth.signUp({ email, password: pass });
+    if(error) throw error;
+    // Si "Confirm email" está apagado, data.session viene llena y ya entró.
+    if(data.session){ this.user = data.session.user; }
+    else { this.user = data.user; }  // por si pide confirmar correo
+    this.pinta();
+    return !!data.session;   // true = ya entró; false = tiene que confirmar correo
+  },
+
+  // Entrar con cuenta ya creada.
+  async entrar(email, pass){
+    if(!this.sb) throw new Error("Las cuentas no están disponibles ahora mismo.");
+    const { data, error } = await this.sb.auth.signInWithPassword({ email, password: pass });
+    if(error) throw error;
+    this.user = data.user;
+    this.pinta();
+  },
+
+  // Salir.
+  async salir(){
+    if(this.sb){ try{ await this.sb.auth.signOut(); }catch(e){} }
+    this.user = null;
+    this.pinta();
+  },
+
+  // ¿Hay alguien con cuenta abierta?
+  logueado(){ return !!this.user; },
+
+  // El nombre bonito del jugador (lo de antes de la @ del correo).
+  nombre(){
+    if(!this.user) return "";
+    const e = this.user.email || "";
+    return e.split("@")[0] || "jugador";
+  },
+
+  // Guardar un récord. Solo guarda si es MEJOR que el que ya tenía.
+  // Lo llaman los juegos al terminar: Cuenta.guardarRecord("tennis", 1200)
+  async guardarRecord(juego, puntos){
+    if(!this.sb || !this.user) return;   // sin cuenta, no se guarda en la nube (pero el juego sigue)
+    try{
+      // ¿cuál es su récord actual en este juego?
+      const { data: prev } = await this.sb.from("player_scores")
+        .select("best").eq("player_id", this.user.id).eq("game", juego).maybeSingle();
+      const antes = (prev && prev.best) || 0;
+      if(puntos <= antes) return;   // no superó su récord, no hacemos nada
+      // guardar el nuevo récord (insertar o actualizar)
+      await this.sb.from("player_scores").upsert({
+        player_id: this.user.id, game: juego, best: puntos, updated_at: new Date().toISOString()
+      }, { onConflict: "player_id,game" });
+    }catch(e){ /* si falla la nube, el juego sigue igual */ }
+  },
+
+  // Leer el récord del jugador en un juego (para mostrarlo).
+  async leerRecord(juego){
+    if(!this.sb || !this.user) return 0;
+    try{
+      const { data } = await this.sb.from("player_scores")
+        .select("best").eq("player_id", this.user.id).eq("game", juego).maybeSingle();
+      return (data && data.best) || 0;
+    }catch(e){ return 0; }
+  },
+
+  // Actualiza la portada: muestra los botones o el nombre del jugador.
+  pinta(){
+    const auth = $("lndAuth"), me = $("lndMe");
+    if(!auth || !me) return;
+    if(this.logueado()){
+      auth.style.display = "none";
+      me.style.display = "flex";
+      const n = this.nombre();
+      $("lndMeName").textContent = n;
+      $("lndMeAva").textContent = (n[0] || "?").toUpperCase();
+    } else {
+      auth.style.display = "flex";
+      me.style.display = "none";
+    }
+  },
+};
+
+// Traduce los errores de Supabase a español de niño.
+function authErrorEs(err){
+  const m = (err && err.message || "").toLowerCase();
+  if(m.includes("already registered") || m.includes("already been registered")) return "Ese correo ya tiene cuenta. Prueba a entrar en vez de crear.";
+  if(m.includes("invalid login")) return "Correo o contraseña incorrectos.";
+  if(m.includes("password should be")) return "La contraseña debe tener al menos 6 letras o números.";
+  if(m.includes("invalid email") || m.includes("unable to validate email")) return "Ese correo no se ve bien. Revísalo.";
+  if(m.includes("email not confirmed")) return "Tienes que confirmar tu correo primero (revisa tu bandeja).";
+  return err && err.message || "Algo salió mal. Inténtalo de nuevo.";
 }
 
 // Guardado robusto: avisa si el navegador no permite persistir (típico al abrir como file://).
@@ -9842,6 +10028,59 @@ function updGameRecords(){ try{
       }catch(e){} },600); } }catch(e){} } }
 }catch(e){} }
 $("lndPlay").onclick=()=>{ $("landing").classList.add("gaming"); updGameRecords(); $("gamePick").classList.add("open"); };   // PLAY = menú de TODOS los juegos
+
+/* ============ EVENTOS DE LAS CUENTAS (Sign up / Sign in) ============ */
+Cuenta.init();   // arranca Supabase y mira si ya había sesión
+
+// Abre el panel en modo "crear cuenta" o "entrar"
+function abrirAuth(modo){
+  Cuenta.modo = modo;
+  const crear = (modo === "signup");
+  $("authTitle").textContent = crear ? "CREAR CUENTA" : "ENTRAR";
+  $("authSub").textContent   = crear ? "Tu correo del colegio y una contraseña" : "Con tu correo y contraseña";
+  $("authGo").textContent    = crear ? "CREAR CUENTA" : "ENTRAR";
+  $("authSwitchTxt").textContent = crear ? "¿Ya tienes cuenta?" : "¿No tienes cuenta?";
+  $("authSwitch").textContent    = crear ? "Entra aquí" : "Créala aquí";
+  $("authPass").autocomplete = crear ? "new-password" : "current-password";
+  $("authMsg").textContent = "";
+  $("authFs").classList.add("show");
+  setTimeout(()=>$("authEmail").focus(), 100);
+}
+function cerrarAuth(){ $("authFs").classList.remove("show"); }
+
+if($("btnSignup")) $("btnSignup").onclick = ()=>abrirAuth("signup");
+if($("btnSignin")) $("btnSignin").onclick = ()=>abrirAuth("signin");
+if($("authClose")) $("authClose").onclick = cerrarAuth;
+if($("authSwitch")) $("authSwitch").onclick = ()=>abrirAuth(Cuenta.modo === "signup" ? "signin" : "signup");
+if($("btnSignout")) $("btnSignout").onclick = async ()=>{ await Cuenta.salir(); toast("👋 Cerraste sesión"); };
+
+// El botón grande: crear cuenta o entrar
+if($("authGo")) $("authGo").onclick = async ()=>{
+  const email = ($("authEmail").value || "").trim();
+  const pass  = $("authPass").value || "";
+  const msg = $("authMsg");
+  if(!email || !email.includes("@")){ msg.style.color="#ff5b6e"; msg.textContent="Escribe un correo válido."; return; }
+  if(pass.length < 6){ msg.style.color="#ff5b6e"; msg.textContent="La contraseña necesita al menos 6 letras o números."; return; }
+  msg.style.color="#9fd"; msg.textContent="Un momento…";
+  $("authGo").disabled = true;
+  try{
+    if(Cuenta.modo === "signup"){
+      const yaEntro = await Cuenta.registrar(email, pass);
+      if(yaEntro){ msg.style.color="#39ff14"; msg.textContent="¡Cuenta creada! 🎉"; toast("🎉 ¡Bienvenido a EDTU, "+Cuenta.nombre()+"!"); setTimeout(cerrarAuth, 900); }
+      else { msg.style.color="#ffd12e"; msg.textContent="Revisa tu correo para confirmar la cuenta."; }
+    } else {
+      await Cuenta.entrar(email, pass);
+      msg.style.color="#39ff14"; msg.textContent="¡Entraste! 🎮"; toast("🎮 Hola de nuevo, "+Cuenta.nombre());
+      setTimeout(cerrarAuth, 800);
+    }
+  }catch(e){
+    msg.style.color="#ff5b6e"; msg.textContent = authErrorEs(e);
+  }finally{
+    $("authGo").disabled = false;
+  }
+};
+// Enter en la contraseña = darle al botón
+if($("authPass")) $("authPass").onkeydown = (e)=>{ if(e.key==="Enter"){ e.preventDefault(); $("authGo").click(); } };
 // 🏆 SALA DE TROFEOS: todos los récords, medallas y WALLYs de los 5 juegos en un solo panel
 function buildTrophies(){ try{
   const g=(k)=>{ try{ return localStorage.getItem(k); }catch(e){ return null; } };
