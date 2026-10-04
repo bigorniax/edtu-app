@@ -257,9 +257,9 @@
   .hub-rec-best{font-weight:900;color:#ffd12e;font-size:20px;text-shadow:0 0 10px rgba(255,209,46,.4)}
   .hub-rec-empty{text-align:center;padding:30px;color:#8fb0cc}
   /* chat de amigos */
-  .chat-wrap{display:flex;gap:16px;height:calc(100vh - 160px);max-width:900px}
-  .chat-side{width:260px;flex-shrink:0;display:flex;flex-direction:column;
-    background:rgba(8,20,40,.6);border:1.5px solid rgba(47,208,255,.2);border-radius:16px;padding:12px;overflow:hidden}
+  .chat-wrap{display:flex;gap:14px;height:calc(100vh - 130px);max-width:1400px}
+  .chat-side{width:215px;flex-shrink:0;display:flex;flex-direction:column;
+    background:rgba(8,20,40,.6);border:1.5px solid rgba(47,208,255,.2);border-radius:16px;padding:10px;overflow:hidden}
   .chat-search{margin-bottom:8px}
   .chat-buscarres{max-height:160px;overflow-y:auto}
   .chat-buscarres:not(:empty){margin-bottom:10px;border-bottom:1px solid rgba(47,208,255,.15);padding-bottom:8px}
@@ -279,11 +279,22 @@
     border:1.5px solid rgba(47,208,255,.2);border-radius:16px;overflow:hidden}
   .chat-conv-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;
     border-bottom:1px solid rgba(47,208,255,.2);color:#fff;font-weight:700}
-  .chat-msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px}
-  .chat-msg{max-width:72%;padding:9px 13px;border-radius:14px;font-size:14px;line-height:1.4;word-wrap:break-word}
-  .chat-msg.mio{align-self:flex-end;background:linear-gradient(135deg,#2a8f2a,#1a6a1a);color:#fff;border-bottom-right-radius:4px}
-  .chat-msg.otro{align-self:flex-start;background:rgba(47,208,255,.14);color:#dff;border-bottom-left-radius:4px}
-  .chat-msg .who{display:block;font-size:11px;opacity:.7;margin-bottom:2px;font-weight:700}
+  .chat-msgs{flex:1;overflow-y:auto;padding:18px 20px;display:flex;flex-direction:column;gap:14px}
+  /* cada mensaje: avatar + (nombre encima de la burbuja) */
+  .chat-row{display:flex;gap:10px;align-items:flex-start;max-width:78%}
+  .chat-row.mio{align-self:flex-end;flex-direction:row-reverse}
+  .chat-row.otro{align-self:flex-start}
+  .chat-mava{width:38px;height:38px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+    font-weight:900;font-size:16px;color:#021018;background:linear-gradient(135deg,#39ff14,#2fd0ff);
+    background-size:cover;background-position:center;overflow:hidden}
+  .chat-mava.foto{color:transparent}
+  .chat-bub{display:flex;flex-direction:column;min-width:0}
+  .chat-row.mio .chat-bub{align-items:flex-end}
+  .chat-who{font-size:12px;font-weight:800;color:#8fd0ff;margin-bottom:3px;padding:0 4px}
+  .chat-row.mio .chat-who{color:#9bffb0}
+  .chat-msg{padding:11px 15px;border-radius:16px;font-size:15px;line-height:1.45;word-wrap:break-word;overflow-wrap:anywhere}
+  .chat-msg.mio{background:linear-gradient(135deg,#2a8f2a,#1a6a1a);color:#fff;border-bottom-right-radius:5px}
+  .chat-msg.otro{background:rgba(47,208,255,.14);color:#eff;border-bottom-left-radius:5px}
   .chat-input{display:flex;gap:8px;padding:12px;border-top:1px solid rgba(47,208,255,.2)}
   .chat-input .auth-inp{flex:1}
   .chat-nodb{text-align:center;color:#ffd12e;background:rgba(40,30,4,.5);border:1px solid rgba(255,209,46,.3);
@@ -1298,6 +1309,16 @@
       <h1 class="hub-h1">⚙️ Configuración</h1>
       <div class="hub-config">
         <div class="hub-cfg-row"><span>Correo</span><b id="cfgEmail">—</b></div>
+
+        <div class="hub-cfg-field">
+          <label>Tu foto de perfil</label>
+          <div class="hub-cfg-inline" style="align-items:center">
+            <span class="hub-me-ava" id="cfgFotoPrev" style="width:52px;height:52px;font-size:22px">?</span>
+            <button class="hub-cfg-save" id="cfgFotoBtn">📸 Cambiar foto</button>
+            <input type="file" id="cfgFotoFile" accept="image/*" style="display:none" />
+          </div>
+          <div class="hub-cfg-note">Si entraste con Google, ya usa tu foto de Google.</div>
+        </div>
 
         <div class="hub-cfg-field">
           <label>Tu nombre (el que ves en Inicio)</label>
@@ -2692,13 +2713,29 @@ const Cuenta = {
     return e.split("@")[0] || "jugador";
   },
   _nombreCustom: null,
+  _fotoCustom: null,
+
+  // La foto de perfil: la que subió, o la de Google si entró con Google.
+  foto(){
+    if(this._fotoCustom) return this._fotoCustom;
+    try{
+      const md = this.user && this.user.user_metadata;
+      return (md && (md.avatar_url || md.picture)) || null;   // Google la trae sola
+    }catch(e){ return null; }
+  },
 
   // Carga el nombre que el jugador guardó (de la tabla players).
   async cargarPerfil(){
     if(!this.sb || !this.user) return;
     try{
-      const { data } = await this.sb.from("players").select("username").eq("id", this.user.id).maybeSingle();
+      const { data } = await this.sb.from("players").select("username,avatar").eq("id", this.user.id).maybeSingle();
       if(data && data.username) this._nombreCustom = data.username;
+      if(data && data.avatar)   this._fotoCustom   = data.avatar;
+      // si entró con Google y no tiene avatar guardado, guarda el de Google
+      if(data && !data.avatar){
+        const g = this.foto();
+        if(g){ try{ await this.sb.from("players").update({ avatar:g }).eq("id", this.user.id); }catch(e){} }
+      }
     }catch(e){}
   },
 
@@ -2711,6 +2748,15 @@ const Cuenta = {
     const { error } = await this.sb.from("players").update({ username: nuevo }).eq("id", this.user.id);
     if(error) throw error;
     this._nombreCustom = nuevo;
+    this.pinta();
+  },
+
+  // Cambiar la foto de perfil (se guarda achicada como dataURL en players.avatar).
+  async cambiarFoto(dataUrl){
+    if(!this.sb || !this.user) throw new Error("No hay sesión.");
+    const { error } = await this.sb.from("players").update({ avatar: dataUrl }).eq("id", this.user.id);
+    if(error) throw error;
+    this._fotoCustom = dataUrl;
     this.pinta();
   },
 
@@ -2789,13 +2835,13 @@ const Cuenta = {
       if(!rels || !rels.length) return [];
       const ids = [...new Set(rels.map(r=> r.de_id===this.user.id ? r.a_id : r.de_id))];
       // los nombres salen de players (siempre existe); la presencia es solo para el punto verde
-      const { data: play } = await this.sb.from("players").select("id,username").in("id",ids);
+      const { data: play } = await this.sb.from("players").select("id,username,avatar").in("id",ids);
       const { data: pres } = await this.sb.from("presencia").select("id,ultimo_visto").in("id",ids);
       const ahora = Date.now();
       const vistos = {}; (pres||[]).forEach(p=>{ vistos[p.id] = p.ultimo_visto; });
       return ids.map(id=>{
         const p = (play||[]).find(x=>x.id===id);
-        return { id, username: (p && p.username) || "jugador",
+        return { id, username: (p && p.username) || "jugador", avatar: (p && p.avatar) || null,
                  online: vistos[id] && (ahora - new Date(vistos[id]).getTime() < 70000) };
       });
     }catch(e){ return []; }
@@ -2815,6 +2861,13 @@ const Cuenta = {
     if(!this.sb || !this.user || !texto.trim()) return;
     try{ await this.sb.from("mensajes").insert({ de_id:this.user.id, a_id:amigoId||null, texto:texto.trim() }); }catch(e){}
   },
+  // Traer nombre y foto de varios jugadores a la vez (para el canal general).
+  async perfilesDe(ids){
+    if(!this.sb || !ids || !ids.length) return [];
+    try{ const { data } = await this.sb.from("players").select("id,username,avatar").in("id", ids); return data||[]; }
+    catch(e){ return []; }
+  },
+
   // ¿Existe la tabla de chat? (para avisar si falta correr el SQL)
   async chatListo(){
     if(!this.sb || !this.user) return false;
@@ -10563,12 +10616,17 @@ const Hub = {
     const ini = (n[0]||"?").toUpperCase();
     $("hubHelloName").textContent = n;
     $("hubMeName").textContent = n;
-    $("hubMeAva").textContent = Cuenta.esCreador() ? "👑" : ini;
+    // avatar: foto de perfil si la tiene, si no la inicial (o corona si es David)
+    const fot = Cuenta.foto();
+    if(fot){ $("hubMeAva").style.backgroundImage = "url("+fot+")"; $("hubMeAva").style.backgroundSize="cover";
+             $("hubMeAva").style.backgroundPosition="center"; $("hubMeAva").textContent=""; }
+    else   { $("hubMeAva").style.backgroundImage = ""; $("hubMeAva").textContent = Cuenta.esCreador() ? "👑" : ini; }
     // 👑 botón de Centro de Mando solo para David (el creador)
     if($("hubAdmin")) $("hubAdmin").style.display = Cuenta.esCreador() ? "block" : "none";
     if($("cfgNameInp")) $("cfgNameInp").value = n;
     $("cfgEmail").textContent = (Cuenta.user && Cuenta.user.email) || "—";
     if($("cfgMsg")) $("cfgMsg").textContent = "";
+    try{ pintaFotoCfg(); }catch(e){}
     // mover el menú de juegos existente dentro de la sección Juegos
     const gp = $("gamePick"), mount = $("hubGamesMount");
     if(gp && mount && gp.parentElement !== mount){
@@ -10629,7 +10687,7 @@ const Hub = {
 /* ============ CHAT DE AMIGOS ============ */
 const Chat = {
   amigoActual: null,      // null = canal general; o {id, username}
-  _timer: null, _latido: null, _nombres: {},
+  _timer: null, _latido: null, _nombres: {}, _fotos: {},
 
   async abrir(){
     const listo = await Cuenta.chatListo();
@@ -10653,14 +10711,16 @@ const Chat = {
   async cargarAmigos(){
     const cont = $("chatFriends");
     const amigos = await Cuenta.misAmigos();
-    amigos.forEach(a=> this._nombres[a.id] = a.username);
+    amigos.forEach(a=>{ this._nombres[a.id] = a.username; if(a.avatar) this._fotos[a.id] = a.avatar; });
     if(!amigos.length){ cont.innerHTML = '<p class="hub-sub" style="padding:10px">Aún no tienes amigos.<br>Búscalos arriba 🔍</p>'; return; }
-    cont.innerHTML = amigos.map(a=>
-      '<div class="chat-friend" data-id="'+a.id+'" data-name="'+esc(a.username)+'">'+
-      '<span class="chat-fava">'+(a.username[0]||"?").toUpperCase()+'</span>'+
-      '<span class="chat-fname">'+esc(a.username)+'</span>'+
-      '<span class="chat-fdot'+(a.online?" on":"")+'"></span></div>'
-    ).join("");
+    cont.innerHTML = amigos.map(a=>{
+      const ava = a.avatar
+        ? '<span class="chat-fava" style="background-image:url('+esc(a.avatar)+');background-size:cover;background-position:center;color:transparent"></span>'
+        : '<span class="chat-fava">'+esc((a.username[0]||"?").toUpperCase())+'</span>';
+      return '<div class="chat-friend" data-id="'+a.id+'" data-name="'+esc(a.username)+'">'+
+        ava+'<span class="chat-fname">'+esc(a.username)+'</span>'+
+        '<span class="chat-fdot'+(a.online?" on":"")+'"></span></div>';
+    }).join("");
     cont.querySelectorAll(".chat-friend").forEach(f=> f.onclick = ()=>this.verConversacion({id:f.dataset.id, username:f.dataset.name}));
   },
 
@@ -10674,10 +10734,30 @@ const Chat = {
   async refrescar(scroll){
     const msgs = await Cuenta.leerMensajes(this.amigoActual ? this.amigoActual.id : null);
     const cont = $("chatMsgs"); const miId = Cuenta.user && Cuenta.user.id;
-    cont.innerHTML = msgs.map(m=>{
+    const general = !this.amigoActual;
+    // traer nombre y foto de quien escribió y no conocemos aún (canal general)
+    const faltan = [...new Set(msgs.map(m=>m.de_id).filter(id=> id && id!==miId && !this._nombres[id]))];
+    if(faltan.length){
+      const perfiles = await Cuenta.perfilesDe(faltan);
+      perfiles.forEach(p=>{ this._nombres[p.id] = p.username || "jugador"; if(p.avatar) this._fotos[p.id] = p.avatar; });
+    }
+    cont.innerHTML = msgs.map((m,i)=>{
       const mio = m.de_id === miId;
-      const quien = mio ? "" : '<span class="who">'+esc(this._nombres[m.de_id] || "alguien")+'</span>';
-      return '<div class="chat-msg '+(mio?"mio":"otro")+'">'+quien+esc(m.texto||"")+'</div>';
+      const nom = mio ? Cuenta.nombre() : (this._nombres[m.de_id] || "jugador");
+      const foto = this._fotos[m.de_id] || (mio ? Cuenta.foto() : null);
+      // en el canal general siempre se ve quién habla; en privado, solo al cambiar de persona
+      const anterior = msgs[i-1];
+      const mismaPersona = anterior && anterior.de_id === m.de_id;
+      const mostrarNombre = general ? !mismaPersona : false;
+      const ava = foto
+        ? '<span class="chat-mava foto" style="background-image:url('+esc(foto)+')"></span>'
+        : '<span class="chat-mava">'+esc((nom[0]||"?").toUpperCase())+'</span>';
+      return '<div class="chat-row '+(mio?"mio":"otro")+'">'+
+        (mismaPersona && general ? '<span class="chat-mava" style="background:none"></span>' : ava)+
+        '<div class="chat-bub">'+
+        (mostrarNombre ? '<span class="chat-who">'+esc(nom)+'</span>' : '')+
+        '<div class="chat-msg '+(mio?"mio":"otro")+'">'+esc(m.texto||"")+'</div>'+
+        '</div></div>';
     }).join("");
     if(scroll || cont.scrollHeight - cont.scrollTop - cont.clientHeight < 120) cont.scrollTop = cont.scrollHeight;
   },
@@ -10745,6 +10825,30 @@ if($("cfgNameSave")) $("cfgNameSave").onclick = async ()=>{
     msg.style.color = "#39ff14"; msg.textContent = "✅ Nombre cambiado a "+n;
   }catch(e){ msg.style.color = "#ff5b6e"; msg.textContent = authErrorEs(e); }
 };
+// ⚙️ Configuración: cambiar foto de perfil
+if($("cfgFotoBtn")) $("cfgFotoBtn").onclick = ()=> $("cfgFotoFile").click();
+if($("cfgFotoFile")) $("cfgFotoFile").onchange = e=>{
+  const f = e.target.files && e.target.files[0]; if(!f) return;
+  const msg = $("cfgMsg"); msg.style.color="#9fd"; msg.textContent="Subiendo foto…";
+  readImageScaled(f, 220, async (dataUrl)=>{     // 220px basta para un avatar y pesa poco
+    try{
+      await Cuenta.cambiarFoto(dataUrl);
+      pintaFotoCfg();
+      // actualizar el avatar del hub al instante
+      const a=$("hubMeAva"); a.style.backgroundImage="url("+dataUrl+")"; a.style.backgroundSize="cover";
+      a.style.backgroundPosition="center"; a.textContent="";
+      msg.style.color="#39ff14"; msg.textContent="✅ Foto cambiada";
+    }catch(er){ msg.style.color="#ff5b6e"; msg.textContent = authErrorEs(er); }
+  });
+  e.target.value = "";
+};
+function pintaFotoCfg(){
+  const el = $("cfgFotoPrev"); if(!el) return;
+  const f = Cuenta.foto();
+  if(f){ el.style.backgroundImage="url("+f+")"; el.style.backgroundSize="cover"; el.style.backgroundPosition="center"; el.textContent=""; }
+  else { el.style.backgroundImage=""; el.textContent=(Cuenta.nombre()[0]||"?").toUpperCase(); }
+}
+
 // ⚙️ Configuración: cambiar contraseña
 if($("cfgPassSave")) $("cfgPassSave").onclick = async ()=>{
   const msg = $("cfgMsg"), v = $("cfgPassInp").value;
