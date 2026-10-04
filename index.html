@@ -237,6 +237,15 @@
   .hub-config{text-align:left}
   .hub-cfg-row{display:flex;justify-content:space-between;padding:14px 0;border-bottom:1px solid rgba(47,208,255,.15);color:#9fc0d8}
   .hub-cfg-row b{color:#fff}
+  .hub-cfg-field{padding:16px 0;border-bottom:1px solid rgba(47,208,255,.15)}
+  .hub-cfg-field label{display:block;color:#9fd;font-size:13px;margin-bottom:8px;font-weight:600}
+  .hub-cfg-inline{display:flex;gap:8px}
+  .hub-cfg-inline .auth-inp{flex:1}
+  .hub-cfg-save{font-family:"Segoe UI",sans-serif;font-size:13px;font-weight:800;color:#021018;cursor:pointer;
+    background:linear-gradient(90deg,#39ff14,#2fd0ff);border:none;border-radius:10px;padding:0 18px;white-space:nowrap;transition:all .15s}
+  .hub-cfg-save:hover{box-shadow:0 0 12px rgba(47,208,255,.5)}
+  .hub-cfg-note{color:#7a98b0;font-size:11px;margin-top:6px}
+  .hub-cfg-msg{min-height:20px;margin:14px 0 0;text-align:center;font-size:13px;font-weight:600}
   .hub-cfg-exit{margin-top:20px;width:100%;font-weight:700;color:#ff8fa0;background:rgba(40,8,16,.5);
     border:1.5px solid rgba(255,91,110,.4);border-radius:10px;padding:12px;cursor:pointer}
   /* el menú de juegos, cuando vive dentro del hub, se ve plano (no ventana flotante) */
@@ -1205,8 +1214,26 @@
     <section class="hub-sec" data-sec="config">
       <h1 class="hub-h1">⚙️ Configuración</h1>
       <div class="hub-config">
-        <div class="hub-cfg-row"><span>Nombre</span><b id="cfgName">—</b></div>
         <div class="hub-cfg-row"><span>Correo</span><b id="cfgEmail">—</b></div>
+
+        <div class="hub-cfg-field">
+          <label>Tu nombre (el que ves en Inicio)</label>
+          <div class="hub-cfg-inline">
+            <input class="auth-inp" id="cfgNameInp" type="text" maxlength="20" placeholder="tu nombre" />
+            <button class="hub-cfg-save" id="cfgNameSave">Guardar</button>
+          </div>
+        </div>
+
+        <div class="hub-cfg-field">
+          <label>Cambiar contraseña</label>
+          <div class="hub-cfg-inline">
+            <input class="auth-inp" id="cfgPassInp" type="password" placeholder="nueva contraseña (mín. 6)" />
+            <button class="hub-cfg-save" id="cfgPassSave">Cambiar</button>
+          </div>
+          <div class="hub-cfg-note" id="cfgPassNote">Si entraste con Google, no necesitas contraseña.</div>
+        </div>
+
+        <div class="hub-cfg-msg" id="cfgMsg"></div>
         <button class="hub-cfg-exit" id="cfgSignout">⏻ Cerrar sesión</button>
       </div>
     </section>
@@ -2567,11 +2594,42 @@ const Cuenta = {
   // ¿Hay alguien con cuenta abierta?
   logueado(){ return !!this.user; },
 
-  // El nombre bonito del jugador (lo de antes de la @ del correo).
+  // El nombre bonito del jugador. Si eligió uno propio, usa ese; si no, lo de antes de la @.
   nombre(){
     if(!this.user) return "";
+    if(this._nombreCustom) return this._nombreCustom;
     const e = this.user.email || "";
     return e.split("@")[0] || "jugador";
+  },
+  _nombreCustom: null,
+
+  // Carga el nombre que el jugador guardó (de la tabla players).
+  async cargarPerfil(){
+    if(!this.sb || !this.user) return;
+    try{
+      const { data } = await this.sb.from("players").select("username").eq("id", this.user.id).maybeSingle();
+      if(data && data.username) this._nombreCustom = data.username;
+    }catch(e){}
+  },
+
+  // Cambiar el nombre del jugador.
+  async cambiarNombre(nuevo){
+    if(!this.sb || !this.user) throw new Error("No hay sesión.");
+    nuevo = (nuevo||"").trim();
+    if(nuevo.length < 2) throw new Error("El nombre necesita al menos 2 letras.");
+    if(nuevo.length > 20) throw new Error("El nombre es muy largo (máximo 20).");
+    const { error } = await this.sb.from("players").update({ username: nuevo }).eq("id", this.user.id);
+    if(error) throw error;
+    this._nombreCustom = nuevo;
+    this.pinta();
+  },
+
+  // Cambiar la contraseña.
+  async cambiarPass(nueva){
+    if(!this.sb || !this.user) throw new Error("No hay sesión.");
+    if((nueva||"").length < 6) throw new Error("La contraseña necesita al menos 6 letras o números.");
+    const { error } = await this.sb.auth.updateUser({ password: nueva });
+    if(error) throw error;
   },
 
   // Guardar un récord. Solo guarda si es MEJOR que el que ya tenía.
@@ -10299,16 +10357,19 @@ if($("lndAdmin")) $("lndAdmin").onclick = ()=>{
 const Hub = {
   _gamesHome: null,   // dónde vivía el menú de juegos antes, para devolverlo
 
-  abrir(){
+  async abrir(){
     const hub = $("hubFs"); if(!hub) return;
+    // cargar el nombre guardado, pero sin bloquear más de 2.5s (si Supabase tarda, abrimos igual)
+    try{ await Promise.race([ Cuenta.cargarPerfil(), new Promise(r=>setTimeout(r,2500)) ]); }catch(e){}
     // pintar nombre del jugador
     const n = Cuenta.nombre() || "jugador";
     const ini = (n[0]||"?").toUpperCase();
     $("hubHelloName").textContent = n;
     $("hubMeName").textContent = n;
     $("hubMeAva").textContent = Cuenta.esCreador() ? "👑" : ini;
-    $("cfgName").textContent = n;
+    if($("cfgNameInp")) $("cfgNameInp").value = n;
     $("cfgEmail").textContent = (Cuenta.user && Cuenta.user.email) || "—";
+    if($("cfgMsg")) $("cfgMsg").textContent = "";
     // mover el menú de juegos existente dentro de la sección Juegos
     const gp = $("gamePick"), mount = $("hubGamesMount");
     if(gp && mount && gp.parentElement !== mount){
@@ -10349,6 +10410,27 @@ document.querySelectorAll("#hubFs .hub-navbtn").forEach(b=> b.onclick = ()=>Hub.
 document.querySelectorAll("#hubFs .hub-card[data-go]").forEach(c=> c.onclick = ()=>Hub.sec(c.dataset.go));
 if($("hubExit"))    $("hubExit").onclick    = async ()=>{ Hub.cerrar(); await Cuenta.salir(); toast("👋 Cerraste sesión"); };
 if($("cfgSignout")) $("cfgSignout").onclick = async ()=>{ Hub.cerrar(); await Cuenta.salir(); toast("👋 Cerraste sesión"); };
+
+// ⚙️ Configuración: cambiar nombre
+if($("cfgNameSave")) $("cfgNameSave").onclick = async ()=>{
+  const msg = $("cfgMsg"), v = $("cfgNameInp").value;
+  try{
+    await Cuenta.cambiarNombre(v);
+    // actualizar el saludo y el avatar del hub al instante
+    const n = Cuenta.nombre(); $("hubHelloName").textContent = n; $("hubMeName").textContent = n;
+    $("hubMeAva").textContent = Cuenta.esCreador() ? "👑" : (n[0]||"?").toUpperCase();
+    msg.style.color = "#39ff14"; msg.textContent = "✅ Nombre cambiado a "+n;
+  }catch(e){ msg.style.color = "#ff5b6e"; msg.textContent = authErrorEs(e); }
+};
+// ⚙️ Configuración: cambiar contraseña
+if($("cfgPassSave")) $("cfgPassSave").onclick = async ()=>{
+  const msg = $("cfgMsg"), v = $("cfgPassInp").value;
+  try{
+    await Cuenta.cambiarPass(v);
+    $("cfgPassInp").value = "";
+    msg.style.color = "#39ff14"; msg.textContent = "✅ Contraseña cambiada";
+  }catch(e){ msg.style.color = "#ff5b6e"; msg.textContent = authErrorEs(e); }
+};
 if($("hubCardTrophies")) $("hubCardTrophies").onclick = ()=>{ try{ if(typeof buildTrophies==="function"){ buildTrophies(); $("trophiesFs") && $("trophiesFs").classList.add("open"); } }catch(e){} Hub.sec("juegos"); };
 
 // El botón grande: crear cuenta o entrar
