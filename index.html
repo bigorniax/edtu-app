@@ -253,6 +253,43 @@
   .hub-rec-game{font-weight:700;color:#fff;text-transform:capitalize}
   .hub-rec-best{font-weight:900;color:#ffd12e;font-size:20px;text-shadow:0 0 10px rgba(255,209,46,.4)}
   .hub-rec-empty{text-align:center;padding:30px;color:#8fb0cc}
+  /* chat de amigos */
+  .chat-wrap{display:flex;gap:16px;height:calc(100vh - 160px);max-width:900px}
+  .chat-side{width:260px;flex-shrink:0;display:flex;flex-direction:column;
+    background:rgba(8,20,40,.6);border:1.5px solid rgba(47,208,255,.2);border-radius:16px;padding:12px;overflow:hidden}
+  .chat-search{margin-bottom:8px}
+  .chat-buscarres{max-height:160px;overflow-y:auto}
+  .chat-buscarres:not(:empty){margin-bottom:10px;border-bottom:1px solid rgba(47,208,255,.15);padding-bottom:8px}
+  .chat-friends-title{color:#9fd;font-size:13px;font-weight:700;margin:4px 0 8px}
+  .chat-friends{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+  .chat-friend,.chat-buscaritem{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:10px;cursor:pointer;
+    background:rgba(47,208,255,.06);border:1px solid transparent;transition:all .12s}
+  .chat-friend:hover,.chat-buscaritem:hover{background:rgba(47,208,255,.14);border-color:rgba(47,208,255,.3)}
+  .chat-friend.on{background:rgba(57,255,20,.15);border-color:#39ff14}
+  .chat-fava{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-weight:900;color:#021018;background:linear-gradient(135deg,#39ff14,#2fd0ff);font-size:14px;flex-shrink:0}
+  .chat-fname{flex:1;color:#dff;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .chat-fdot{width:9px;height:9px;border-radius:50%;background:#556;flex-shrink:0}
+  .chat-fdot.on{background:#39ff14;box-shadow:0 0 6px #39ff14}
+  .chat-addbtn{font-size:11px;font-weight:800;color:#021018;background:#39ff14;border:none;border-radius:8px;padding:5px 9px;cursor:pointer}
+  .chat-conv{flex:1;display:flex;flex-direction:column;background:rgba(8,20,40,.6);
+    border:1.5px solid rgba(47,208,255,.2);border-radius:16px;overflow:hidden}
+  .chat-conv-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;
+    border-bottom:1px solid rgba(47,208,255,.2);color:#fff;font-weight:700}
+  .chat-msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px}
+  .chat-msg{max-width:72%;padding:9px 13px;border-radius:14px;font-size:14px;line-height:1.4;word-wrap:break-word}
+  .chat-msg.mio{align-self:flex-end;background:linear-gradient(135deg,#2a8f2a,#1a6a1a);color:#fff;border-bottom-right-radius:4px}
+  .chat-msg.otro{align-self:flex-start;background:rgba(47,208,255,.14);color:#dff;border-bottom-left-radius:4px}
+  .chat-msg .who{display:block;font-size:11px;opacity:.7;margin-bottom:2px;font-weight:700}
+  .chat-input{display:flex;gap:8px;padding:12px;border-top:1px solid rgba(47,208,255,.2)}
+  .chat-input .auth-inp{flex:1}
+  .chat-nodb{text-align:center;color:#ffd12e;background:rgba(40,30,4,.5);border:1px solid rgba(255,209,46,.3);
+    border-radius:12px;padding:16px;max-width:600px;margin-top:16px}
+  @media (max-width:720px){
+    .chat-wrap{flex-direction:column;height:auto}
+    .chat-side{width:auto;max-height:30vh}
+    .chat-conv{height:52vh}
+  }
   .hub-cfg-exit{margin-top:20px;width:100%;font-weight:700;color:#ff8fa0;background:rgba(40,8,16,.5);
     border:1.5px solid rgba(255,91,110,.4);border-radius:10px;padding:12px;cursor:pointer}
   /* el menú de juegos, cuando vive dentro del hub, se ve plano (no ventana flotante) */
@@ -1220,13 +1257,34 @@
       <div id="hubRecordsList" class="hub-records"><p class="hub-sub">Cargando…</p></div>
     </section>
 
-    <!-- CHAT -->
+    <!-- CHAT DE AMIGOS -->
     <section class="hub-sec" data-sec="chat">
       <h1 class="hub-h1">💬 Chat</h1>
-      <div class="hub-soon">
-        <div class="hub-soon-ico">💬</div>
-        <p>El chat de amigos está <b>en construcción</b>.</p>
-        <p class="hub-sub">Pronto podrás agregar amigos, ver quién está en línea y chatear.</p>
+      <div class="chat-wrap">
+        <!-- columna izquierda: amigos + buscar -->
+        <div class="chat-side">
+          <div class="chat-search">
+            <input id="chatBuscar" class="auth-inp" type="text" placeholder="🔍 Buscar amigos por nombre" />
+          </div>
+          <div id="chatBuscarRes" class="chat-buscarres"></div>
+          <div class="chat-friends-title">👥 Amigos</div>
+          <div id="chatFriends" class="chat-friends"><p class="hub-sub" style="padding:10px">Cargando…</p></div>
+        </div>
+        <!-- columna derecha: conversación -->
+        <div class="chat-conv">
+          <div class="chat-conv-head" id="chatConvHead">
+            <span>💬 Canal general de EDTU</span>
+            <span class="chat-online-dot" id="chatOnline"></span>
+          </div>
+          <div class="chat-msgs" id="chatMsgs"></div>
+          <div class="chat-input">
+            <input id="chatMsgInp" class="auth-inp" type="text" placeholder="Escribe un mensaje…" maxlength="300" />
+            <button id="chatSend" class="hub-cfg-save">Enviar</button>
+          </div>
+        </div>
+      </div>
+      <div class="chat-nodb" id="chatNoDb" style="display:none">
+        <p>⚠️ El chat necesita que el administrador corra <b>supabase/chat.sql</b> en Supabase.</p>
       </div>
     </section>
 
@@ -2694,6 +2752,58 @@ const Cuenta = {
         .select("game,best").eq("player_id", this.user.id).order("best",{ascending:false});
       return data || [];
     }catch(e){ return []; }
+  },
+
+  /* ---- CHAT DE AMIGOS (necesita que corran supabase/chat.sql) ---- */
+  // Avisar que estoy en línea (se llama cada poco).
+  async latido(){
+    if(!this.sb || !this.user) return;
+    try{ await this.sb.from("presencia").upsert({ id:this.user.id, username:this.nombre(), ultimo_visto:new Date().toISOString() }); }catch(e){}
+  },
+  // Buscar jugadores por nombre.
+  async buscarJugadores(q){
+    if(!this.sb || !q || q.length<2) return [];
+    try{ const { data } = await this.sb.rpc("buscar_jugadores",{ q }); return data||[]; }catch(e){ return []; }
+  },
+  // Mandar solicitud de amistad.
+  async agregarAmigo(id){
+    if(!this.sb || !this.user) return;
+    try{ await this.sb.from("amistades").insert({ de_id:this.user.id, a_id:id, estado:"aceptada" }); }catch(e){}
+    // (para simple: amistad directa aceptada; se puede hacer con solicitudes luego)
+  },
+  // Lista de mis amigos (con su estado en línea).
+  async misAmigos(){
+    if(!this.sb || !this.user) return [];
+    try{
+      const { data: rels } = await this.sb.from("amistades").select("de_id,a_id,estado")
+        .or("de_id.eq."+this.user.id+",a_id.eq."+this.user.id);
+      if(!rels || !rels.length) return [];
+      const ids = [...new Set(rels.map(r=> r.de_id===this.user.id ? r.a_id : r.de_id))];
+      const { data: pres } = await this.sb.from("presencia").select("id,username,ultimo_visto").in("id",ids);
+      const ahora = Date.now();
+      return (pres||[]).map(p=>({ id:p.id, username:p.username||"jugador",
+        online: p.ultimo_visto && (ahora - new Date(p.ultimo_visto).getTime() < 70000) }));
+    }catch(e){ return []; }
+  },
+  // Leer mensajes (canal general si amigoId es null, o privado con ese amigo).
+  async leerMensajes(amigoId){
+    if(!this.sb || !this.user) return [];
+    try{
+      let q = this.sb.from("mensajes").select("de_id,a_id,texto,created_at").order("created_at",{ascending:true}).limit(60);
+      if(amigoId){ q = q.or("and(de_id.eq."+this.user.id+",a_id.eq."+amigoId+"),and(de_id.eq."+amigoId+",a_id.eq."+this.user.id+")"); }
+      else { q = q.is("a_id", null); }
+      const { data } = await q; return data||[];
+    }catch(e){ return []; }
+  },
+  // Enviar un mensaje.
+  async enviarMensaje(texto, amigoId){
+    if(!this.sb || !this.user || !texto.trim()) return;
+    try{ await this.sb.from("mensajes").insert({ de_id:this.user.id, a_id:amigoId||null, texto:texto.trim() }); }catch(e){}
+  },
+  // ¿Existe la tabla de chat? (para avisar si falta correr el SQL)
+  async chatListo(){
+    if(!this.sb || !this.user) return false;
+    try{ const { error } = await this.sb.from("mensajes").select("id").limit(1); return !error; }catch(e){ return false; }
   },
 
   // Actualiza la portada: muestra los botones o el nombre del jugador.
@@ -10458,6 +10568,7 @@ const Hub = {
 
   cerrar(){
     const hub = $("hubFs"); if(hub) hub.classList.remove("show");
+    try{ Chat.cerrar(); }catch(e){}   // parar el chat al salir del hub
     // volver a mostrar la portada
     const land = $("landing"); if(land) land.style.display = "";
     // devolver el menú de juegos a donde estaba
@@ -10475,6 +10586,7 @@ const Hub = {
     document.querySelectorAll("#hubFs .hub-navbtn").forEach(b=>b.classList.toggle("active", b.dataset.sec===name));
     document.querySelectorAll("#hubFs .hub-sec").forEach(s=>s.classList.toggle("active", s.dataset.sec===name));
     if(name==="records") this.cargarRecords();
+    if(name==="chat") Chat.abrir(); else Chat.cerrar();   // el chat solo "late" mientras lo ves
   },
 
   // 🏆 cargar y mostrar los récords de la cuenta
@@ -10497,7 +10609,95 @@ const Hub = {
   },
 };
 
-// eventos del hub
+/* ============ CHAT DE AMIGOS ============ */
+const Chat = {
+  amigoActual: null,      // null = canal general; o {id, username}
+  _timer: null, _latido: null, _nombres: {},
+
+  async abrir(){
+    const listo = await Cuenta.chatListo();
+    if(!listo){ $("chatNoDb").style.display = "block"; document.querySelector(".chat-wrap").style.display = "none"; return; }
+    $("chatNoDb").style.display = "none"; document.querySelector(".chat-wrap").style.display = "flex";
+    Cuenta.latido();
+    if(this._latido) clearInterval(this._latido);
+    this._latido = setInterval(()=>Cuenta.latido(), 40000);   // decir "estoy en línea" cada 40s
+    this.cargarAmigos();
+    this.verConversacion(null);   // empezar en el canal general
+    // refrescar mensajes cada 4s (simple; realtime se puede añadir luego)
+    if(this._timer) clearInterval(this._timer);
+    this._timer = setInterval(()=>this.refrescar(), 4000);
+  },
+  cerrar(){
+    if(this._timer) clearInterval(this._timer);
+    if(this._latido) clearInterval(this._latido);
+    this._timer = this._latido = null;
+  },
+
+  async cargarAmigos(){
+    const cont = $("chatFriends");
+    const amigos = await Cuenta.misAmigos();
+    amigos.forEach(a=> this._nombres[a.id] = a.username);
+    if(!amigos.length){ cont.innerHTML = '<p class="hub-sub" style="padding:10px">Aún no tienes amigos.<br>Búscalos arriba 🔍</p>'; return; }
+    cont.innerHTML = amigos.map(a=>
+      '<div class="chat-friend" data-id="'+a.id+'" data-name="'+esc(a.username)+'">'+
+      '<span class="chat-fava">'+(a.username[0]||"?").toUpperCase()+'</span>'+
+      '<span class="chat-fname">'+esc(a.username)+'</span>'+
+      '<span class="chat-fdot'+(a.online?" on":"")+'"></span></div>'
+    ).join("");
+    cont.querySelectorAll(".chat-friend").forEach(f=> f.onclick = ()=>this.verConversacion({id:f.dataset.id, username:f.dataset.name}));
+  },
+
+  async verConversacion(amigo){
+    this.amigoActual = amigo;
+    document.querySelectorAll(".chat-friend").forEach(f=> f.classList.toggle("on", amigo && f.dataset.id===amigo.id));
+    $("chatConvHead").querySelector("span").textContent = amigo ? ("💬 "+amigo.username) : "💬 Canal general de EDTU";
+    await this.refrescar(true);
+  },
+
+  async refrescar(scroll){
+    const msgs = await Cuenta.leerMensajes(this.amigoActual ? this.amigoActual.id : null);
+    const cont = $("chatMsgs"); const miId = Cuenta.user && Cuenta.user.id;
+    cont.innerHTML = msgs.map(m=>{
+      const mio = m.de_id === miId;
+      const quien = mio ? "" : '<span class="who">'+esc(this._nombres[m.de_id] || "alguien")+'</span>';
+      return '<div class="chat-msg '+(mio?"mio":"otro")+'">'+quien+esc(m.texto||"")+'</div>';
+    }).join("");
+    if(scroll || cont.scrollHeight - cont.scrollTop - cont.clientHeight < 120) cont.scrollTop = cont.scrollHeight;
+  },
+
+  async buscar(q){
+    const res = $("chatBuscarRes");
+    if(!q || q.length<2){ res.innerHTML=""; return; }
+    const encontrados = await Cuenta.buscarJugadores(q);
+    if(!encontrados.length){ res.innerHTML = '<p class="hub-sub" style="padding:6px">Nadie con ese nombre.</p>'; return; }
+    encontrados.forEach(p=> this._nombres[p.id] = p.username);
+    res.innerHTML = encontrados.map(p=>
+      '<div class="chat-buscaritem"><span class="chat-fava">'+(p.username[0]||"?").toUpperCase()+'</span>'+
+      '<span class="chat-fname">'+esc(p.username)+'</span>'+
+      '<button class="chat-addbtn" data-id="'+p.id+'" data-name="'+esc(p.username)+'">+ Agregar</button></div>'
+    ).join("");
+    res.querySelectorAll(".chat-addbtn").forEach(b=> b.onclick = async ()=>{
+      await Cuenta.agregarAmigo(b.dataset.id);
+      toast("✅ "+b.dataset.name+" agregado");
+      $("chatBuscar").value=""; res.innerHTML=""; this.cargarAmigos();
+    });
+  },
+
+  async enviar(){
+    const inp = $("chatMsgInp"); const t = inp.value;
+    if(!t.trim()) return;
+    inp.value = "";
+    await Cuenta.enviarMensaje(t, this.amigoActual ? this.amigoActual.id : null);
+    this.refrescar(true);
+  },
+};
+
+
+// eventos del chat
+if($("chatSend")) $("chatSend").onclick = ()=>Chat.enviar();
+if($("chatMsgInp")) $("chatMsgInp").onkeydown = e=>{ if(e.key==="Enter"){ e.preventDefault(); Chat.enviar(); } };
+if($("chatBuscar")){ let bt; $("chatBuscar").oninput = ()=>{ clearTimeout(bt); bt=setTimeout(()=>Chat.buscar($("chatBuscar").value.trim()), 350); }; }
+
 document.querySelectorAll("#hubFs .hub-navbtn").forEach(b=> b.onclick = ()=>Hub.sec(b.dataset.sec));
 document.querySelectorAll("#hubFs .hub-card[data-go]").forEach(c=> c.onclick = ()=>Hub.sec(c.dataset.go));
 if($("hubExit"))    $("hubExit").onclick    = async ()=>{ Hub.cerrar(); await Cuenta.salir(); toast("👋 Cerraste sesión"); };
