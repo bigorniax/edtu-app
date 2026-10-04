@@ -210,6 +210,9 @@
   .hub-me-ava{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;
     font-weight:900;color:#021018;background:linear-gradient(135deg,#39ff14,#2fd0ff);font-size:17px}
   .hub-me-name{color:#dff;font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .hub-admin-btn{width:100%;font-family:"Segoe UI",sans-serif;font-size:13px;font-weight:800;color:#ffd12e;cursor:pointer;
+    background:rgba(30,24,4,.6);border:1.5px solid rgba(255,209,46,.5);border-radius:10px;padding:10px;margin-bottom:8px;transition:all .15s}
+  .hub-admin-btn:hover{box-shadow:0 0 12px rgba(255,209,46,.5);background:rgba(40,32,6,.8)}
   .hub-side-exit{width:100%;font-family:"Segoe UI",sans-serif;font-size:13px;font-weight:700;color:#ff8fa0;
     background:rgba(40,8,16,.5);border:1.5px solid rgba(255,91,110,.4);border-radius:10px;padding:10px;cursor:pointer;transition:all .15s}
   .hub-side-exit:hover{background:rgba(60,10,20,.7);border-color:#ff5b6e}
@@ -1209,6 +1212,8 @@
         <span class="hub-me-ava" id="hubMeAva">?</span>
         <span class="hub-me-name" id="hubMeName">jugador</span>
       </div>
+      <!-- 👑 solo David (creador) ve este botón: va directo al Centro de Mando -->
+      <button class="hub-admin-btn" id="hubAdmin" style="display:none">👑 Centro de Mando</button>
       <button class="hub-side-exit" id="hubExit">⏻ Salir</button>
     </div>
   </aside>
@@ -2767,9 +2772,13 @@ const Cuenta = {
   },
   // Mandar solicitud de amistad.
   async agregarAmigo(id){
-    if(!this.sb || !this.user) return;
-    try{ await this.sb.from("amistades").insert({ de_id:this.user.id, a_id:id, estado:"aceptada" }); }catch(e){}
-    // (para simple: amistad directa aceptada; se puede hacer con solicitudes luego)
+    if(!this.sb || !this.user) throw new Error("No hay sesión.");
+    // amistad directa en ambos sentidos, para que los DOS se vean como amigos
+    const { error } = await this.sb.from("amistades").upsert([
+      { de_id:this.user.id, a_id:id, estado:"aceptada" },
+      { de_id:id, a_id:this.user.id, estado:"aceptada" }
+    ], { onConflict:"de_id,a_id" });
+    if(error) throw error;
   },
   // Lista de mis amigos (con su estado en línea).
   async misAmigos(){
@@ -2779,10 +2788,16 @@ const Cuenta = {
         .or("de_id.eq."+this.user.id+",a_id.eq."+this.user.id);
       if(!rels || !rels.length) return [];
       const ids = [...new Set(rels.map(r=> r.de_id===this.user.id ? r.a_id : r.de_id))];
-      const { data: pres } = await this.sb.from("presencia").select("id,username,ultimo_visto").in("id",ids);
+      // los nombres salen de players (siempre existe); la presencia es solo para el punto verde
+      const { data: play } = await this.sb.from("players").select("id,username").in("id",ids);
+      const { data: pres } = await this.sb.from("presencia").select("id,ultimo_visto").in("id",ids);
       const ahora = Date.now();
-      return (pres||[]).map(p=>({ id:p.id, username:p.username||"jugador",
-        online: p.ultimo_visto && (ahora - new Date(p.ultimo_visto).getTime() < 70000) }));
+      const vistos = {}; (pres||[]).forEach(p=>{ vistos[p.id] = p.ultimo_visto; });
+      return ids.map(id=>{
+        const p = (play||[]).find(x=>x.id===id);
+        return { id, username: (p && p.username) || "jugador",
+                 online: vistos[id] && (ahora - new Date(vistos[id]).getTime() < 70000) };
+      });
     }catch(e){ return []; }
   },
   // Leer mensajes (canal general si amigoId es null, o privado con ese amigo).
@@ -10549,6 +10564,8 @@ const Hub = {
     $("hubHelloName").textContent = n;
     $("hubMeName").textContent = n;
     $("hubMeAva").textContent = Cuenta.esCreador() ? "👑" : ini;
+    // 👑 botón de Centro de Mando solo para David (el creador)
+    if($("hubAdmin")) $("hubAdmin").style.display = Cuenta.esCreador() ? "block" : "none";
     if($("cfgNameInp")) $("cfgNameInp").value = n;
     $("cfgEmail").textContent = (Cuenta.user && Cuenta.user.email) || "—";
     if($("cfgMsg")) $("cfgMsg").textContent = "";
@@ -10677,9 +10694,13 @@ const Chat = {
       '<button class="chat-addbtn" data-id="'+p.id+'" data-name="'+esc(p.username)+'">+ Agregar</button></div>'
     ).join("");
     res.querySelectorAll(".chat-addbtn").forEach(b=> b.onclick = async ()=>{
-      await Cuenta.agregarAmigo(b.dataset.id);
-      toast("✅ "+b.dataset.name+" agregado");
-      $("chatBuscar").value=""; res.innerHTML=""; this.cargarAmigos();
+      try{
+        await Cuenta.agregarAmigo(b.dataset.id);
+        toast("✅ "+b.dataset.name+" agregado");
+        $("chatBuscar").value=""; res.innerHTML=""; this.cargarAmigos();
+      }catch(e){
+        toast("⚠ No se pudo agregar: "+(e.message||"error"));
+      }
     });
   },
 
@@ -10701,6 +10722,16 @@ if($("chatBuscar")){ let bt; $("chatBuscar").oninput = ()=>{ clearTimeout(bt); b
 document.querySelectorAll("#hubFs .hub-navbtn").forEach(b=> b.onclick = ()=>Hub.sec(b.dataset.sec));
 document.querySelectorAll("#hubFs .hub-card[data-go]").forEach(c=> c.onclick = ()=>Hub.sec(c.dataset.go));
 if($("hubExit"))    $("hubExit").onclick    = async ()=>{ Hub.cerrar(); await Cuenta.salir(); toast("👋 Cerraste sesión"); };
+// 👑 Centro de Mando desde el hub (solo David)
+if($("hubAdmin")) $("hubAdmin").onclick = ()=>{
+  if(!Cuenta.esCreador()){ toast("⛔ Solo el creador"); return; }
+  try{
+    Hub.cerrar();
+    const dg = (typeof agents!=="undefined" && agents.find) ? agents.find(a=>(a.name||"").trim().toLowerCase()==="david") : null;
+    proceedLogin(dg && !dg.blocked ? {type:"agent", id:dg.id} : {type:"admin"});
+    toast("👑 Bienvenido al Centro de Mando, "+Cuenta.nombre());
+  }catch(e){ toast("No se pudo entrar al Centro de Mando"); }
+};
 if($("cfgSignout")) $("cfgSignout").onclick = async ()=>{ Hub.cerrar(); await Cuenta.salir(); toast("👋 Cerraste sesión"); };
 
 // ⚙️ Configuración: cambiar nombre
