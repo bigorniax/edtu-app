@@ -246,6 +246,13 @@
   .hub-cfg-save:hover{box-shadow:0 0 12px rgba(47,208,255,.5)}
   .hub-cfg-note{color:#7a98b0;font-size:11px;margin-top:6px}
   .hub-cfg-msg{min-height:20px;margin:14px 0 0;text-align:center;font-size:13px;font-weight:600}
+  .hub-records{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;max-width:760px}
+  .hub-rec{display:flex;align-items:center;justify-content:space-between;
+    background:linear-gradient(160deg,rgba(12,30,56,.7),rgba(6,16,32,.7));border:1.5px solid rgba(255,209,46,.3);
+    border-radius:14px;padding:16px 18px}
+  .hub-rec-game{font-weight:700;color:#fff;text-transform:capitalize}
+  .hub-rec-best{font-weight:900;color:#ffd12e;font-size:20px;text-shadow:0 0 10px rgba(255,209,46,.4)}
+  .hub-rec-empty{text-align:center;padding:30px;color:#8fb0cc}
   .hub-cfg-exit{margin-top:20px;width:100%;font-weight:700;color:#ff8fa0;background:rgba(40,8,16,.5);
     border:1.5px solid rgba(255,91,110,.4);border-radius:10px;padding:12px;cursor:pointer}
   /* el menú de juegos, cuando vive dentro del hub, se ve plano (no ventana flotante) */
@@ -1198,6 +1205,12 @@
     <section class="hub-sec" data-sec="juegos">
       <h1 class="hub-h1">🎮 Elige un juego</h1>
       <div id="hubGamesMount"><!-- aquí se monta el menú de juegos existente --></div>
+    </section>
+
+    <!-- MIS RÉCORDS -->
+    <section class="hub-sec" data-sec="records">
+      <h1 class="hub-h1">🏆 Mis récords</h1>
+      <div id="hubRecordsList" class="hub-records"><p class="hub-sub">Cargando…</p></div>
     </section>
 
     <!-- CHAT -->
@@ -2659,6 +2672,16 @@ const Cuenta = {
     }catch(e){ return 0; }
   },
 
+  // Leer TODOS los récords del jugador (para la pantalla "Mis récords").
+  async misRecords(){
+    if(!this.sb || !this.user) return [];
+    try{
+      const { data } = await this.sb.from("player_scores")
+        .select("game,best").eq("player_id", this.user.id).order("best",{ascending:false});
+      return data || [];
+    }catch(e){ return []; }
+  },
+
   // Actualiza la portada: muestra los botones o el nombre del jugador.
   pinta(){
     const auth = $("lndAuth"), me = $("lndMe"), admin = $("lndAdmin");
@@ -2687,6 +2710,34 @@ const Cuenta = {
     }
   },
 };
+
+/* 🎮 RÉCORDS A LA CUENTA (sin tocar los 40 juegos uno por uno).
+   Los juegos guardan su récord con localStorage.setItem("xxx_best", n).
+   Aquí "escuchamos" esos guardados y, si hay sesión, subimos el récord a
+   la cuenta del jugador (player_scores). Si no hay sesión, no pasa nada:
+   el juego sigue guardando en localStorage como siempre. */
+(function engancharRecords(){
+  function subirSiEsRecord(key, value){
+    try{
+      if(/_(best|wins|kills)$/.test(key||"")){
+        const num = parseFloat(value);
+        if(isFinite(num) && typeof Cuenta!=="undefined" && Cuenta.logueado()){
+          const juego = key.replace(/^edtu_/,"").replace(/_(best|wins|kills)$/,"");
+          Cuenta.guardarRecord(juego, Math.round(num));
+        }
+      }
+    }catch(e){}
+  }
+  // 1) juegos que corren DENTRO de index.html: envolvemos setItem
+  const original = localStorage.setItem.bind(localStorage);
+  localStorage.setItem = function(key, value){
+    original(key, value);
+    subirSiEsRecord(key, value);
+  };
+  // 2) juegos en IFRAME (starwars, jurassic, scream…): el evento "storage" avisa
+  //    a la página padre cuando otra ventana del mismo dominio guarda algo.
+  window.addEventListener("storage", e=>{ if(e.key) subirSiEsRecord(e.key, e.newValue); });
+})();
 
 // Traduce los errores de Supabase a español de niño.
 function authErrorEs(err){
@@ -10398,10 +10449,30 @@ const Hub = {
     }
   },
 
-  // cambiar de sección (inicio / juegos / chat / config)
+  // cambiar de sección (inicio / juegos / chat / config / records)
   sec(name){
     document.querySelectorAll("#hubFs .hub-navbtn").forEach(b=>b.classList.toggle("active", b.dataset.sec===name));
     document.querySelectorAll("#hubFs .hub-sec").forEach(s=>s.classList.toggle("active", s.dataset.sec===name));
+    if(name==="records") this.cargarRecords();
+  },
+
+  // 🏆 cargar y mostrar los récords de la cuenta
+  async cargarRecords(){
+    const cont = $("hubRecordsList"); if(!cont) return;
+    cont.innerHTML = '<p class="hub-sub">Cargando…</p>';
+    const recs = await Cuenta.misRecords();
+    if(!recs.length){
+      cont.innerHTML = '<div class="hub-rec-empty">🎮 Todavía no tienes récords.<br>¡Juega para empezar a guardarlos!</div>';
+      return;
+    }
+    // nombres bonitos para algunos juegos
+    const lindo = { snake:"Snake", flap:"Flappy", fly:"Fly", inv:"Space Invaders", mem:"Memoria",
+      break:"Breakout", sal:"Salto", rsc:"Rescate", trr:"Torre", guess:"Adivina", simon:"Simón",
+      swarm:"Swarm", f1:"F1 RB Rush", sw:"Star Wars", nag:"Not a Game", jurassic:"Jurassic", scream:"Scream" };
+    cont.innerHTML = recs.map(r=>{
+      const nom = lindo[r.game] || r.game;
+      return '<div class="hub-rec"><span class="hub-rec-game">'+nom+'</span><span class="hub-rec-best">'+(r.best||0)+'</span></div>';
+    }).join("");
   },
 };
 
@@ -10431,7 +10502,7 @@ if($("cfgPassSave")) $("cfgPassSave").onclick = async ()=>{
     msg.style.color = "#39ff14"; msg.textContent = "✅ Contraseña cambiada";
   }catch(e){ msg.style.color = "#ff5b6e"; msg.textContent = authErrorEs(e); }
 };
-if($("hubCardTrophies")) $("hubCardTrophies").onclick = ()=>{ try{ if(typeof buildTrophies==="function"){ buildTrophies(); $("trophiesFs") && $("trophiesFs").classList.add("open"); } }catch(e){} Hub.sec("juegos"); };
+if($("hubCardTrophies")) $("hubCardTrophies").onclick = ()=>{ Hub.sec("records"); Hub.cargarRecords(); };
 
 // El botón grande: crear cuenta o entrar
 if($("authGo")) $("authGo").onclick = async ()=>{
