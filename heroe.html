@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Héroe Araña</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;background:#0a0a1e;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;touch-action:none}
+  #c{display:block;width:100vw;height:100vh}
+  .hud{position:fixed;top:12px;left:0;right:0;display:flex;justify-content:space-between;padding:0 18px;
+    color:#fff;font-weight:900;font-size:20px;text-shadow:0 2px 6px #000;pointer-events:none}
+  .hud .sc{color:#ff3b3b}.hud .bt{color:#ffd12e}
+  .over{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(5,5,20,.88);color:#fff;text-align:center;padding:20px}
+  .over.show{display:flex}
+  .over h1{font-size:34px;color:#ff3b3b;text-shadow:0 0 20px rgba(255,59,59,.6);margin-bottom:6px}
+  .over p{font-size:17px;margin:4px;color:#cfe}
+  .over .best{color:#ffd12e;font-weight:900}
+  .btn{margin-top:18px;font-size:20px;font-weight:900;cursor:pointer;border:none;border-radius:16px;padding:15px 34px;
+    color:#fff;background:linear-gradient(90deg,#ff3b3b,#c01a1a);box-shadow:0 5px 0 #8a0f0f}
+  .btn:active{transform:translateY(3px);box-shadow:0 2px 0 #8a0f0f}
+  .hint{position:fixed;bottom:14px;left:0;right:0;text-align:center;color:#9ab;font-size:13px;pointer-events:none}
+</style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div class="hud">
+    <span>🕸️ <span class="sc" id="score">0</span></span>
+    <span>🏆 <span class="bt" id="best">0</span></span>
+  </div>
+  <div class="hint" id="hint">👆 Toca o mueve para columpiarte · esquiva los obstáculos</div>
+  <div class="over show" id="over">
+    <h1 id="overTitle">🕷️ HÉROE ARAÑA</h1>
+    <p>Columpíate por la ciudad, agarra ⭐ y esquiva los 🚁 y 🧱.</p>
+    <p>Toca la pantalla (o mueve el mouse) para subir y bajar.</p>
+    <p class="best">Récord: <span id="overBest">0</span></p>
+    <button class="btn" id="startBtn">▶ JUGAR</button>
+  </div>
+<script>
+const cv=document.getElementById("c"), ctx=cv.getContext("2d");
+let W,H; function resize(){ W=cv.width=innerWidth; H=cv.height=innerHeight; } resize(); addEventListener("resize",resize);
+const $=id=>document.getElementById(id);
+
+const BEST_KEY="edtu_heroe_best";
+let best=parseInt(localStorage.getItem(BEST_KEY)||"0",10)||0;
+$("best").textContent=best; $("overBest").textContent=best;
+
+let playing=false, score=0, hero, obstacles, stars, t, spawnT, starT, targetY, speed;
+
+function reset(){
+  score=0; speed=5; hero={x:W*0.28,y:H/2,vy:0,r:18}; obstacles=[]; stars=[]; t=0; spawnT=0; starT=0; targetY=H/2;
+  $("score").textContent="0";
+}
+function start(){ reset(); playing=true; $("over").classList.remove("show"); loop(); }
+
+// control: puntero/touch mueve el objetivo vertical
+function setTarget(y){ targetY=Math.max(30,Math.min(H-30,y)); }
+cv.addEventListener("pointermove",e=>setTarget(e.clientY));
+cv.addEventListener("pointerdown",e=>setTarget(e.clientY));
+addEventListener("keydown",e=>{ if(e.key==="ArrowUp"||e.key==="w")targetY-=60; if(e.key==="ArrowDown"||e.key==="s")targetY+=60; });
+
+function spawnObstacle(){
+  const kind=Math.random()<0.5?"heli":"wall";
+  const y=40+Math.random()*(H-80);
+  obstacles.push({x:W+40,y, kind, r:26});
+}
+function spawnStar(){ stars.push({x:W+30,y:40+Math.random()*(H-80),r:14,got:false}); }
+
+function loop(){
+  if(!playing) return;
+  requestAnimationFrame(loop);
+  t++; speed=5+score*0.03;
+  // fondo ciudad
+  ctx.fillStyle="#0a0a1e"; ctx.fillRect(0,0,W,H);
+  // edificios de fondo
+  ctx.fillStyle="#12122e";
+  for(let i=0;i<8;i++){ const bx=((i*160 - (t*speed*0.3))%(W+160)+W+160)%(W+160)-80; ctx.fillRect(bx,H-220-(i%3)*60,110,300); }
+  ctx.fillStyle="#1a1a3e";
+  for(let i=0;i<10;i++){ const bx=((i*130 - (t*speed*0.6))%(W+130)+W+130)%(W+130)-65; ctx.fillRect(bx,H-150-(i%4)*40,90,300); }
+
+  // héroe sube/baja hacia el objetivo (efecto columpio)
+  hero.vy += (targetY-hero.y)*0.012; hero.vy*=0.9; hero.y+=hero.vy;
+  // telaraña
+  ctx.strokeStyle="rgba(255,255,255,.5)"; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(hero.x,hero.y); ctx.lineTo(W*0.6, -10); ctx.stroke();
+  // héroe (araña roja)
+  ctx.fillStyle="#ff2b2b"; ctx.beginPath(); ctx.arc(hero.x,hero.y,hero.r,0,7); ctx.fill();
+  ctx.fillStyle="#1a1a4e"; ctx.beginPath(); ctx.ellipse(hero.x+5,hero.y-4,8,6,0,0,7); ctx.fill();
+  ctx.strokeStyle="#000"; ctx.lineWidth=1.5;
+  for(let a=0;a<4;a++){ ctx.beginPath(); ctx.moveTo(hero.x,hero.y); ctx.lineTo(hero.x-14,hero.y-10+a*7); ctx.stroke(); }
+
+  // spawn
+  if(--spawnT<=0){ spawnObstacle(); spawnT=Math.max(28,70-score*0.5); }
+  if(--starT<=0){ spawnStar(); starT=90+Math.random()*60; }
+
+  // estrellas
+  for(const s of stars){ s.x-=speed;
+    if(!s.got){ ctx.font="26px serif"; ctx.textAlign="center"; ctx.fillText("⭐",s.x,s.y+9);
+      if(Math.hypot(s.x-hero.x,s.y-hero.y)<hero.r+16){ s.got=true; score+=5; $("score").textContent=score; } } }
+  stars=stars.filter(s=>s.x>-30 && !s.got);
+
+  // obstáculos
+  for(const o of obstacles){ o.x-=speed; ctx.font="40px serif"; ctx.textAlign="center";
+    ctx.fillText(o.kind==="heli"?"🚁":"🧱",o.x,o.y+14);
+    if(Math.hypot(o.x-hero.x,o.y-hero.y)<hero.r+o.r){ return gameOver(); } }
+  obstacles=obstacles.filter(o=>o.x>-50);
+
+  // puntos por sobrevivir
+  if(t%12===0){ score++; $("score").textContent=score; }
+  // límites
+  if(hero.y<10||hero.y>H-10) return gameOver();
+}
+
+function gameOver(){
+  playing=false;
+  if(score>best){ best=score; try{ localStorage.setItem(BEST_KEY,String(best)); }catch(e){} }
+  try{ if(window.parent&&window.parent.edtuPlayDay) window.parent.edtuPlayDay("Héroe Araña",score,score); }catch(e){}
+  $("best").textContent=best; $("overBest").textContent=best;
+  $("overTitle").textContent = score>=best&&score>0 ? "🏆 ¡NUEVO RÉCORD!" : "💥 ¡TE ATRAPARON!";
+  $("over").querySelector("p").textContent="Hiciste "+score+" puntos.";
+  $("startBtn").textContent="▶ OTRA VEZ";
+  $("over").classList.add("show");
+}
+$("startBtn").onclick=start;
+</script>
+</body>
+</html>

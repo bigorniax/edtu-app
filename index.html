@@ -540,6 +540,13 @@
   #scrFrame{width:100%;height:100%;border:none;display:block}
   #scrCloseBtn{position:fixed;top:8px;right:12px;z-index:201;background:rgba(0,0,0,.6);color:#fff;border:1px solid #ff2b3a;
     border-radius:8px;padding:7px 13px;font-family:"Consolas",monospace;font-weight:700;cursor:pointer}
+  /* juegos nuevos (estilo, héroe, piano) — mismos paneles de iframe */
+  #estFs,#herFs,#piaFs{position:fixed;inset:0;z-index:200;display:none}
+  #estFs.open,#herFs.open,#piaFs.open{display:block}
+  #estFs{background:#e89bd0}#herFs{background:#0a0a1e}#piaFs{background:#0a0a1e}
+  #estFrame,#herFrame,#piaFrame{width:100%;height:100%;border:none;display:block}
+  #estCloseBtn,#herCloseBtn,#piaCloseBtn{position:fixed;top:8px;right:12px;z-index:201;background:rgba(0,0,0,.55);color:#fff;
+    border:1px solid #fff;border-radius:8px;padding:7px 13px;font-family:"Consolas",monospace;font-weight:700;cursor:pointer}
   /* ---------- JUEGO: F1 RB RUSH ---------- */
   /* 🤖 WALLY presentador de la Sala de Trofeos */
   @keyframes wallySway{0%,100%{transform:rotate(-7deg)}50%{transform:rotate(7deg)}}
@@ -1901,6 +1908,9 @@
     <button class="btn pickgame" id="pickScr" style="background:linear-gradient(90deg,#1a0308,#3a0810);border-color:#ff2b3a">🕷️ SCREAM</button>
     <button class="btn pickgame" id="pickTrophies" style="background:linear-gradient(90deg,#1a1406,#3a2c08);border-color:#ffd12e;color:#ffd12e">🏆 SALA DE TROFEOS</button>
     <button class="btn pickgame" id="pickWally" style="background:linear-gradient(90deg,#061a1e,#083a44);border-color:#38b6ff;color:#8fd0ff">🤖 HABLAR CON WALLY 🎤</button>
+    <button class="btn pickgame" id="pickEst" style="background:linear-gradient(90deg,#c0397f,#ff8cc6);border-color:#ffd3e1;color:#fff8fb">💇‍♀️ SALÓN DE ESTILO</button>
+    <button class="btn pickgame" id="pickHer" style="background:linear-gradient(90deg,#3a0810,#c01a1a);border-color:#ff6b6b;color:#ffd6d6">🕷️ HÉROE ARAÑA</button>
+    <button class="btn pickgame" id="pickPia" style="background:linear-gradient(90deg,#1a0a2e,#5a2a80);border-color:#c58cff;color:#e8d6ff">🎹 PIANO MÁGICO</button>
     <button class="btn pickgame" id="pickRandom" style="border-color:#8fd0ff;color:#8fd0ff">🎲 SORPRÉNDEME</button>
     <button class="btn btn-ghost btn-sm" id="pickClose">Cerrar</button>
   </div>
@@ -2091,6 +2101,10 @@
 
 <!-- ============ SCREAM (terror araña 3D en iframe) ============ -->
 <div id="scrFs"><iframe id="scrFrame" allow="fullscreen; pointer-lock; autoplay" title="SCREAM"></iframe><button id="scrCloseBtn">✕ Salir</button></div>
+<!-- juegos nuevos para todas las edades -->
+<div id="estFs"><iframe id="estFrame" allow="fullscreen; autoplay" title="SALÓN DE ESTILO"></iframe><button id="estCloseBtn">✕ Salir</button></div>
+<div id="herFs"><iframe id="herFrame" allow="fullscreen; autoplay" title="HÉROE ARAÑA"></iframe><button id="herCloseBtn">✕ Salir</button></div>
+<div id="piaFs"><iframe id="piaFrame" allow="fullscreen; autoplay" title="PIANO MÁGICO"></iframe><button id="piaCloseBtn">✕ Salir</button></div>
 
 <!-- ============ 12 MINIJUEGOS ============ -->
 <div id="snakeFs" class="gfull"><h2>🐍 SNAKE</h2><div class="ghud" id="snakeHud"></div><canvas id="snakeCv"></canvas><div class="gover" id="snakeOver"></div><div style="margin-top:8px"><button class="btn btn-primary" id="snakeStart">▶ Jugar</button><button class="btn btn-ghost" id="snakeClose" style="margin-left:6px">✕ Salir</button></div></div>
@@ -9962,6 +9976,13 @@ $("pickJp").onclick=()=>abreMundo("jpFrame","jpFs","jurassic.html","JURASSIC",["
 $("jpCloseBtn").onclick=()=>cierraMundo("jpFrame","jpFs");
 $("pickScr").onclick=()=>abreMundo("scrFrame","scrFs","scream.html","SCREAM",["apagando las luces…","soltando a las arañas…","cargando el edificio…"]);
 $("scrCloseBtn").onclick=()=>cierraMundo("scrFrame","scrFs");
+// 🆕 juegos nuevos para todas las edades
+$("pickEst").onclick=()=>abreMundo("estFrame","estFs","estilista.html","SALÓN DE ESTILO",["calentando las planchas…","sacando el maquillaje…","eligiendo los peinados…"]);
+$("pickHer").onclick=()=>abreMundo("herFrame","herFs","heroe.html","HÉROE ARAÑA",["tejiendo las telarañas…","subiendo a los edificios…","cargando la ciudad…"]);
+$("pickPia").onclick=()=>abreMundo("piaFrame","piaFs","piano.html","PIANO MÁGICO",["afinando el piano…","buscando las canciones…"]);
+$("estCloseBtn").onclick=()=>cierraMundo("estFrame","estFs");
+$("herCloseBtn").onclick=()=>cierraMundo("herFrame","herFs");
+$("piaCloseBtn").onclick=()=>cierraMundo("piaFrame","piaFs");
 /* controles: teclado + puntero + swipe */
 document.addEventListener("keydown",e=>{ GK[e.key]=true;
   if($("snakeFs").classList.contains("open")){ const k=e.key; if(k==="ArrowUp")Snake.turn(0,-1);else if(k==="ArrowDown")Snake.turn(0,1);else if(k==="ArrowLeft")Snake.turn(-1,0);else if(k==="ArrowRight")Snake.turn(1,0);else return; e.preventDefault(); }

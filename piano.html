@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Piano Mágico</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;touch-action:manipulation;
+    background:linear-gradient(160deg,#1a0a2e,#0a0a1e);color:#fff}
+  .top{text-align:center;padding:12px}
+  .top h1{font-size:24px;color:#c58cff;text-shadow:0 0 14px rgba(197,140,255,.6)}
+  .top p{font-size:13px;color:#9a8fc0}
+  .tabs{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:6px}
+  .tab{font-size:14px;font-weight:700;cursor:pointer;background:rgba(197,140,255,.15);border:2px solid rgba(197,140,255,.4);
+    border-radius:12px;padding:8px 14px;color:#dcc8ff}
+  .tab.on{background:#c58cff;color:#1a0a2e;border-color:#fff}
+  .msg{text-align:center;min-height:24px;font-size:16px;font-weight:800;color:#ffd12e;margin:4px}
+  .piano{display:flex;justify-content:center;gap:4px;padding:16px 10px;flex-wrap:wrap;max-width:720px;margin:0 auto}
+  .key{width:64px;height:150px;border-radius:0 0 12px 12px;cursor:pointer;display:flex;align-items:flex-end;justify-content:center;
+    padding-bottom:12px;font-weight:900;font-size:16px;color:#5a2a80;transition:all .06s;
+    background:linear-gradient(180deg,#fff,#eee);box-shadow:0 5px 0 #bbb;border:1px solid #ccc}
+  .key:active,.key.hit{transform:translateY(4px);box-shadow:0 1px 0 #bbb;background:linear-gradient(180deg,#f0d8ff,#e0b8ff)}
+  .key.k0{background:linear-gradient(180deg,#ffd6d6,#ffb3b3)}
+  .key.k1{background:linear-gradient(180deg,#ffe8c2,#ffd089)}
+  .key.k2{background:linear-gradient(180deg,#fdffc2,#f3ff89)}
+  .key.k3{background:linear-gradient(180deg,#d2ffc2,#a0ff89)}
+  .key.k4{background:linear-gradient(180deg,#c2fff0,#89ffe0)}
+  .key.k5{background:linear-gradient(180deg,#c2e8ff,#89d0ff)}
+  .key.k6{background:linear-gradient(180deg,#e0c2ff,#c089ff)}
+  .songs{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:10px}
+  .song{font-size:14px;font-weight:700;cursor:pointer;background:rgba(255,209,46,.15);border:2px solid rgba(255,209,46,.4);
+    border-radius:12px;padding:9px 16px;color:#ffe9a8}
+  .song:active{transform:scale(.96)}
+</style>
+</head>
+<body>
+  <div class="top">
+    <h1>🎹 Piano Mágico EDTU 🎵</h1>
+    <p>Toca las teclas (o usa A S D F G H J). ¡Aprende canciones!</p>
+  </div>
+  <div class="tabs">
+    <span class="tab on" data-mode="libre">🎵 Tocar libre</span>
+    <span class="tab" data-mode="seguir">⭐ Sigue la canción</span>
+  </div>
+  <div class="msg" id="msg">¡Toca una tecla!</div>
+  <div class="songs" id="songs" style="display:none"></div>
+  <div class="piano" id="piano"></div>
+<script>
+const $=id=>document.getElementById(id);
+const notas=[  // do re mi fa sol la si
+  {n:"DO",f:261.63,k:"a"},{n:"RE",f:293.66,k:"s"},{n:"MI",f:329.63,k:"d"},
+  {n:"FA",f:349.23,k:"f"},{n:"SOL",f:392.00,k:"g"},{n:"LA",f:440.00,k:"h"},{n:"SI",f:493.88,k:"j"}
+];
+let AC=null;
+function sonar(f){
+  try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)();
+    const o=AC.createOscillator(),g=AC.createGain(); o.type="triangle"; o.frequency.value=f;
+    g.gain.setValueAtTime(0.25,AC.currentTime); g.gain.exponentialRampToValueAtTime(0.001,AC.currentTime+0.6);
+    o.connect(g); g.connect(AC.destination); o.start(); o.stop(AC.currentTime+0.6);
+  }catch(e){}
+}
+
+// construir teclado
+const piano=$("piano");
+notas.forEach((nt,i)=>{
+  const k=document.createElement("div"); k.className="key k"+i; k.textContent=nt.n; k.dataset.i=i;
+  k.onpointerdown=()=>tocar(i); piano.appendChild(k);
+});
+function tocar(i){
+  const nt=notas[i]; sonar(nt.f);
+  const k=piano.children[i]; k.classList.add("hit"); setTimeout(()=>k.classList.remove("hit"),120);
+  if(modo==="seguir") chequear(i);
+  else $("msg").textContent="🎵 "+nt.n;
+}
+addEventListener("keydown",e=>{ const i=notas.findIndex(n=>n.k===e.key.toLowerCase()); if(i>=0){ e.preventDefault(); tocar(i); } });
+
+// ---- modo canción ----
+let modo="libre";
+const canciones={
+  "⭐ Estrellita":["DO","DO","SOL","SOL","LA","LA","SOL","FA","FA","MI","MI","RE","RE","DO"],
+  "🎂 Feliz Cumpleaños":["DO","DO","RE","DO","FA","MI","DO","DO","RE","DO","SOL","FA"],
+  "🎶 Mi Mi Mi":["MI","RE","DO","RE","MI","MI","MI","RE","RE","RE","MI","SOL","SOL"],
+};
+let objetivo=[], paso=0;
+
+document.querySelectorAll(".tab").forEach(t=>{
+  t.onclick=()=>{ document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on")); t.classList.add("on");
+    modo=t.dataset.mode;
+    if(modo==="seguir"){ $("songs").style.display="flex"; pintaCanciones(); $("msg").textContent="Elige una canción 🎵"; }
+    else { $("songs").style.display="none"; $("msg").textContent="¡Toca libre! 🎵"; }
+  };
+});
+function pintaCanciones(){
+  $("songs").innerHTML="";
+  Object.keys(canciones).forEach(nom=>{
+    const b=document.createElement("div"); b.className="song"; b.textContent=nom;
+    b.onclick=()=>empezar(nom); $("songs").appendChild(b);
+  });
+}
+function empezar(nom){
+  objetivo=canciones[nom]; paso=0;
+  $("msg").textContent="Toca: "+objetivo[0]+" 👉";
+  resaltar(objetivo[0]);
+}
+function resaltar(nombreNota){
+  piano.querySelectorAll(".key").forEach(k=>k.style.outline="");
+  const i=notas.findIndex(n=>n.n===nombreNota);
+  if(i>=0) piano.children[i].style.outline="4px solid #ffd12e";
+}
+function chequear(i){
+  if(!objetivo.length) return;
+  if(notas[i].n===objetivo[paso]){
+    paso++;
+    if(paso>=objetivo.length){
+      $("msg").textContent="🏆 ¡CANCIÓN COMPLETA! ¡Bravo! 🎉";
+      piano.querySelectorAll(".key").forEach(k=>k.style.outline="");
+      try{ const n=(parseInt(localStorage.getItem("edtu_piano_best")||"0",10)||0)+1;
+        localStorage.setItem("edtu_piano_best",String(n));
+        if(window.parent&&window.parent.edtuPlayDay) window.parent.edtuPlayDay("Piano Mágico",n,n);
+      }catch(e){}
+      objetivo=[];
+      return;
+    }
+    $("msg").textContent="¡Bien! Ahora: "+objetivo[paso]+" 👉"; resaltar(objetivo[paso]);
+  } else {
+    $("msg").textContent="Casi... toca "+objetivo[paso]+" 👉";
+  }
+}
+</script>
+</body>
+</html>
