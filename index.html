@@ -152,6 +152,12 @@
   .lnd-me .lnd-meava{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;
     font-weight:900;color:#021018;background:linear-gradient(135deg,#39ff14,#2fd0ff);font-size:16px}
   .lnd-me .lnd-mename{color:#dff;font-family:"Consolas",monospace;font-weight:700;font-size:14px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* 👑 Botón de acceso al Centro de Mando (solo lo ve David logueado) */
+  .lnd-adminbtn{margin-top:14px;width:min(340px,86vw);font-family:"Consolas",ui-monospace,monospace;
+    font-size:14px;font-weight:800;letter-spacing:.06em;color:#ffd12e;cursor:pointer;
+    background:rgba(20,16,2,.6);border:1.5px solid rgba(255,209,46,.55);border-radius:12px;padding:13px 18px;
+    transition:all .15s}
+  .lnd-adminbtn:hover{box-shadow:0 0 16px rgba(255,209,46,.5);transform:translateY(-1px);background:rgba(30,24,4,.8)}
 
   /* Panel de crear cuenta / entrar */
   #authFs{position:fixed;inset:0;z-index:500;display:none;align-items:center;justify-content:center;
@@ -1008,6 +1014,10 @@
 
   <div class="lnd-card">
     <button class="btn lnd-btn play-neon" id="lndPlay">▶ PLAY</button>
+    <!-- 🔗 CUENTAS VINCULADAS: solo David (el creador) ve este botón al estar logueado.
+         Como ya demostró quién es con su correo+contraseña de Google, entra al modo
+         espía sin tener que escribir HOLA + PIN otra vez. -->
+    <button class="lnd-adminbtn" id="lndAdmin" style="display:none">👑 ENTRAR AL CENTRO DE MANDO</button>
     <div class="mono" style="font-size:10px;opacity:.45;margin-top:20px">www.edtu.cl</div>
   </div>
 </div>
@@ -2427,7 +2437,7 @@ const Cuenta = {
 
   // Actualiza la portada: muestra los botones o el nombre del jugador.
   pinta(){
-    const auth = $("lndAuth"), me = $("lndMe");
+    const auth = $("lndAuth"), me = $("lndMe"), admin = $("lndAdmin");
     if(!auth || !me) return;
     if(this.logueado()){
       auth.style.display = "none";
@@ -2438,14 +2448,18 @@ const Cuenta = {
         $("lndMeName").innerHTML = '👑 ' + n + ' <span style="color:#ffd12e;font-size:11px">· CREADOR</span>';
         $("lndMeAva").textContent = "👑";
         $("lndMeAva").style.background = "linear-gradient(135deg,#ffd12e,#ff9500)";
+        // 🔗 cuentas vinculadas: solo David ve el acceso directo al Centro de Mando
+        if(admin) admin.style.display = "block";
       } else {
         $("lndMeName").textContent = n;
         $("lndMeAva").textContent = (n[0] || "?").toUpperCase();
         $("lndMeAva").style.background = "";
+        if(admin) admin.style.display = "none";
       }
     } else {
       auth.style.display = "flex";
       me.style.display = "none";
+      if(admin) admin.style.display = "none";   // sin cuenta, no hay acceso admin
     }
   },
 };
@@ -10100,6 +10114,17 @@ if($("authGoogle")) $("authGoogle").onclick = async ()=>{
   const msg = $("authMsg"); msg.style.color="#9fd"; msg.textContent="Abriendo Google…";
   try{ await Cuenta.conGoogle(); }
   catch(e){ msg.style.color="#ff5b6e"; msg.textContent = authErrorEs(e); }
+};
+// 🔗 CUENTAS VINCULADAS: David logueado con su cuenta gamer entra al Centro de Mando
+// sin re-escribir HOLA + PIN. Su correo+contraseña de Google ya probó que es él.
+if($("lndAdmin")) $("lndAdmin").onclick = ()=>{
+  if(!Cuenta.esCreador()){ toast("⛔ Solo el creador puede entrar aquí"); return; }
+  try{
+    // entra como el agente "david" si existe, si no como admin (igual que el PIN 25062015)
+    const dg = (typeof agents!=="undefined" && agents.find) ? agents.find(a=>(a.name||"").trim().toLowerCase()==="david") : null;
+    proceedLogin(dg && !dg.blocked ? {type:"agent", id:dg.id} : {type:"admin"});
+    toast("👑 Bienvenido al Centro de Mando, "+Cuenta.nombre());
+  }catch(e){ toast("No se pudo entrar al Centro de Mando"); }
 };
 
 // El botón grande: crear cuenta o entrar
