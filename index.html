@@ -217,9 +217,12 @@
     background:rgba(40,8,16,.5);border:1.5px solid rgba(255,91,110,.4);border-radius:10px;padding:10px;cursor:pointer;transition:all .15s}
   .hub-side-exit:hover{background:rgba(60,10,20,.7);border-color:#ff5b6e}
   /* contenido */
-  .hub-main{flex:1;overflow-y:auto;padding:34px 36px}
+  .hub-main{flex:1;overflow-y:auto;padding:34px 36px;min-height:0;display:flex;flex-direction:column}
   .hub-sec{display:none;animation:hubFade .25s ease}
   .hub-sec.active{display:block}
+  /* la sección del chat ocupa TODO el alto que queda (si no, se ve una franjita) */
+  .hub-sec[data-sec="chat"].active{display:flex;flex-direction:column;flex:1;min-height:0}
+  .hub-sec[data-sec="chat"] .hub-h1{flex-shrink:0}
   @keyframes hubFade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
   .hub-hello h1{font-size:30px;color:#fff;margin:0 0 4px}
   .hub-hello #hubHelloName{color:#39ff14;text-shadow:0 0 12px rgba(57,255,20,.5)}
@@ -257,52 +260,52 @@
   .hub-rec-best{font-weight:900;color:#ffd12e;font-size:20px;text-shadow:0 0 10px rgba(255,209,46,.4)}
   .hub-rec-empty{text-align:center;padding:30px;color:#8fb0cc}
   /* chat de amigos */
-  .chat-wrap{display:flex;gap:14px;height:calc(100vh - 130px);max-width:1400px}
-  .chat-side{width:215px;flex-shrink:0;display:flex;flex-direction:column;
+  .hchat-wrap{display:flex;gap:14px;flex:1;min-height:0;max-width:1400px;width:100%}
+  .hchat-side{width:215px;flex-shrink:0;display:flex;flex-direction:column;
     background:rgba(8,20,40,.6);border:1.5px solid rgba(47,208,255,.2);border-radius:16px;padding:10px;overflow:hidden}
-  .chat-search{margin-bottom:8px}
-  .chat-buscarres{max-height:160px;overflow-y:auto}
-  .chat-buscarres:not(:empty){margin-bottom:10px;border-bottom:1px solid rgba(47,208,255,.15);padding-bottom:8px}
-  .chat-friends-title{color:#9fd;font-size:13px;font-weight:700;margin:4px 0 8px}
-  .chat-friends{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
-  .chat-friend,.chat-buscaritem{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:10px;cursor:pointer;
+  .hchat-search{margin-bottom:8px}
+  .hchat-buscarres{max-height:160px;overflow-y:auto}
+  .hchat-buscarres:not(:empty){margin-bottom:10px;border-bottom:1px solid rgba(47,208,255,.15);padding-bottom:8px}
+  .hchat-friends-title{color:#9fd;font-size:13px;font-weight:700;margin:4px 0 8px}
+  .hchat-friends{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+  .hchat-friend,.hchat-buscaritem{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:10px;cursor:pointer;
     background:rgba(47,208,255,.06);border:1px solid transparent;transition:all .12s}
-  .chat-friend:hover,.chat-buscaritem:hover{background:rgba(47,208,255,.14);border-color:rgba(47,208,255,.3)}
-  .chat-friend.on{background:rgba(57,255,20,.15);border-color:#39ff14}
-  .chat-fava{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  .hchat-friend:hover,.hchat-buscaritem:hover{background:rgba(47,208,255,.14);border-color:rgba(47,208,255,.3)}
+  .hchat-friend.on{background:rgba(57,255,20,.15);border-color:#39ff14}
+  .hchat-fava{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;
     font-weight:900;color:#021018;background:linear-gradient(135deg,#39ff14,#2fd0ff);font-size:14px;flex-shrink:0}
-  .chat-fname{flex:1;color:#dff;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .chat-fdot{width:9px;height:9px;border-radius:50%;background:#556;flex-shrink:0}
-  .chat-fdot.on{background:#39ff14;box-shadow:0 0 6px #39ff14}
-  .chat-addbtn{font-size:11px;font-weight:800;color:#021018;background:#39ff14;border:none;border-radius:8px;padding:5px 9px;cursor:pointer}
-  .chat-conv{flex:1;display:flex;flex-direction:column;background:rgba(8,20,40,.6);
+  .hchat-fname{flex:1;color:#dff;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .hchat-fdot{width:9px;height:9px;border-radius:50%;background:#556;flex-shrink:0}
+  .hchat-fdot.on{background:#39ff14;box-shadow:0 0 6px #39ff14}
+  .hchat-addbtn{font-size:11px;font-weight:800;color:#021018;background:#39ff14;border:none;border-radius:8px;padding:5px 9px;cursor:pointer}
+  .hchat-conv{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;background:rgba(8,20,40,.6);
     border:1.5px solid rgba(47,208,255,.2);border-radius:16px;overflow:hidden}
-  .chat-conv-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;
+  .hchat-conv-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;
     border-bottom:1px solid rgba(47,208,255,.2);color:#fff;font-weight:700}
-  .chat-msgs{flex:1;overflow-y:auto;padding:18px 20px;display:flex;flex-direction:column;gap:14px}
+  .hchat-msgs{flex:1;min-height:0;overflow-y:auto;padding:18px 20px;display:flex;flex-direction:column;gap:14px}
   /* cada mensaje: avatar + (nombre encima de la burbuja) */
-  .chat-row{display:flex;gap:10px;align-items:flex-start;max-width:78%}
-  .chat-row.mio{align-self:flex-end;flex-direction:row-reverse}
-  .chat-row.otro{align-self:flex-start}
-  .chat-mava{width:38px;height:38px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  .hchat-row{display:flex;gap:10px;align-items:flex-start;max-width:78%}
+  .hchat-row.mio{align-self:flex-end;flex-direction:row-reverse}
+  .hchat-row.otro{align-self:flex-start}
+  .hchat-mava{width:38px;height:38px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;
     font-weight:900;font-size:16px;color:#021018;background:linear-gradient(135deg,#39ff14,#2fd0ff);
     background-size:cover;background-position:center;overflow:hidden}
-  .chat-mava.foto{color:transparent}
-  .chat-bub{display:flex;flex-direction:column;min-width:0}
-  .chat-row.mio .chat-bub{align-items:flex-end}
-  .chat-who{font-size:12px;font-weight:800;color:#8fd0ff;margin-bottom:3px;padding:0 4px}
-  .chat-row.mio .chat-who{color:#9bffb0}
-  .chat-msg{padding:11px 15px;border-radius:16px;font-size:15px;line-height:1.45;word-wrap:break-word;overflow-wrap:anywhere}
-  .chat-msg.mio{background:linear-gradient(135deg,#2a8f2a,#1a6a1a);color:#fff;border-bottom-right-radius:5px}
-  .chat-msg.otro{background:rgba(47,208,255,.14);color:#eff;border-bottom-left-radius:5px}
-  .chat-input{display:flex;gap:8px;padding:12px;border-top:1px solid rgba(47,208,255,.2)}
-  .chat-input .auth-inp{flex:1}
-  .chat-nodb{text-align:center;color:#ffd12e;background:rgba(40,30,4,.5);border:1px solid rgba(255,209,46,.3);
+  .hchat-mava.foto{color:transparent}
+  .hchat-bub{display:flex;flex-direction:column;min-width:0}
+  .hchat-row.mio .hchat-bub{align-items:flex-end}
+  .hchat-who{font-size:12px;font-weight:800;color:#8fd0ff;margin-bottom:3px;padding:0 4px}
+  .hchat-row.mio .hchat-who{color:#9bffb0}
+  .hchat-msg{padding:11px 15px;border-radius:16px;font-size:15px;line-height:1.45;word-wrap:break-word;overflow-wrap:anywhere}
+  .hchat-msg.mio{background:linear-gradient(135deg,#2a8f2a,#1a6a1a);color:#fff;border-bottom-right-radius:5px}
+  .hchat-msg.otro{background:rgba(47,208,255,.14);color:#eff;border-bottom-left-radius:5px}
+  .hchat-input{display:flex;gap:8px;padding:12px;border-top:1px solid rgba(47,208,255,.2)}
+  .hchat-input .auth-inp{flex:1}
+  .hchat-nodb{text-align:center;color:#ffd12e;background:rgba(40,30,4,.5);border:1px solid rgba(255,209,46,.3);
     border-radius:12px;padding:16px;max-width:600px;margin-top:16px}
   @media (max-width:720px){
-    .chat-wrap{flex-direction:column;height:auto}
-    .chat-side{width:auto;max-height:30vh}
-    .chat-conv{height:52vh}
+    .hchat-wrap{flex-direction:column;height:auto}
+    .hchat-side{width:auto;max-height:30vh}
+    .hchat-conv{height:52vh}
   }
   .hub-cfg-exit{margin-top:20px;width:100%;font-weight:700;color:#ff8fa0;background:rgba(40,8,16,.5);
     border:1.5px solid rgba(255,91,110,.4);border-radius:10px;padding:12px;cursor:pointer}
@@ -1276,30 +1279,30 @@
     <!-- CHAT DE AMIGOS -->
     <section class="hub-sec" data-sec="chat">
       <h1 class="hub-h1">💬 Chat</h1>
-      <div class="chat-wrap">
+      <div class="hchat-wrap">
         <!-- columna izquierda: amigos + buscar -->
-        <div class="chat-side">
-          <div class="chat-search">
+        <div class="hchat-side">
+          <div class="hchat-search">
             <input id="chatBuscar" class="auth-inp" type="text" placeholder="🔍 Buscar amigos por nombre" />
           </div>
-          <div id="chatBuscarRes" class="chat-buscarres"></div>
-          <div class="chat-friends-title">👥 Amigos</div>
-          <div id="chatFriends" class="chat-friends"><p class="hub-sub" style="padding:10px">Cargando…</p></div>
+          <div id="chatBuscarRes" class="hchat-buscarres"></div>
+          <div class="hchat-friends-title">👥 Amigos</div>
+          <div id="chatFriends" class="hchat-friends"><p class="hub-sub" style="padding:10px">Cargando…</p></div>
         </div>
         <!-- columna derecha: conversación -->
-        <div class="chat-conv">
-          <div class="chat-conv-head" id="chatConvHead">
+        <div class="hchat-conv">
+          <div class="hchat-conv-head" id="chatConvHead">
             <span>💬 Canal general de EDTU</span>
-            <span class="chat-online-dot" id="chatOnline"></span>
+            <span class="hchat-online-dot" id="chatOnline"></span>
           </div>
-          <div class="chat-msgs" id="chatMsgs"></div>
-          <div class="chat-input">
+          <div class="hchat-msgs" id="chatMsgs"></div>
+          <div class="hchat-input">
             <input id="chatMsgInp" class="auth-inp" type="text" placeholder="Escribe un mensaje…" maxlength="300" />
             <button id="chatSend" class="hub-cfg-save">Enviar</button>
           </div>
         </div>
       </div>
-      <div class="chat-nodb" id="chatNoDb" style="display:none">
+      <div class="hchat-nodb" id="chatNoDb" style="display:none">
         <p>⚠️ El chat necesita que el administrador corra <b>supabase/chat.sql</b> en Supabase.</p>
       </div>
     </section>
@@ -10691,8 +10694,8 @@ const Chat = {
 
   async abrir(){
     const listo = await Cuenta.chatListo();
-    if(!listo){ $("chatNoDb").style.display = "block"; document.querySelector(".chat-wrap").style.display = "none"; return; }
-    $("chatNoDb").style.display = "none"; document.querySelector(".chat-wrap").style.display = "flex";
+    if(!listo){ $("chatNoDb").style.display = "block"; document.querySelector(".hchat-wrap").style.display = "none"; return; }
+    $("chatNoDb").style.display = "none"; document.querySelector(".hchat-wrap").style.display = "flex";
     Cuenta.latido();
     if(this._latido) clearInterval(this._latido);
     this._latido = setInterval(()=>Cuenta.latido(), 40000);   // decir "estoy en línea" cada 40s
@@ -10715,18 +10718,18 @@ const Chat = {
     if(!amigos.length){ cont.innerHTML = '<p class="hub-sub" style="padding:10px">Aún no tienes amigos.<br>Búscalos arriba 🔍</p>'; return; }
     cont.innerHTML = amigos.map(a=>{
       const ava = a.avatar
-        ? '<span class="chat-fava" style="background-image:url('+esc(a.avatar)+');background-size:cover;background-position:center;color:transparent"></span>'
-        : '<span class="chat-fava">'+esc((a.username[0]||"?").toUpperCase())+'</span>';
-      return '<div class="chat-friend" data-id="'+a.id+'" data-name="'+esc(a.username)+'">'+
-        ava+'<span class="chat-fname">'+esc(a.username)+'</span>'+
-        '<span class="chat-fdot'+(a.online?" on":"")+'"></span></div>';
+        ? '<span class="hchat-fava" style="background-image:url('+esc(a.avatar)+');background-size:cover;background-position:center;color:transparent"></span>'
+        : '<span class="hchat-fava">'+esc((a.username[0]||"?").toUpperCase())+'</span>';
+      return '<div class="hchat-friend" data-id="'+a.id+'" data-name="'+esc(a.username)+'">'+
+        ava+'<span class="hchat-fname">'+esc(a.username)+'</span>'+
+        '<span class="hchat-fdot'+(a.online?" on":"")+'"></span></div>';
     }).join("");
-    cont.querySelectorAll(".chat-friend").forEach(f=> f.onclick = ()=>this.verConversacion({id:f.dataset.id, username:f.dataset.name}));
+    cont.querySelectorAll(".hchat-friend").forEach(f=> f.onclick = ()=>this.verConversacion({id:f.dataset.id, username:f.dataset.name}));
   },
 
   async verConversacion(amigo){
     this.amigoActual = amigo;
-    document.querySelectorAll(".chat-friend").forEach(f=> f.classList.toggle("on", amigo && f.dataset.id===amigo.id));
+    document.querySelectorAll(".hchat-friend").forEach(f=> f.classList.toggle("on", amigo && f.dataset.id===amigo.id));
     $("chatConvHead").querySelector("span").textContent = amigo ? ("💬 "+amigo.username) : "💬 Canal general de EDTU";
     await this.refrescar(true);
   },
@@ -10750,13 +10753,13 @@ const Chat = {
       const mismaPersona = anterior && anterior.de_id === m.de_id;
       const mostrarNombre = general ? !mismaPersona : false;
       const ava = foto
-        ? '<span class="chat-mava foto" style="background-image:url('+esc(foto)+')"></span>'
-        : '<span class="chat-mava">'+esc((nom[0]||"?").toUpperCase())+'</span>';
-      return '<div class="chat-row '+(mio?"mio":"otro")+'">'+
-        (mismaPersona && general ? '<span class="chat-mava" style="background:none"></span>' : ava)+
-        '<div class="chat-bub">'+
-        (mostrarNombre ? '<span class="chat-who">'+esc(nom)+'</span>' : '')+
-        '<div class="chat-msg '+(mio?"mio":"otro")+'">'+esc(m.texto||"")+'</div>'+
+        ? '<span class="hchat-mava foto" style="background-image:url('+esc(foto)+')"></span>'
+        : '<span class="hchat-mava">'+esc((nom[0]||"?").toUpperCase())+'</span>';
+      return '<div class="hchat-row '+(mio?"mio":"otro")+'">'+
+        (mismaPersona && general ? '<span class="hchat-mava" style="background:none"></span>' : ava)+
+        '<div class="hchat-bub">'+
+        (mostrarNombre ? '<span class="hchat-who">'+esc(nom)+'</span>' : '')+
+        '<div class="hchat-msg '+(mio?"mio":"otro")+'">'+esc(m.texto||"")+'</div>'+
         '</div></div>';
     }).join("");
     if(scroll || cont.scrollHeight - cont.scrollTop - cont.clientHeight < 120) cont.scrollTop = cont.scrollHeight;
@@ -10769,11 +10772,11 @@ const Chat = {
     if(!encontrados.length){ res.innerHTML = '<p class="hub-sub" style="padding:6px">Nadie con ese nombre.</p>'; return; }
     encontrados.forEach(p=> this._nombres[p.id] = p.username);
     res.innerHTML = encontrados.map(p=>
-      '<div class="chat-buscaritem"><span class="chat-fava">'+(p.username[0]||"?").toUpperCase()+'</span>'+
-      '<span class="chat-fname">'+esc(p.username)+'</span>'+
-      '<button class="chat-addbtn" data-id="'+p.id+'" data-name="'+esc(p.username)+'">+ Agregar</button></div>'
+      '<div class="hchat-buscaritem"><span class="hchat-fava">'+(p.username[0]||"?").toUpperCase()+'</span>'+
+      '<span class="hchat-fname">'+esc(p.username)+'</span>'+
+      '<button class="hchat-addbtn" data-id="'+p.id+'" data-name="'+esc(p.username)+'">+ Agregar</button></div>'
     ).join("");
-    res.querySelectorAll(".chat-addbtn").forEach(b=> b.onclick = async ()=>{
+    res.querySelectorAll(".hchat-addbtn").forEach(b=> b.onclick = async ()=>{
       try{
         await Cuenta.agregarAmigo(b.dataset.id);
         toast("✅ "+b.dataset.name+" agregado");
