@@ -25,7 +25,8 @@
   .card.best{border-color:#ffd12e}.card.best .val{color:#ffd12e}
   .hist{display:flex;justify-content:center;gap:5px;flex-wrap:wrap;padding:0 12px 12px;flex-shrink:0}
   .h{font-size:12px;background:rgba(0,0,0,.3);border-radius:8px;padding:4px 9px;opacity:.85}
-  .rank{text-align:center;font-size:15px;font-weight:800;padding:0 12px 10px;min-height:22px}
+  .rank{text-align:center;font-size:15px;font-weight:800;padding:0 12px 6px;min-height:22px}
+  .puesto{text-align:center;font-size:14px;padding:0 12px 10px;min-height:20px;color:#ffd12e;opacity:.95}
 </style>
 </head>
 <body class="listo">
@@ -41,6 +42,7 @@
   </div>
 
   <div class="rank" id="rank"></div>
+  <div class="puesto" id="puesto"></div>
 
   <div class="stats">
     <div class="card best"><div class="lbl">🏆 TU RÉCORD</div><div class="val" id="best">—</div></div>
@@ -130,12 +132,40 @@ function tocar(){
     }catch(e){}
     $("rank").innerHTML = (nuevo?"🎉 <span style='color:#ffd12e'>¡NUEVO RÉCORD!</span> · ":"") + medalla(ms);
     pinta();
+    // ☁️ guardar en la cuenta y mostrar en qué puesto vas (si entró con cuenta)
+    if(nuevo) guardarEnCuenta(ms);
+    verPuesto();
   }
+}
+
+/* ☁️ CUENTA Y PUESTO
+   El juego vive en un iframe dentro de EDTU, así que puede pedirle a la
+   página de arriba (window.parent) que guarde el récord en la cuenta y
+   que le diga en qué puesto va. Si se abre suelto, simplemente no pasa nada. */
+function cuentaDeArriba(){
+  try{ const C = window.parent && window.parent.Cuenta;
+       return (C && C.logueado && C.logueado()) ? C : null; }catch(e){ return null; }
+}
+function guardarEnCuenta(ms){
+  const C = cuentaDeArriba(); if(!C) return;
+  // en reflejos gana el MENOR, así que guardamos solo si mejora
+  try{ C.guardarRecordMenor ? C.guardarRecordMenor("reflejos", ms) : C.guardarRecord("reflejos", ms); }catch(e){}
+}
+async function verPuesto(){
+  const C = cuentaDeArriba();
+  if(!C){ $("puesto").textContent = "Entra con tu cuenta para competir con los demás 🏅"; return; }
+  try{
+    const p = await C.miPuesto("reflejos", true);   // true = gana el más bajo
+    if(!p){ $("puesto").textContent = ""; return; }
+    const med = p.puesto===1?"🥇":p.puesto===2?"🥈":p.puesto===3?"🥉":"🏅";
+    $("puesto").innerHTML = med+" Vas en el <b>puesto "+p.puesto+"</b> de "+p.total+" jugadores";
+  }catch(e){ $("puesto").textContent=""; }
 }
 
 $("zona").addEventListener("pointerdown", e=>{ e.preventDefault(); tocar(); });
 addEventListener("keydown", e=>{ if(e.key===" "||e.key==="Enter"){ e.preventDefault(); tocar(); } });
 pinta();
+verPuesto();
 </script>
 </body>
 </html>
