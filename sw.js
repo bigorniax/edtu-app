@@ -8,7 +8,8 @@
 // v52: cuentas de jugadores, hub con barra lateral, chat de amigos, y los
 //      juegos nuevos (Salón de Estilo, Héroe Araña, Piano, 20 de 2 jugadores).
 // v53: arreglado el scroll lateral en móvil (barra de arriba y lista de juegos).
-const CACHE = "edtu-v53";
+// v54: Test de Reflejos (1 jugador con récord) y cronómetro en el de 2.
+const CACHE = "edtu-v54";
 const SHELL = ["./", "./index.html", "./starwars.html", "./wally-kb.js", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 // Estas SIEMPRE se piden a la red primero: son las que cambian con cada mejora.
 const FRESCOS = [".html", "/"];

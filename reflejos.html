@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Test de Reflejos</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;touch-action:manipulation}
+  body{display:flex;flex-direction:column;background:#141428;color:#fff;transition:background .08s}
+  body.espera{background:#8a1a1a}
+  body.ya{background:#14a033}
+  .top{text-align:center;padding:14px 12px 6px;flex-shrink:0}
+  .top h1{font-size:22px;letter-spacing:.02em}
+  .top p{font-size:13px;opacity:.75;margin-top:2px}
+  .zona{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;padding:16px}
+  .big{font-size:clamp(34px,9vw,64px);font-weight:900;text-align:center;line-height:1.15}
+  .crono{font-size:clamp(44px,14vw,96px);font-weight:900;color:#ffd12e;text-shadow:0 0 24px rgba(255,209,46,.45);margin-top:10px;
+    font-variant-numeric:tabular-nums}
+  .sub{font-size:16px;opacity:.85;margin-top:12px;text-align:center}
+  .stats{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;padding:10px 12px 16px;flex-shrink:0}
+  .card{background:rgba(0,0,0,.3);border:1.5px solid rgba(255,255,255,.2);border-radius:14px;padding:10px 16px;text-align:center;min-width:92px}
+  .card .lbl{font-size:11px;opacity:.7;letter-spacing:.06em}
+  .card .val{font-size:21px;font-weight:900;margin-top:2px}
+  .card.best{border-color:#ffd12e}.card.best .val{color:#ffd12e}
+  .hist{display:flex;justify-content:center;gap:5px;flex-wrap:wrap;padding:0 12px 12px;flex-shrink:0}
+  .h{font-size:12px;background:rgba(0,0,0,.3);border-radius:8px;padding:4px 9px;opacity:.85}
+  .rank{text-align:center;font-size:15px;font-weight:800;padding:0 12px 10px;min-height:22px}
+</style>
+</head>
+<body class="listo">
+  <div class="top">
+    <h1>⚡ Test de Reflejos</h1>
+    <p>Espera el <b>VERDE</b> y toca lo más rápido que puedas</p>
+  </div>
+
+  <div class="zona" id="zona">
+    <div class="big" id="big">👆 Toca para empezar</div>
+    <div class="crono" id="crono" style="display:none">0 ms</div>
+    <div class="sub" id="sub">También sirve la <b>barra espaciadora</b></div>
+  </div>
+
+  <div class="rank" id="rank"></div>
+
+  <div class="stats">
+    <div class="card best"><div class="lbl">🏆 TU RÉCORD</div><div class="val" id="best">—</div></div>
+    <div class="card"><div class="lbl">ÚLTIMO</div><div class="val" id="last">—</div></div>
+    <div class="card"><div class="lbl">PROMEDIO</div><div class="val" id="avg">—</div></div>
+    <div class="card"><div class="lbl">INTENTOS</div><div class="val" id="n">0</div></div>
+  </div>
+  <div class="hist" id="hist"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const K_BEST="edtu_reflejos_best";      // ⚠ guarda el MEJOR tiempo (el más bajo)
+const K_HIST="edtu_reflejos_hist";
+
+let estado="listo";      // listo | espera | ya | resultado | falso
+let t0=0, timer=null, raf=null;   // raf = el intervalo del cronómetro
+let hist=[];
+try{ hist=JSON.parse(localStorage.getItem(K_HIST)||"[]"); }catch(e){ hist=[]; }
+let best=null;
+try{ const b=parseInt(localStorage.getItem(K_BEST)||"0",10); if(b>0) best=b; }catch(e){}
+
+function pinta(){
+  $("best").textContent = best!=null ? best+" ms" : "—";
+  $("last").textContent = hist.length ? hist[hist.length-1]+" ms" : "—";
+  $("n").textContent = hist.length;
+  if(hist.length){
+    const prom = Math.round(hist.reduce((a,b)=>a+b,0)/hist.length);
+    $("avg").textContent = prom+" ms";
+  } else $("avg").textContent="—";
+  $("hist").innerHTML = hist.slice(-8).map(v=>'<span class="h">'+v+'</span>').join("");
+}
+function medalla(ms){
+  if(ms<180) return "🥇 ¡INCREÍBLE! Reflejos de campeón";
+  if(ms<230) return "🥈 ¡Muy rápido!";
+  if(ms<300) return "🥉 ¡Bien!";
+  if(ms<400) return "👍 Normal";
+  return "🐢 Despierta un poco 😄";
+}
+function setCuerpo(c){ document.body.className=c; }
+
+function empezar(){
+  estado="espera"; setCuerpo("espera");
+  $("big").textContent="Espera el VERDE…";
+  $("crono").style.display="none";
+  $("sub").textContent="¡NO toques todavía!";
+  $("rank").textContent="";
+  const espera = 1200 + Math.random()*3000;
+  timer = setTimeout(()=>{
+    estado="ya"; setCuerpo("ya");
+    $("big").textContent="¡YA! 👆";
+    $("crono").style.display="block";
+    $("sub").textContent="";
+    t0 = performance.now();
+    // ⏱️ el cronómetro sube a la vista.
+    // Con setInterval (no requestAnimationFrame) para que corra igual aunque
+    // la pestaña esté en segundo plano o el navegador frene los frames.
+    $("crono").textContent = "0 ms";
+    clearInterval(raf);
+    raf = setInterval(()=>{ if(estado!=="ya"){ clearInterval(raf); return; }
+      $("crono").textContent = Math.round(performance.now()-t0)+" ms"; }, 10);
+  }, espera);
+}
+
+function tocar(){
+  if(estado==="listo" || estado==="resultado" || estado==="falso"){ empezar(); return; }
+  if(estado==="espera"){            // se adelantó
+    clearTimeout(timer); estado="falso"; setCuerpo("listo");
+    $("big").textContent="😅 ¡Te adelantaste!";
+    $("crono").style.display="none";
+    $("sub").textContent="Espera a que se ponga VERDE. Toca para reintentar.";
+    return;
+  }
+  if(estado==="ya"){
+    clearInterval(raf);
+    const ms = Math.round(performance.now()-t0);
+    estado="resultado"; setCuerpo("listo");
+    $("crono").textContent = ms+" ms";
+    $("big").textContent="⚡ "+ms+" ms";
+    $("sub").textContent="Toca para intentar otra vez";
+    hist.push(ms); if(hist.length>50) hist=hist.slice(-50);
+    let nuevo=false;
+    if(best==null || ms<best){ best=ms; nuevo=true; }   // el récord es el MÁS BAJO
+    try{
+      localStorage.setItem(K_HIST, JSON.stringify(hist));
+      localStorage.setItem(K_BEST, String(best));       // se guarda tu tiempo mínimo
+      if(window.parent && window.parent.edtuPlayDay) window.parent.edtuPlayDay("Reflejos", ms+" ms", ms);
+    }catch(e){}
+    $("rank").innerHTML = (nuevo?"🎉 <span style='color:#ffd12e'>¡NUEVO RÉCORD!</span> · ":"") + medalla(ms);
+    pinta();
+  }
+}
+
+$("zona").addEventListener("pointerdown", e=>{ e.preventDefault(); tocar(); });
+addEventListener("keydown", e=>{ if(e.key===" "||e.key==="Enter"){ e.preventDefault(); tocar(); } });
+pinta();
+</script>
+</body>
+</html>

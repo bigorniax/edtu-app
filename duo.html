@@ -322,7 +322,7 @@ add("⚽","Fútbol","<b>P1:</b> WASD &nbsp;·&nbsp; <b>P2:</b> flechas — ¡met
 // 9) DISPARO AL BLANCO (reflejos)
 let rf;
 add("⚡","Reflejos","Cuando salga <b>¡YA!</b>: <b>P1</b> aprieta <b>A</b>, <b>P2</b> aprieta <b>L</b>",
- ()=>{ rf={estado:"espera",t:0,espera:60+Math.random()*180,msg:"¿Listos?"}; },
+ ()=>{ rf={estado:"espera",t:0,espera:60+Math.random()*180,msg:"¿Listos?",ms:0,ultimo1:null,ultimo2:null}; },
  ()=>{ const r=rf; fondo(r.estado==="ya"?"#1a5a1a":"#1a1a2e");
    r.t++;
    if(r.estado==="espera"){
@@ -331,10 +331,17 @@ add("⚡","Reflejos","Cuando salga <b>¡YA!</b>: <b>P1</b> aprieta <b>A</b>, <b>
        if(quien===1) setSc(s1,s2+1); else setSc(s1+1,s2); }
      else if(r.t>r.espera){ r.estado="ya"; r.msg="¡YA!"; r.t=0; }
    } else if(r.estado==="ya"){
-     if(keys["a"]){ setSc(s1+1,s2); r.estado="fin"; r.msg="🏆 ¡J1 más rápido! ("+Math.round(r.t*16.7)+"ms)"; r.t=0; }
-     else if(keys["l"]){ setSc(s1,s2+1); r.estado="fin"; r.msg="🏆 ¡J2 más rápido! ("+Math.round(r.t*16.7)+"ms)"; r.t=0; }
-   } else if(r.t>90){ r.estado="espera"; r.t=0; r.espera=60+Math.random()*180; r.msg="¿Listos?"; }
-   texto(r.msg,W/2,H/2,r.estado==="ya"?80:38,r.estado==="ya"?"#39ff14":"#fff");
+     r.ms=Math.round(r.t*16.7);                       // ⏱️ el cronómetro que sube
+     if(keys["a"]){ setSc(s1+1,s2); r.ultimo1=r.ms; r.estado="fin"; r.msg="🏆 ¡J1 más rápido!"; r.t=0; }
+     else if(keys["l"]){ setSc(s1,s2+1); r.ultimo2=r.ms; r.estado="fin"; r.msg="🏆 ¡J2 más rápido!"; r.t=0; }
+   } else if(r.t>90){ r.estado="espera"; r.t=0; r.espera=60+Math.random()*180; r.msg="¿Listos?"; r.ms=0; }
+   texto(r.msg,W/2,r.estado==="ya"?H/2-40:H/2,r.estado==="ya"?80:38,r.estado==="ya"?"#39ff14":"#fff");
+   // ⏱️ CRONÓMETRO EN VIVO: se ve subir mientras no aprietas
+   if(r.estado==="ya") texto(r.ms+" ms",W/2,H/2+55,52,"#ffd12e");
+   if(r.estado==="fin") texto(r.ms+" ms",W/2,H/2+50,46,"#ffd12e");
+   // los últimos tiempos de cada uno
+   if(r.ultimo1!=null) texto("J1: "+r.ultimo1+"ms",W*0.22,H-30,20,"#ff5b6e");
+   if(r.ultimo2!=null) texto("J2: "+r.ultimo2+"ms",W*0.78,H-30,20,"#2fd0ff");
    if(s1>=5||s2>=5){ anota("Reflejos"); ganar(s1>=5?"🏆 ¡GANA JUGADOR 1!":"🏆 ¡GANA JUGADOR 2!",""); }
  });
 
