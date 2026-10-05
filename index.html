@@ -2854,6 +2854,33 @@ const Cuenta = {
     }catch(e){ return null; }
   },
 
+  /* 🧹 ARREGLO DE RÉCORDS DE TIEMPO MAL GUARDADOS.
+     Antes, los tiempos se guardaban como si fueran puntos, quedándose con el
+     número MÁS ALTO — o sea, con el PEOR tiempo. A David le quedó 1153 ms de
+     récord cuando el suyo real era 217.
+     Esto compara lo que hay en la nube con lo guardado en este dispositivo y
+     deja el mejor (el más bajo). Corre al abrir "Mis récords". */
+  async arreglaTiemposViejos(){
+    if(!this.sb || !this.user) return;
+    for(const juego of JUEGOS_DE_TIEMPO){
+      try{
+        // el mejor tiempo que tiene este dispositivo
+        let local = 0;
+        for(const k of ["edtu_"+juego+"_best", juego+"_best"]){
+          const v = parseFloat(localStorage.getItem(k) || "0");
+          if(v > 0 && (local === 0 || v < local)) local = Math.round(v);
+        }
+        if(!local) continue;
+        const nube = await this.leerRecord(juego);
+        if(nube > 0 && local < nube){
+          await this.sb.from("player_scores").upsert({
+            player_id: this.user.id, game: juego, best: local, updated_at: new Date().toISOString()
+          }, { onConflict: "player_id,game" });
+        }
+      }catch(e){}
+    }
+  },
+
   // Leer TODOS los récords del jugador (para la pantalla "Mis récords").
   async misRecords(){
     if(!this.sb || !this.user) return [];
@@ -10745,6 +10772,7 @@ const Hub = {
   async cargarRecords(){
     const cont = $("hubRecordsList"); if(!cont) return;
     cont.innerHTML = '<p class="hub-sub">Cargando…</p>';
+    await Cuenta.arreglaTiemposViejos();   // 🧹 corrige récords de tiempo mal guardados
     const recs = await Cuenta.misRecords();
     if(!recs.length){
       cont.innerHTML = '<div class="hub-rec-empty">🎮 Todavía no tienes récords.<br>¡Juega para empezar a guardarlos!</div>';
