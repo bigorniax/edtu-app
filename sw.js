@@ -7,7 +7,8 @@
 // v51: el LED RGB de WALLY + EDTU lista para Cloudflare Pages (2026-09-29).
 // v52: cuentas de jugadores, hub con barra lateral, chat de amigos, y los
 //      juegos nuevos (Salón de Estilo, Héroe Araña, Piano, 20 de 2 jugadores).
-const CACHE = "edtu-v52";
+// v53: arreglado el scroll lateral en móvil (barra de arriba y lista de juegos).
+const CACHE = "edtu-v53";
 const SHELL = ["./", "./index.html", "./starwars.html", "./wally-kb.js", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 // Estas SIEMPRE se piden a la red primero: son las que cambian con cada mejora.
 const FRESCOS = [".html", "/"];
