@@ -171,6 +171,14 @@ $("saveBtn").onclick=()=>{
     s.style.left=(Math.random()*100)+"vw"; s.style.top=(30+Math.random()*50)+"vh"; s.style.fontSize=(20+Math.random()*20)+"px";
     document.body.appendChild(s); setTimeout(()=>s.remove(),1000); }, i*60); }
 };
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
 </script>
 </body>
 </html>

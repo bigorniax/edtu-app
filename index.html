@@ -10916,6 +10916,53 @@ if($("chatSend")) $("chatSend").onclick = ()=>Chat.enviar();
 if($("chatMsgInp")) $("chatMsgInp").onkeydown = e=>{ if(e.key==="Enter"){ e.preventDefault(); Chat.enviar(); } };
 if($("chatBuscar")){ let bt; $("chatBuscar").oninput = ()=>{ clearTimeout(bt); bt=setTimeout(()=>Chat.buscar($("chatBuscar").value.trim()), 350); }; }
 
+/* ============ 🖱️ BOTONES LATERALES DEL MOUSE = VOLVER ATRÁS ============
+   Los mouse con botones al costado ahora sirven en EDTU: el de ATRÁS cierra
+   lo que tengas abierto, en orden — primero el juego, luego el panel, y al
+   final te devuelve a Inicio dentro del hub.
+   El navegador numera esos botones como 3 (atrás) y 4 (adelante). */
+function edtuAtras(){
+  // 1) ¿hay un juego a pantalla completa abierto? ciérralo
+  const mundos = [["swFrame","swFs"],["jpFrame","jpFs"],["scrFrame","scrFs"],["nagFrame","nagFs"],
+    ["rkFrame","rkFs"],["tenFrame","tenFs"],["turboFrame","turboFs"],["canelaFrame","canelaFs"],
+    ["duoFrame","duoFs"],["refFrame","refFs"],["estFrame","estFs"],["herFrame","herFs"],["piaFrame","piaFs"]];
+  for(const [marco,panel] of mundos){
+    const p = $(panel);
+    if(p && p.classList.contains("open")){ try{ cierraMundo(marco,panel); }catch(e){} return true; }
+  }
+  // 2) ¿algún panel abierto? (selector de juegos, cuentas, trofeos…)
+  for(const id of ["authFs","gamePick","trophiesFs","wallyFs"]){
+    const el = $(id);
+    if(el && (el.classList.contains("open") || el.classList.contains("show"))){
+      el.classList.remove("open"); el.classList.remove("show"); return true; }
+  }
+  // 3) dentro del hub: si no estás en Inicio, vuelve a Inicio
+  const hub = $("hubFs");
+  if(hub && hub.classList.contains("show")){
+    const activa = document.querySelector("#hubFs .hub-sec.active");
+    if(activa && activa.dataset.sec !== "inicio"){ Hub.sec("inicio"); return true; }
+  }
+  return false;   // nada que cerrar: no hacemos nada (no cerramos sesión sin querer)
+}
+// Los botones laterales: actuamos al soltar, y evitamos que el navegador
+// se salga de EDTU hacia atrás en el historial.
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button === 3 || e.button === 4){
+      e.preventDefault(); e.stopPropagation();
+      if(ev === "mouseup" && e.button === 3) edtuAtras();
+    }
+  }, true);
+});
+// cuando estás DENTRO de un juego el mouse lo recibe el iframe, así que el
+// juego nos avisa por postMessage y nosotros cerramos.
+addEventListener("message", e=>{ if(e.data && e.data.edtuAtras) edtuAtras(); });
+// el gesto "atrás" del navegador (o del celular) también vuelve dentro de EDTU
+try{
+  history.pushState(null,"",location.href);
+  addEventListener("popstate", ()=>{ history.pushState(null,"",location.href); edtuAtras(); });
+}catch(e){}
+
 document.querySelectorAll("#hubFs .hub-navbtn").forEach(b=> b.onclick = ()=>Hub.sec(b.dataset.sec));
 document.querySelectorAll("#hubFs .hub-card[data-go]").forEach(c=> c.onclick = ()=>Hub.sec(c.dataset.go));
 if($("hubExit"))    $("hubExit").onclick    = async ()=>{ Hub.cerrar(); await Cuenta.salir(); toast("👋 Cerraste sesión"); };

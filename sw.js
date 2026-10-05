@@ -11,7 +11,8 @@
 // v54: Test de Reflejos (1 jugador con récord) y cronómetro en el de 2.
 // v55: récords en la cuenta + puesto (medalla) en cada récord.
 // v56: arreglado el récord de Reflejos (guardaba el PEOR tiempo).
-const CACHE = "edtu-v57";
+// v58: los botones laterales del mouse sirven para volver atrás.
+const CACHE = "edtu-v58";
 const SHELL = ["./", "./index.html", "./starwars.html", "./wally-kb.js", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 // Estas SIEMPRE se piden a la red primero: son las que cambian con cada mejora.
 const FRESCOS = [".html", "/"];

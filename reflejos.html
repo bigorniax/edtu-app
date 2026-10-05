@@ -201,6 +201,14 @@ addEventListener("keydown", e=>{ if(e.key===" "||e.key==="Enter"){ e.preventDefa
 pinta();
 // al abrir: corrige el récord si quedó mal guardado antes, y muestra el puesto
 (async ()=>{ await arreglaRecordViejo(); verPuesto(); })();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
 </script>
 </body>
 </html>
