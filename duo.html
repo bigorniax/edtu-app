@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · 20 Juegos de 2 Jugadores</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;
+    background:radial-gradient(ellipse at 50% 0%,#15213f,#070c18 60%);color:#eff}
+  /* ---------- MENÚ ---------- */
+  #menu{position:absolute;inset:0;overflow-y:auto;padding:18px}
+  #menu h1{text-align:center;font-size:26px;color:#2fd0ff;text-shadow:0 0 16px rgba(47,208,255,.5)}
+  #menu .sub{text-align:center;color:#8fb0cc;font-size:13px;margin:4px 0 16px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:11px;max-width:1000px;margin:0 auto}
+  .gbtn{cursor:pointer;border:2px solid rgba(47,208,255,.35);border-radius:14px;padding:14px 10px;text-align:center;
+    background:linear-gradient(160deg,rgba(14,32,60,.9),rgba(7,16,32,.9));transition:all .14s}
+  .gbtn:hover{transform:translateY(-3px);border-color:#2fd0ff;box-shadow:0 7px 20px rgba(47,208,255,.3)}
+  .gbtn .ico{font-size:30px;display:block;margin-bottom:5px}
+  .gbtn .nm{font-weight:800;font-size:14px;color:#fff}
+  .gbtn .ctl{font-size:10px;color:#7fa8c8;margin-top:3px}
+  /* ---------- JUEGO ---------- */
+  #play{position:absolute;inset:0;display:none;flex-direction:column}
+  #play.on{display:flex}
+  .bar{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:rgba(5,12,24,.85);
+    border-bottom:1px solid rgba(47,208,255,.25);flex-shrink:0}
+  .bar h2{font-size:17px;color:#2fd0ff}
+  .bar .sc{font-weight:900;font-size:17px}
+  .p1c{color:#ff5b6e}.p2c{color:#2fd0ff}
+  .bar button{cursor:pointer;background:rgba(255,91,110,.15);border:1.5px solid rgba(255,91,110,.5);color:#ff8fa0;
+    border-radius:9px;padding:7px 13px;font-weight:700;font-size:13px}
+  #stage{flex:1;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center}
+  canvas{display:block;max-width:100%;max-height:100%;touch-action:none}
+  .help{position:absolute;bottom:8px;left:0;right:0;text-align:center;color:#7fa8c8;font-size:12px;pointer-events:none}
+  .win{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(4,8,18,.9);text-align:center;padding:20px;z-index:5}
+  .win.on{display:flex}
+  .win h2{font-size:30px;margin-bottom:8px}
+  .win button{margin-top:16px;cursor:pointer;font-size:17px;font-weight:900;border:none;border-radius:14px;padding:13px 30px;
+    color:#021018;background:linear-gradient(90deg,#39ff14,#2fd0ff)}
+  /* botones táctiles */
+  .touch{position:absolute;inset:0;display:none;pointer-events:none}
+  .touch.on{display:block}
+  .tb{position:absolute;width:62px;height:62px;border-radius:50%;background:rgba(47,208,255,.18);
+    border:2px solid rgba(47,208,255,.5);color:#fff;font-size:24px;display:flex;align-items:center;justify-content:center;
+    pointer-events:auto;font-weight:900}
+  .tb.p1{border-color:rgba(255,91,110,.6);background:rgba(255,91,110,.18)}
+</style>
+</head>
+<body>
+
+<div id="menu">
+  <h1>🎮 20 Juegos de 2 Jugadores</h1>
+  <p class="sub">¡Reta a un amigo en el mismo teclado! · <span class="p1c">■ Jugador 1</span> &nbsp; <span class="p2c">■ Jugador 2</span></p>
+  <div class="grid" id="grid"></div>
+</div>
+
+<div id="play">
+  <div class="bar">
+    <h2 id="gname">Juego</h2>
+    <div><span class="sc p1c" id="s1">0</span> <span style="opacity:.5">—</span> <span class="sc p2c" id="s2">0</span></div>
+    <button id="back">✕ Menú</button>
+  </div>
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div class="help" id="help"></div>
+    <div class="touch" id="touch"></div>
+    <div class="win" id="win"><h2 id="winTxt">¡Ganaste!</h2><p id="winSub"></p><button id="again">▶ Otra vez</button></div>
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+let W=900,H=560;
+function fit(){
+  const st=$("stage"); const m=Math.min(st.clientWidth/W, st.clientHeight/H);
+  cv.style.width=(W*m)+"px"; cv.style.height=(H*m)+"px";
+}
+cv.width=W; cv.height=H;
+addEventListener("resize",fit);
+
+// ---------- teclado ----------
+const keys={};
+addEventListener("keydown",e=>{ keys[e.key.toLowerCase()]=true;
+  if([" ","arrowup","arrowdown","arrowleft","arrowright"].includes(e.key.toLowerCase())) e.preventDefault(); });
+addEventListener("keyup",e=>{ keys[e.key.toLowerCase()]=false; });
+
+// ---------- motor ----------
+let juego=null, raf=null, s1=0, s2=0;
+function setSc(a,b){ s1=a; s2=b; $("s1").textContent=a; $("s2").textContent=b; }
+function ganar(txt,sub){ $("winTxt").innerHTML=txt; $("winSub").textContent=sub||""; $("win").classList.add("on"); }
+function limpiar(){ ctx.clearRect(0,0,W,H); }
+function fondo(c){ ctx.fillStyle=c||"#0a1428"; ctx.fillRect(0,0,W,H); }
+function texto(t,x,y,size,col,align){ ctx.fillStyle=col||"#fff"; ctx.font="900 "+(size||20)+"px Segoe UI,sans-serif";
+  ctx.textAlign=align||"center"; ctx.fillText(t,x,y); }
+
+function abrir(j){
+  juego=j; $("gname").textContent=j.ico+" "+j.nom; $("help").innerHTML=j.ctl;
+  $("menu").style.display="none"; $("play").classList.add("on"); $("win").classList.remove("on");
+  setSc(0,0); fit(); j.init();
+  if(raf) cancelAnimationFrame(raf);
+  const bucle=()=>{ raf=requestAnimationFrame(bucle); if(!$("win").classList.contains("on")) j.paso(); };
+  bucle();
+}
+function cerrar(){ if(raf) cancelAnimationFrame(raf); raf=null; juego=null;
+  $("play").classList.remove("on"); $("menu").style.display="block"; $("touch").classList.remove("on"); }
+$("back").onclick=cerrar;
+$("again").onclick=()=>{ $("win").classList.remove("on"); setSc(0,0); juego.init(); };
+
+// guardar que jugaron (para los récords de EDTU)
+function anota(nombre){
+  try{ const k="edtu_duo_best"; const n=(parseInt(localStorage.getItem(k)||"0",10)||0)+1;
+    localStorage.setItem(k,String(n));
+    if(window.parent&&window.parent.edtuPlayDay) window.parent.edtuPlayDay("2 Jugadores: "+nombre,n,n);
+  }catch(e){}
+}
+
+/* ======================= LOS 20 JUEGOS ======================= */
+const JUEGOS=[];
+const add=(ico,nom,ctl,init,paso)=>JUEGOS.push({ico,nom,ctl,init,paso});
+
+// 1) PONG
+let pong;
+add("🏓","Pong","<b>P1:</b> W / S &nbsp;·&nbsp; <b>P2:</b> ↑ / ↓",
+ ()=>{ pong={y1:H/2,y2:H/2,bx:W/2,by:H/2,vx:6,vy:3.4,ph:92}; },
+ ()=>{ const p=pong; fondo();
+   if(keys["w"])p.y1-=7; if(keys["s"])p.y1+=7;
+   if(keys["arrowup"])p.y2-=7; if(keys["arrowdown"])p.y2+=7;
+   p.y1=Math.max(p.ph/2,Math.min(H-p.ph/2,p.y1)); p.y2=Math.max(p.ph/2,Math.min(H-p.ph/2,p.y2));
+   p.bx+=p.vx; p.by+=p.vy;
+   if(p.by<10||p.by>H-10) p.vy*=-1;
+   if(p.bx<38&&Math.abs(p.by-p.y1)<p.ph/2){ p.vx=Math.abs(p.vx)*1.04; p.vy+=(p.by-p.y1)*0.055; }
+   if(p.bx>W-38&&Math.abs(p.by-p.y2)<p.ph/2){ p.vx=-Math.abs(p.vx)*1.04; p.vy+=(p.by-p.y2)*0.055; }
+   if(p.bx<0){ setSc(s1,s2+1); p.bx=W/2;p.by=H/2;p.vx=6;p.vy=3.4; }
+   if(p.bx>W){ setSc(s1+1,s2); p.bx=W/2;p.by=H/2;p.vx=-6;p.vy=3.4; }
+   ctx.strokeStyle="rgba(255,255,255,.18)"; ctx.setLineDash([9,13]); ctx.beginPath(); ctx.moveTo(W/2,0); ctx.lineTo(W/2,H); ctx.stroke(); ctx.setLineDash([]);
+   ctx.fillStyle="#ff5b6e"; ctx.fillRect(20,p.y1-p.ph/2,12,p.ph);
+   ctx.fillStyle="#2fd0ff"; ctx.fillRect(W-32,p.y2-p.ph/2,12,p.ph);
+   ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(p.bx,p.by,9,0,7); ctx.fill();
+   if(s1>=7||s2>=7){ anota("Pong"); ganar(s1>7-1?"🏆 ¡GANA JUGADOR 1!":"🏆 ¡GANA JUGADOR 2!",""); }
+ });
+
+// 2) TANQUES
+let tk;
+add("💥","Tanques","<b>P1:</b> WASD + <b>C</b> dispara &nbsp;·&nbsp; <b>P2:</b> flechas + <b>Enter</b>",
+ ()=>{ tk={a:{x:90,y:H/2,an:0,b:[],cd:0,v:5},b:{x:W-90,y:H/2,an:Math.PI,b:[],cd:0,v:5}}; },
+ ()=>{ fondo("#10241a"); const t=tk;
+   const mv=(o,u,d,l,r)=>{ if(keys[l])o.an-=0.055; if(keys[r])o.an+=0.055;
+     if(keys[u]){o.x+=Math.cos(o.an)*o.v;o.y+=Math.sin(o.an)*o.v;}
+     if(keys[d]){o.x-=Math.cos(o.an)*o.v*0.6;o.y-=Math.sin(o.an)*o.v*0.6;}
+     o.x=Math.max(22,Math.min(W-22,o.x)); o.y=Math.max(22,Math.min(H-22,o.y)); };
+   mv(t.a,"w","s","a","d"); mv(t.b,"arrowup","arrowdown","arrowleft","arrowright");
+   const tira=(o,k)=>{ if(o.cd>0)o.cd--; if(keys[k]&&o.cd<=0){ o.cd=22;
+     o.b.push({x:o.x+Math.cos(o.an)*26,y:o.y+Math.sin(o.an)*26,vx:Math.cos(o.an)*10,vy:Math.sin(o.an)*10}); } };
+   tira(t.a,"c"); tira(t.b,"enter");
+   const dibT=(o,c)=>{ ctx.save(); ctx.translate(o.x,o.y); ctx.rotate(o.an);
+     ctx.fillStyle=c; ctx.fillRect(-17,-13,34,26); ctx.fillRect(10,-4,22,8);
+     ctx.fillStyle="rgba(0,0,0,.3)"; ctx.fillRect(-17,-13,34,5); ctx.restore(); };
+   const bal=(o,otro,c,quien)=>{ for(let i=o.b.length-1;i>=0;i--){ const b=o.b[i]; b.x+=b.vx; b.y+=b.vy;
+     ctx.fillStyle=c; ctx.beginPath(); ctx.arc(b.x,b.y,4.5,0,7); ctx.fill();
+     if(b.x<0||b.x>W||b.y<0||b.y>H){ o.b.splice(i,1); continue; }
+     if(Math.hypot(b.x-otro.x,b.y-otro.y)<21){ o.b.splice(i,1);
+       if(quien===1) setSc(s1+1,s2); else setSc(s1,s2+1);
+       t.a.x=90;t.a.y=H/2;t.a.an=0;t.b.x=W-90;t.b.y=H/2;t.b.an=Math.PI;t.a.b=[];t.b.b=[]; } } };
+   dibT(t.a,"#ff5b6e"); dibT(t.b,"#2fd0ff");
+   bal(t.a,t.b,"#ffd12e",1); bal(t.b,t.a,"#9be37d",2);
+   if(s1>=5||s2>=5){ anota("Tanques"); ganar(s1>=5?"🏆 ¡GANA JUGADOR 1!":"🏆 ¡GANA JUGADOR 2!",""); }
+ });
+
+// 3) SUMO (empujar fuera del círculo)
+let sm;
+add("⚪","Sumo","<b>P1:</b> WASD &nbsp;·&nbsp; <b>P2:</b> flechas — ¡empuja al otro fuera!",
+ ()=>{ sm={a:{x:W/2-80,y:H/2,vx:0,vy:0},b:{x:W/2+80,y:H/2,vx:0,vy:0},r:200}; },
+ ()=>{ fondo("#1a1428"); const m=sm;
+   ctx.fillStyle="#2e2446"; ctx.beginPath(); ctx.arc(W/2,H/2,m.r,0,7); ctx.fill();
+   ctx.strokeStyle="#ffd12e"; ctx.lineWidth=5; ctx.stroke();
+   const mv=(o,u,d,l,r)=>{ if(keys[u])o.vy-=0.6; if(keys[d])o.vy+=0.6; if(keys[l])o.vx-=0.6; if(keys[r])o.vx+=0.6;
+     o.vx*=0.94; o.vy*=0.94; o.x+=o.vx; o.y+=o.vy; };
+   mv(m.a,"w","s","a","d"); mv(m.b,"arrowup","arrowdown","arrowleft","arrowright");
+   const dx=m.b.x-m.a.x, dy=m.b.y-m.a.y, d=Math.hypot(dx,dy);
+   if(d<48&&d>0){ const nx=dx/d, ny=dy/d, f=(48-d)*0.35;
+     m.a.vx-=nx*f; m.a.vy-=ny*f; m.b.vx+=nx*f; m.b.vy+=ny*f; }
+   [["#ff5b6e",m.a],["#2fd0ff",m.b]].forEach(([c,o])=>{
+     ctx.fillStyle=c; ctx.beginPath(); ctx.arc(o.x,o.y,24,0,7); ctx.fill();
+     ctx.fillStyle="rgba(255,255,255,.25)"; ctx.beginPath(); ctx.arc(o.x-7,o.y-7,8,0,7); ctx.fill(); });
+   const fuera=o=>Math.hypot(o.x-W/2,o.y-H/2)>m.r+14;
+   if(fuera(m.a)){ setSc(s1,s2+1); juego.init(); }
+   if(fuera(m.b)){ setSc(s1+1,s2); juego.init(); }
+   if(s1>=5||s2>=5){ anota("Sumo"); ganar(s1>=5?"🏆 ¡GANA JUGADOR 1!":"🏆 ¡GANA JUGADOR 2!",""); }
+ });
+
+// 4) CARRERA DE BOTONES
+let cb;
+add("🏁","Carrera","<b>P1:</b> aprieta <b>A</b> &nbsp;·&nbsp; <b>P2:</b> aprieta <b>L</b> — ¡lo más rápido!",
+ ()=>{ cb={x1:60,x2:60,k1:false,k2:false}; },
+ ()=>{ fondo("#0d1f12"); const c=cb;
+   if(keys["a"]&&!c.k1){ c.x1+=11; c.k1=true; } if(!keys["a"]) c.k1=false;
+   if(keys["l"]&&!c.k2){ c.x2+=11; c.k2=true; } if(!keys["l"]) c.k2=false;
+   ctx.fillStyle="rgba(255,255,255,.1)"; ctx.fillRect(0,H*0.3-4,W,80); ctx.fillRect(0,H*0.62-4,W,80);
+   ctx.strokeStyle="#ffd12e"; ctx.lineWidth=5; ctx.setLineDash([12,12]);
+   ctx.beginPath(); ctx.moveTo(W-70,0); ctx.lineTo(W-70,H); ctx.stroke(); ctx.setLineDash([]);
+   texto("🏎️",c.x1,H*0.3+48,46,"#fff"); texto("🏎️",c.x2,H*0.62+48,46,"#fff");
+   texto("P1",30,H*0.3-14,16,"#ff5b6e"); texto("P2",30,H*0.62-14,16,"#2fd0ff");
+   if(c.x1>=W-70){ anota("Carrera"); setSc(1,0); ganar("🏆 ¡GANA JUGADOR 1!",""); }
+   if(c.x2>=W-70){ anota("Carrera"); setSc(0,1); ganar("🏆 ¡GANA JUGADOR 2!",""); }
+ });
+
+// 5) SNAKE DUELO
+let sn;
+add("🐍","Snake Duelo","<b>P1:</b> WASD &nbsp;·&nbsp; <b>P2:</b> flechas — ¡no choques!",
+ ()=>{ const G=20; sn={G,a:[{x:6,y:8}],b:[{x:38,y:20}],da:{x:1,y:0},db:{x:-1,y:0},t:0,
+   co:{x:22,y:14},cols:Math.floor(W/G),rows:Math.floor(H/G)}; },
+ ()=>{ const s=sn; fondo("#071a10");
+   if(keys["w"]&&s.da.y===0)s.da={x:0,y:-1}; if(keys["s"]&&s.da.y===0)s.da={x:0,y:1};
+   if(keys["a"]&&s.da.x===0)s.da={x:-1,y:0}; if(keys["d"]&&s.da.x===0)s.da={x:1,y:0};
+   if(keys["arrowup"]&&s.db.y===0)s.db={x:0,y:-1}; if(keys["arrowdown"]&&s.db.y===0)s.db={x:0,y:1};
+   if(keys["arrowleft"]&&s.db.x===0)s.db={x:-1,y:0}; if(keys["arrowright"]&&s.db.x===0)s.db={x:1,y:0};
+   if(++s.t%7===0){
+     const mov=(cu,d)=>{ const h={x:cu[0].x+d.x,y:cu[0].y+d.y}; cu.unshift(h);
+       if(h.x===s.co.x&&h.y===s.co.y){ s.co={x:(Math.random()*s.cols)|0,y:(Math.random()*s.rows)|0}; } else cu.pop(); };
+     mov(s.a,s.da); mov(s.b,s.db);
+     const ch=(cu,otro)=>{ const h=cu[0];
+       if(h.x<0||h.y<0||h.x>=s.cols||h.y>=s.rows) return true;
+       if(cu.slice(1).some(p=>p.x===h.x&&p.y===h.y)) return true;
+       if(otro.some(p=>p.x===h.x&&p.y===h.y)) return true; return false; };
+     const m1=ch(s.a,s.b), m2=ch(s.b,s.a);
+     if(m1||m2){ if(m1&&!m2) setSc(s1,s2+1); else if(m2&&!m1) setSc(s1+1,s2);
+       if(s1>=3||s2>=3){ anota("Snake Duelo"); ganar(s1>=3?"🏆 ¡GANA JUGADOR 1!":"🏆 ¡GANA JUGADOR 2!",""); } else juego.init(); return; }
+   }
+   const G=s.G;
+   ctx.fillStyle="#ffd12e"; ctx.fillRect(s.co.x*G+3,s.co.y*G+3,G-6,G-6);
+   s.a.forEach((p,i)=>{ ctx.fillStyle=i?"#c0394f":"#ff5b6e"; ctx.fillRect(p.x*G+1,p.y*G+1,G-2,G-2); });
+   s.b.forEach((p,i)=>{ ctx.fillStyle=i?"#1a7fa8":"#2fd0ff"; ctx.fillRect(p.x*G+1,p.y*G+1,G-2,G-2); });
+ });
+
+// 6) 4 EN LÍNEA
+let c4;
+add("🔴","4 en Línea","<b>P1:</b> A/D mueve, <b>S</b> suelta &nbsp;·&nbsp; <b>P2:</b> ←/→, <b>↓</b> suelta",
+ ()=>{ c4={g:Array.from({length:6},()=>Array(7).fill(0)),col:3,turno:1,k:{}}; },
+ ()=>{ const g=c4; fondo("#0a1838");
+   const cw=72, ch=72, ox=(W-7*cw)/2, oy=70;
+   const once=(k,fn)=>{ if(keys[k]&&!g.k[k]){ g.k[k]=true; fn(); } if(!keys[k]) g.k[k]=false; };
+   if(g.turno===1){ once("a",()=>g.col=Math.max(0,g.col-1)); once("d",()=>g.col=Math.min(6,g.col+1)); once("s",soltar); }
+   else { once("arrowleft",()=>g.col=Math.max(0,g.col-1)); once("arrowright",()=>g.col=Math.min(6,g.col+1)); once("arrowdown",soltar); }
+   function soltar(){
+     for(let r=5;r>=0;r--){ if(!g.g[r][g.col]){ g.g[r][g.col]=g.turno;
+       if(gana(r,g.col,g.turno)){ anota("4 en Línea");
+         if(g.turno===1) setSc(s1+1,s2); else setSc(s1,s2+1);
+         ganar(g.turno===1?"🏆 ¡GANA JUGADOR 1!":"🏆 ¡GANA JUGADOR 2!",""); return; }
+       g.turno=g.turno===1?2:1; return; } }
+   }
+   function gana(r,c,p){ const d=[[0,1],[1,0],[1,1],[1,-1]];
+     return d.some(([dr,dc])=>{ let n=1;
+       for(const s of [1,-1]) for(let i=1;i<4;i++){ const rr=r+dr*i*s, cc=c+dc*i*s;
+         if(rr<0||rr>5||cc<0||cc>6||g.g[rr][cc]!==p) break; n++; }
+       return n>=4; }); }
+   ctx.fillStyle="#1a3a6e"; ctx.fillRect(ox-8,oy-8,7*cw+16,6*ch+16);
+   for(let r=0;r<6;r++) for(let c=0;c<7;c++){
+     const v=g.g[r][c];
+     ctx.fillStyle = v===1?"#ff5b6e" : v===2?"#2fd0ff" : "#071226";
+     ctx.beginPath(); ctx.arc(ox+c*cw+cw/2, oy+r*ch+ch/2, 30, 0, 7); ctx.fill(); }
+   ctx.fillStyle=g.turno===1?"#ff5b6e":"#2fd0ff";
+   ctx.beginPath(); ctx.arc(ox+g.col*cw+cw/2, 36, 22, 0, 7); ctx.fill();
+   texto("Turno: Jugador "+g.turno, W/2, H-16, 17, g.turno===1?"#ff5b6e":"#2fd0ff");
+ });
+
+// 7) GATO (tres en raya)
+let ga;
+add("⭕","Gato","<b>P1:</b> WASD mueve, <b>C</b> pone &nbsp;·&nbsp; <b>P2:</b> flechas, <b>Enter</b>",
+ ()=>{ ga={g:Array(9).fill(0),sel:4,turno:1,k:{}}; },
+ ()=>{ const g=ga; fondo("#1a1024");
+   const S=120, ox=(W-3*S)/2, oy=(H-3*S)/2;
+   const once=(k,fn)=>{ if(keys[k]&&!g.k[k]){ g.k[k]=true; fn(); } if(!keys[k]) g.k[k]=false; };
+   const mover=(dx,dy)=>{ const x=(g.sel%3+dx+3)%3, y=((g.sel/3|0)+dy+3)%3; g.sel=y*3+x; };
+   if(g.turno===1){ once("a",()=>mover(-1,0)); once("d",()=>mover(1,0)); once("w",()=>mover(0,-1)); once("s",()=>mover(0,1)); once("c",poner); }
+   else { once("arrowleft",()=>mover(-1,0)); once("arrowright",()=>mover(1,0)); once("arrowup",()=>mover(0,-1)); once("arrowdown",()=>mover(0,1)); once("enter",poner); }
+   function poner(){ if(g.g[g.sel]) return; g.g[g.sel]=g.turno;
+     const L=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+     if(L.some(l=>l.every(i=>g.g[i]===g.turno))){ anota("Gato");
+       if(g.turno===1) setSc(s1+1,s2); else setSc(s1,s2+1);
+       ganar(g.turno===1?"🏆 ¡GANA JUGADOR 1!":"🏆 ¡GANA JUGADOR 2!",""); return; }
+     if(g.g.every(v=>v)){ ganar("🤝 ¡EMPATE!",""); return; }
+     g.turno=g.turno===1?2:1; }
+   ctx.strokeStyle="#4a7fc8"; ctx.lineWidth=4;
+   for(let i=1;i<3;i++){ ctx.beginPath(); ctx.moveTo(ox+i*S,oy); ctx.lineTo(ox+i*S,oy+3*S); ctx.stroke();
+     ctx.beginPath(); ctx.moveTo(ox,oy+i*S); ctx.lineTo(ox+3*S,oy+i*S); ctx.stroke(); }
+   for(let i=0;i<9;i++){ const x=ox+(i%3)*S+S/2, y=oy+((i/3|0))*S+S/2;
+     if(i===g.sel){ ctx.strokeStyle=g.turno===1?"#ff5b6e":"#2fd0ff"; ctx.lineWidth=4;
+       ctx.strokeRect(ox+(i%3)*S+6, oy+((i/3|0))*S+6, S-12, S-12); }
+     if(g.g[i]===1) texto("⭕",x,y+22,62);
+     if(g.g[i]===2) texto("❌",x,y+22,62); }
+   texto("Turno: Jugador "+g.turno, W/2, H-18, 17, g.turno===1?"#ff5b6e":"#2fd0ff");
+ });
+
+// 8) FÚTBOL
+let fu;
+add("⚽","Fútbol","<b>P1:</b> WASD &nbsp;·&nbsp; <b>P2:</b> flechas — ¡mete gol!",
+ ()=>{ fu={a:{x:160,y:H/2,vx:0,vy:0},b:{x:W-160,y:H/2,vx:0,vy:0},p:{x:W/2,y:H/2,vx:0,vy:0}}; },
+ ()=>{ const f=fu; fondo("#0d4a1e");
+   ctx.strokeStyle="rgba(255,255,255,.3)"; ctx.lineWidth=3;
+   ctx.beginPath(); ctx.moveTo(W/2,0); ctx.lineTo(W/2,H); ctx.stroke();
+   ctx.beginPath(); ctx.arc(W/2,H/2,70,0,7); ctx.stroke();
+   ctx.fillStyle="rgba(255,255,255,.14)"; ctx.fillRect(0,H/2-85,16,170); ctx.fillRect(W-16,H/2-85,16,170);
+   const mv=(o,u,d,l,r)=>{ if(keys[u])o.vy-=0.75; if(keys[d])o.vy+=0.75; if(keys[l])o.vx-=0.75; if(keys[r])o.vx+=0.75;
+     o.vx*=0.9; o.vy*=0.9; o.x+=o.vx; o.y+=o.vy;
+     o.x=Math.max(20,Math.min(W-20,o.x)); o.y=Math.max(20,Math.min(H-20,o.y)); };
+   mv(f.a,"w","s","a","d"); mv(f.b,"arrowup","arrowdown","arrowleft","arrowright");
+   [f.a,f.b].forEach(o=>{ const dx=f.p.x-o.x, dy=f.p.y-o.y, d=Math.hypot(dx,dy);
+     if(d<34&&d>0){ f.p.vx+=(dx/d)*3.4+o.vx*0.5; f.p.vy+=(dy/d)*3.4+o.vy*0.5; } });
+   f.p.x+=f.p.vx; f.p.y+=f.p.vy; f.p.vx*=0.98; f.p.vy*=0.98;
+   if(f.p.y<13||f.p.y>H-13){ f.p.vy*=-0.9; f.p.y=Math.max(13,Math.min(H-13,f.p.y)); }
+   const enArco = Math.abs(f.p.y-H/2)<85;
+   if(f.p.x<14){ if(enArco){ setSc(s1,s2+1); juego.init(); } else { f.p.vx*=-0.9; f.p.x=14; } }
+   if(f.p.x>W-14){ if(enArco){ setSc(s1+1,s2); juego.init(); } else { f.p.vx*=-0.9; f.p.x=W-14; } }
+   ctx.fillStyle="#ff5b6e"; ctx.beginPath(); ctx.arc(f.a.x,f.a.y,19,0,7); ctx.fill();
+   ctx.fillStyle="#2fd0ff"; ctx.beginPath(); ctx.arc(f.b.x,f.b.y,19,0,7); ctx.fill();
+   texto("⚽",f.p.x,f.p.y+9,25);
+   if(s1>=5||s2>=5){ anota("Fútbol"); ganar(s1>=5?"🏆 ¡GANA JUGADOR 1!":"🏆 ¡GANA JUGADOR 2!",""); }
+ });
+
+// 9) DISPARO AL BLANCO (reflejos)
+let rf;
+add("⚡","Reflejos","Cuando salga <b>¡YA!</b>: <b>P1</b> aprieta <b>A</b>, <b>P2</b> aprieta <b>L</b>",
+ ()=>{ rf={estado:"espera",t:0,espera:60+Math.random()*180,msg:"¿Listos?"}; },
+ ()=>{ const r=rf; fondo(r.estado==="ya"?"#1a5a1a":"#1a1a2e");
+   r.t++;
+   if(r.estado==="espera"){
+     if(keys["a"]||keys["l"]){ const quien=keys["a"]?1:2;
+       r.estado="falso"; r.msg="😅 ¡J"+quien+" se adelantó!"; r.t=0;
+       if(quien===1) setSc(s1,s2+1); else setSc(s1+1,s2); }
+     else if(r.t>r.espera){ r.estado="ya"; r.msg="¡YA!"; r.t=0; }
+   } else if(r.estado==="ya"){
+     if(keys["a"]){ setSc(s1+1,s2); r.estado="fin"; r.msg="🏆 ¡J1 más rápido! ("+Math.round(r.t*16.7)+"ms)"; r.t=0; }
+     else if(keys["l"]){ setSc(s1,s2+1); r.estado="fin"; r.msg="🏆 ¡J2 más rápido! ("+Math.round(r.t*16.7)+"ms)"; r.t=0; }
+   } else if(r.t>90){ r.estado="espera"; r.t=0; r.espera=60+Math.random()*180; r.msg="¿Listos?"; }
+   texto(r.msg,W/2,H/2,r.estado==="ya"?80:38,r.estado==="ya"?"#39ff14":"#fff");
+   if(s1>=5||s2>=5){ anota("Reflejos"); ganar(s1>=5?"🏆 ¡GANA JUGADOR 1!":"🏆 ¡GANA JUGADOR 2!",""); }
+ });
+
+// 10) AIR HOCKEY
+let ah;
+add("🥅","Air Hockey","<b>P1:</b> WASD &nbsp;·&nbsp; <b>P2:</b> flechas",
+ ()=>{ ah={a:{x:100,y:H/2},b:{x:W-100,y:H/2},p:{x:W/2,y:H/2,vx:0,vy:0}}; },
+ ()=>{ const g=ah; fondo("#0a2a4a");
+   ctx.strokeStyle="rgba(255,255,255,.25)"; ctx.lineWidth=3;
+   ctx.beginPath(); ctx.moveTo(W/2,0); ctx.lineTo(W/2,H); ctx.stroke();
+   ctx.fillStyle="rgba(255,209,46,.2)"; ctx.fillRect(0,H/2-80,10,160); ctx.fillRect(W-10,H/2-80,10,160);
+   const mv=(o,u,d,l,r,lim)=>{ const v=7; if(keys[u])o.y-=v; if(keys[d])o.y+=v; if(keys[l])o.x-=v; if(keys[r])o.x+=v;
+     o.y=Math.max(26,Math.min(H-26,o.y)); o.x=Math.max(lim[0],Math.min(lim[1],o.x)); };
+   mv(g.a,"w","s","a","d",[26,W/2-30]); mv(g.b,"arrowup","arrowdown","arrowleft","arrowright",[W/2+30,W-26]);
+   [g.a,g.b].forEach(o=>{ const dx=g.p.x-o.x, dy=g.p.y-o.y, d=Math.hypot(dx,dy);
+     if(d<42&&d>0){ g.p.vx=(dx/d)*11; g.p.vy=(dy/d)*11; } });
+   g.p.x+=g.p.vx; g.p.y+=g.p.vy; g.p.vx*=0.993; g.p.vy*=0.993;
+   if(g.p.y<14||g.p.y>H-14){ g.p.vy*=-1; g.p.y=Math.max(14,Math.min(H-14,g.p.y)); }
+   const arco=Math.abs(g.p.y-H/2)<80;
+   if(g.p.x<12){ if(arco){ setSc(s1,s2+1); juego.init(); } else { g.p.vx*=-1; g.p.x=12; } }
+   if(g.p.x>W-12){ if(arco){ setSc(s1+1,s2); juego.init(); } else { g.p.vx*=-1; g.p.x=W-12; } }
+   ctx.fillStyle="#ff5b6e"; ctx.beginPath(); ctx.arc(g.a.x,g.a.y,25,0,7); ctx.fill();
+   ctx.fillStyle="#2fd0ff"; ctx.beginPath(); ctx.arc(g.b.x,g.b.y,25,0,7); ctx.fill();
+   ctx.fillStyle="#ffd12e"; ctx.beginPath(); ctx.arc(g.p.x,g.p.y,13,0,7); ctx.fill();
+   if(s1>=7||s2>=7){ anota("Air Hockey"); ganar(s1>=7?"🏆 ¡GANA JUGADOR 1!":"🏆 ¡GANA JUGADOR 2!",""); }
+ });
+
+// 11) TIRA Y AFLOJA
+let ta;
+add("🪢","Tira y Afloja","<b>P1:</b> aprieta <b>A</b> &nbsp;·&nbsp; <b>P2:</b> aprieta <b>L</b>",
+ ()=>{ ta={pos:0,k1:false,k2:false}; },
+ ()=>{ const t=ta; fondo("#2a1a08");
+   if(keys["a"]&&!t.k1){ t.pos-=9; t.k1=true; } if(!keys["a"]) t.k1=false;
+   if(keys["l"]&&!t.k2){ t.pos+=9; t.k2=true; } if(!keys["l"]) t.k2=false;
+   ctx.strokeStyle="#c9971b"; ctx.lineWidth=11;
+   ctx.beginPath(); ctx.moveTo(100,H/2); ctx.lineTo(W-100,H/2); ctx.stroke();
+   ctx.strokeStyle="rgba(255,255,255,.25)"; ctx.lineWidth=3; ctx.setLineDash([8,10]);
+   ctx.beginPath(); ctx.moveTo(W/2,80); ctx.lineTo(W/2,H-80); ctx.stroke(); ctx.setLineDash([]);
+   const cx=W/2+t.pos;
+   ctx.fillStyle="#ffd12e"; ctx.beginPath(); ctx.arc(cx,H/2,17,0,7); ctx.fill();
+   texto("💪",cx-125,H/2+14,42); texto("💪",cx+125,H/2+14,42);
+   texto("P1 ← A",W*0.2,70,21,"#ff5b6e"); texto("L → P2",W*0.8,70,21,"#2fd0ff");
+   if(t.pos<-230){ anota("Tira y Afloja"); setSc(1,0); ganar("🏆 ¡GANA JUGADOR 1!",""); }
+   if(t.pos> 230){ anota("Tira y Afloja"); setSc(0,1); ganar("🏆 ¡GANA JUGADOR 2!",""); }
+ });
+
+// 12) ESQUIVA LAS BOMBAS
+let eb;
+add("💣","Esquiva","<b>P1:</b> A/D &nbsp;·&nbsp; <b>P2:</b> ←/→ — ¡el último vivo gana!",
+ ()=>{ eb={a:{x:W*0.3,vivo:true},b:{x:W*0.7,vivo:true},bombas:[],t:0}; },
+ ()=>{ const e=eb; fondo("#1a0a0a"); e.t++;
+   if(e.t%26===0) e.bombas.push({x:40+Math.random()*(W-80),y:-20,v:3.6+Math.random()*3.4});
+   if(keys["a"])e.a.x-=7; if(keys["d"])e.a.x+=7;
+   if(keys["arrowleft"])e.b.x-=7; if(keys["arrowright"])e.b.x+=7;
+   e.a.x=Math.max(22,Math.min(W-22,e.a.x)); e.b.x=Math.max(22,Math.min(W-22,e.b.x));
+   for(let i=e.bombas.length-1;i>=0;i--){ const b=e.bombas[i]; b.y+=b.v;
+     texto("💣",b.x,b.y,34);
+     if(b.y>H+30){ e.bombas.splice(i,1); continue; }
+     if(e.a.vivo&&Math.abs(b.x-e.a.x)<26&&Math.abs(b.y-(H-50))<26){ e.a.vivo=false; }
+     if(e.b.vivo&&Math.abs(b.x-e.b.x)<26&&Math.abs(b.y-(H-50))<26){ e.b.vivo=false; } }
+   if(e.a.vivo) texto("🔴",e.a.x,H-36,40); if(e.b.vivo) texto("🔵",e.b.x,H-36,40);
+   if(!e.a.vivo&&e.b.vivo){ setSc(s1,s2+1); if(s2>=3){ anota("Esquiva"); ganar("🏆 ¡GANA JUGADOR 2!",""); } else juego.init(); }
+   if(!e.b.vivo&&e.a.vivo){ setSc(s1+1,s2); if(s1>=3){ anota("Esquiva"); ganar("🏆 ¡GANA JUGADOR 1!",""); } else juego.init(); }
+   if(!e.a.vivo&&!e.b.vivo) juego.init();
+ });
+
+// 13) PINTA EL TABLERO
+let pt;
+add("🎨","Pinta","<b>P1:</b> WASD &nbsp;·&nbsp; <b>P2:</b> flechas — ¡pinta más casillas en 30s!",
+ ()=>{ const G=40; pt={G,cols:Math.floor(W/G),rows:Math.floor(H/G),g:[],a:{x:2,y:2},b:{x:0,y:0},t:0,fin:30*60};
+   pt.g=Array.from({length:pt.rows},()=>Array(pt.cols).fill(0));
+   pt.b={x:pt.cols-3,y:pt.rows-3}; },
+ ()=>{ const p=pt; fondo("#0a0a1e"); p.t++;
+   if(p.t%6===0){
+     if(keys["w"])p.a.y--; if(keys["s"])p.a.y++; if(keys["a"])p.a.x--; if(keys["d"])p.a.x++;
+     if(keys["arrowup"])p.b.y--; if(keys["arrowdown"])p.b.y++; if(keys["arrowleft"])p.b.x--; if(keys["arrowright"])p.b.x++;
+     p.a.x=Math.max(0,Math.min(p.cols-1,p.a.x)); p.a.y=Math.max(0,Math.min(p.rows-1,p.a.y));
+     p.b.x=Math.max(0,Math.min(p.cols-1,p.b.x)); p.b.y=Math.max(0,Math.min(p.rows-1,p.b.y));
+     p.g[p.a.y][p.a.x]=1; p.g[p.b.y][p.b.x]=2;
+   }
+   let n1=0,n2=0;
+   for(let r=0;r<p.rows;r++) for(let c=0;c<p.cols;c++){ const v=p.g[r][c];
+     if(v){ ctx.fillStyle=v===1?"rgba(255,91,110,.6)":"rgba(47,208,255,.6)"; ctx.fillRect(c*p.G,r*p.G,p.G-1,p.G-1); if(v===1)n1++;else n2++; } }
+   setSc(n1,n2);
+   ctx.fillStyle="#ff5b6e"; ctx.fillRect(p.a.x*p.G+4,p.a.y*p.G+4,p.G-9,p.G-9);
+   ctx.fillStyle="#2fd0ff"; ctx.fillRect(p.b.x*p.G+4,p.b.y*p.G+4,p.G-9,p.G-9);
+   texto("⏱ "+Math.ceil((p.fin-p.t)/60)+"s",W/2,34,24,"#ffd12e");
+   if(p.t>=p.fin){ anota("Pinta"); ganar(n1>n2?"🏆 ¡GANA JUGADOR 1!":n2>n1?"🏆 ¡GANA JUGADOR 2!":"🤝 ¡EMPATE!", n1+" vs "+n2); }
+ });
+
+// 14) SALTO DE CUERDA
+let sc2;
+add("🪅","Salta","<b>P1:</b> <b>W</b> salta &nbsp;·&nbsp; <b>P2:</b> <b>↑</b> salta",
+ ()=>{ sc2={a:{y:0,v:0,vivo:true},b:{y:0,v:0,vivo:true},x:W+40,vel:7,t:0}; },
+ ()=>{ const s=sc2; fondo("#0f1a3a"); s.t++;
+   const suelo=H-90;
+   const salto=(o,k)=>{ if(keys[k]&&o.y===0) o.v=-15; o.v+=0.72; o.y+=o.v; if(o.y>0){o.y=0;o.v=0;} };
+   if(s.a.vivo) salto(s.a,"w"); if(s.b.vivo) salto(s.b,"arrowup");
+   s.x-=s.vel; if(s.x<-40){ s.x=W+40; s.vel+=0.45; }
+   ctx.fillStyle="#2a3a5a"; ctx.fillRect(0,suelo+30,W,H);
+   ctx.fillStyle="#c9971b"; ctx.fillRect(s.x-10,suelo+6,20,26);
+   const px1=W*0.33, px2=W*0.63;
+   const choca=(px,o)=> o.vivo && Math.abs(s.x-px)<24 && o.y>-34;
+   if(choca(px1,s.a)) s.a.vivo=false;
+   if(choca(px2,s.b)) s.b.vivo=false;
+   if(s.a.vivo) texto("🏃",px1,suelo+s.a.y+22,44); else texto("💥",px1,suelo+22,44);
+   if(s.b.vivo) texto("🏃",px2,suelo+s.b.y+22,44); else texto("💥",px2,suelo+22,44);
+   if(!s.a.vivo&&s.b.vivo){ setSc(s1,s2+1); if(s2>=3){anota("Salta");ganar("🏆 ¡GANA JUGADOR 2!","");} else juego.init(); }
+   if(!s.b.vivo&&s.a.vivo){ setSc(s1+1,s2); if(s1>=3){anota("Salta");ganar("🏆 ¡GANA JUGADOR 1!","");} else juego.init(); }
+   if(!s.a.vivo&&!s.b.vivo) juego.init();
+ });
+
+// 15) BASQUET
+let bq;
+add("🏀","Básquet","<b>P1:</b> A/D mueve, <b>S</b> lanza &nbsp;·&nbsp; <b>P2:</b> ←/→, <b>↓</b> lanza",
+ ()=>{ bq={a:{x:W*0.25,p:0},b:{x:W*0.75,p:0},bolas:[],k:{},aro1:W*0.25,aro2:W*0.75,t:0}; },
+ ()=>{ const g=bq; fondo("#2a1808"); g.t++;
+   g.aro1=W*0.25+Math.sin(g.t*0.02)*130; g.aro2=W*0.75+Math.cos(g.t*0.023)*130;
+   if(keys["a"])g.a.x-=6; if(keys["d"])g.a.x+=6;
+   if(keys["arrowleft"])g.b.x-=6; if(keys["arrowright"])g.b.x+=6;
+   g.a.x=Math.max(30,Math.min(W/2-20,g.a.x)); g.b.x=Math.max(W/2+20,Math.min(W-30,g.b.x));
+   const once=(k,fn)=>{ if(keys[k]&&!g.k[k]){g.k[k]=true;fn();} if(!keys[k])g.k[k]=false; };
+   once("s",()=>g.bolas.push({x:g.a.x,y:H-60,vy:-15.5,q:1}));
+   once("arrowdown",()=>g.bolas.push({x:g.b.x,y:H-60,vy:-15.5,q:2}));
+   [["#ff5b6e",g.aro1],["#2fd0ff",g.aro2]].forEach(([c,ax])=>{
+     ctx.strokeStyle=c; ctx.lineWidth=5; ctx.beginPath(); ctx.ellipse(ax,110,40,11,0,0,7); ctx.stroke(); });
+   for(let i=g.bolas.length-1;i>=0;i--){ const b=g.bolas[i]; b.vy+=0.52; b.y+=b.vy;
+     texto("🏀",b.x,b.y,30);
+     const aro = b.q===1?g.aro1:g.aro2;
+     if(b.vy>0 && Math.abs(b.y-110)<13 && Math.abs(b.x-aro)<38){
+       if(b.q===1) setSc(s1+1,s2); else setSc(s1,s2+1); g.bolas.splice(i,1); continue; }
+     if(b.y>H+30) g.bolas.splice(i,1); }
+   texto("🔴",g.a.x,H-30,38); texto("🔵",g.b.x,H-30,38);
+   if(s1>=5||s2>=5){ anota("Básquet"); ganar(s1>=5?"🏆 ¡GANA JUGADOR 1!":"🏆 ¡GANA JUGADOR 2!",""); }
+ });
+
+// 16) MEMORIA DUELO
+let md;
+add("🃏","Memoria","<b>P1:</b> WASD + <b>C</b> &nbsp;·&nbsp; <b>P2:</b> flechas + <b>Enter</b>",
+ ()=>{ const emo=["🐶","🐱","🦊","🐼","🦁","🐸","🐧","🐙"];
+   const cartas=[...emo,...emo].sort(()=>Math.random()-0.5).map(e=>({e,abierta:false,hecha:false}));
+   md={c:cartas,sel:0,abiertas:[],turno:1,k:{},espera:0}; },
+ ()=>{ const g=md; fondo("#101a2e");
+   const CW=110,CH=118, cols=4, ox=(W-cols*CW)/2, oy=70;
+   if(g.espera>0){ if(--g.espera===0){ const [i,j]=g.abiertas;
+     if(g.c[i].e===g.c[j].e){ g.c[i].hecha=g.c[j].hecha=true;
+       if(g.turno===1) setSc(s1+1,s2); else setSc(s1,s2+1);
+       if(g.c.every(c=>c.hecha)){ anota("Memoria"); ganar(s1>s2?"🏆 ¡GANA JUGADOR 1!":s2>s1?"🏆 ¡GANA JUGADOR 2!":"🤝 ¡EMPATE!",""); } }
+     else { g.c[i].abierta=g.c[j].abierta=false; g.turno=g.turno===1?2:1; }
+     g.abiertas=[]; } }
+   const once=(k,fn)=>{ if(keys[k]&&!g.k[k]){g.k[k]=true;fn();} if(!keys[k])g.k[k]=false; };
+   const mover=(dx,dy)=>{ const x=(g.sel%cols+dx+cols)%cols, y=((g.sel/cols|0)+dy+4)%4; g.sel=y*cols+x; };
+   const voltea=()=>{ if(g.espera>0) return; const c=g.c[g.sel]; if(c.abierta||c.hecha) return;
+     c.abierta=true; g.abiertas.push(g.sel); if(g.abiertas.length===2) g.espera=45; };
+   if(g.turno===1){ once("a",()=>mover(-1,0)); once("d",()=>mover(1,0)); once("w",()=>mover(0,-1)); once("s",()=>mover(0,1)); once("c",voltea); }
+   else { once("arrowleft",()=>mover(-1,0)); once("arrowright",()=>mover(1,0)); once("arrowup",()=>mover(0,-1)); once("arrowdown",()=>mover(0,1)); once("enter",voltea); }
+   g.c.forEach((c,i)=>{ const x=ox+(i%cols)*CW, y=oy+((i/cols|0))*CH;
+     ctx.fillStyle = c.hecha?"rgba(57,255,20,.2)" : (c.abierta?"#2a3a5e":"#1a2440");
+     ctx.fillRect(x+5,y+5,CW-10,CH-10);
+     if(i===g.sel){ ctx.strokeStyle=g.turno===1?"#ff5b6e":"#2fd0ff"; ctx.lineWidth=4; ctx.strokeRect(x+5,y+5,CW-10,CH-10); }
+     if(c.abierta||c.hecha) texto(c.e,x+CW/2,y+CH/2+16,46); else texto("?",x+CW/2,y+CH/2+14,38,"#4a6a9a"); });
+   texto("Turno: Jugador "+g.turno,W/2,H-14,17,g.turno===1?"#ff5b6e":"#2fd0ff");
+ });
+
+// 17) GLOBOS (revienta más)
+let gl;
+add("🎈","Globos","<b>P1:</b> A/D + <b>S</b> pincha &nbsp;·&nbsp; <b>P2:</b> ←/→ + <b>↓</b>",
+ ()=>{ gl={a:W*0.3,b:W*0.7,globos:[],t:0,fin:30*60,k:{}}; },
+ ()=>{ const g=gl; fondo("#0a1a2e"); g.t++;
+   if(g.t%34===0) g.globos.push({x:40+Math.random()*(W-80),y:H+20,v:1.6+Math.random()*2.2,c:Math.random()<0.5});
+   if(keys["a"])g.a-=7; if(keys["d"])g.a+=7;
+   if(keys["arrowleft"])g.b-=7; if(keys["arrowright"])g.b+=7;
+   g.a=Math.max(20,Math.min(W-20,g.a)); g.b=Math.max(20,Math.min(W-20,g.b));
+   const once=(k,fn)=>{ if(keys[k]&&!g.k[k]){g.k[k]=true;fn();} if(!keys[k])g.k[k]=false; };
+   const pincha=(px,quien)=>{ for(let i=g.globos.length-1;i>=0;i--){ const b=g.globos[i];
+     if(Math.abs(b.x-px)<40 && Math.abs(b.y-(H-70))<60){ g.globos.splice(i,1);
+       if(quien===1) setSc(s1+1,s2); else setSc(s1,s2+1); return; } } };
+   once("s",()=>pincha(g.a,1)); once("arrowdown",()=>pincha(g.b,2));
+   for(let i=g.globos.length-1;i>=0;i--){ const b=g.globos[i]; b.y-=b.v;
+     texto(b.c?"🎈":"🎈",b.x,b.y,34); if(b.y<-30) g.globos.splice(i,1); }
+   texto("🔴",g.a,H-40,38); texto("🔵",g.b,H-40,38);
+   texto("⏱ "+Math.ceil((g.fin-g.t)/60)+"s",W/2,32,22,"#ffd12e");
+   if(g.t>=g.fin){ anota("Globos"); ganar(s1>s2?"🏆 ¡GANA JUGADOR 1!":s2>s1?"🏆 ¡GANA JUGADOR 2!":"🤝 ¡EMPATE!",""); }
+ });
+
+// 18) LASER (gira y dispara)
+let ls;
+add("🔫","Duelo Láser","<b>P1:</b> W/S gira, <b>C</b> dispara &nbsp;·&nbsp; <b>P2:</b> ↑/↓, <b>Enter</b>",
+ ()=>{ ls={a:{y:H/2,an:0,cd:0,b:[]},b:{y:H/2,an:Math.PI,cd:0,b:[]}}; },
+ ()=>{ const g=ls; fondo("#140a1e");
+   if(keys["w"])g.a.an-=0.035; if(keys["s"])g.a.an+=0.035;
+   if(keys["arrowup"])g.b.an-=0.035; if(keys["arrowdown"])g.b.an+=0.035;
+   g.a.an=Math.max(-1.1,Math.min(1.1,g.a.an));
+   g.b.an=Math.max(Math.PI-1.1,Math.min(Math.PI+1.1,g.b.an));
+   const tira=(o,k,x)=>{ if(o.cd>0)o.cd--; if(keys[k]&&o.cd<=0){ o.cd=26;
+     o.b.push({x, y:o.y, vx:Math.cos(o.an)*12, vy:Math.sin(o.an)*12}); } };
+   tira(g.a,"c",70); tira(g.b,"enter",W-70);
+   const ax=70, bx=W-70;
+   ctx.strokeStyle="#ff5b6e"; ctx.lineWidth=6;
+   ctx.beginPath(); ctx.moveTo(ax,g.a.y); ctx.lineTo(ax+Math.cos(g.a.an)*48, g.a.y+Math.sin(g.a.an)*48); ctx.stroke();
+   ctx.strokeStyle="#2fd0ff";
+   ctx.beginPath(); ctx.moveTo(bx,g.b.y); ctx.lineTo(bx+Math.cos(g.b.an)*48, g.b.y+Math.sin(g.b.an)*48); ctx.stroke();
+   ctx.fillStyle="#ff5b6e"; ctx.beginPath(); ctx.arc(ax,g.a.y,22,0,7); ctx.fill();
+   ctx.fillStyle="#2fd0ff"; ctx.beginPath(); ctx.arc(bx,g.b.y,22,0,7); ctx.fill();
+   const bal=(o,ox,oy,c,quien)=>{ for(let i=o.b.length-1;i>=0;i--){ const b=o.b[i]; b.x+=b.vx; b.y+=b.vy;
+     ctx.strokeStyle=c; ctx.lineWidth=4;
+     ctx.beginPath(); ctx.moveTo(b.x,b.y); ctx.lineTo(b.x-b.vx*1.6,b.y-b.vy*1.6); ctx.stroke();
+     if(b.y<6||b.y>H-6){ b.vy*=-1; }
+     if(Math.hypot(b.x-ox,b.y-oy)<24){ o.b.splice(i,1);
+       if(quien===1) setSc(s1+1,s2); else setSc(s1,s2+1); g.a.b=[];g.b.b=[]; return; }
+     if(b.x<-20||b.x>W+20) o.b.splice(i,1); } };
+   bal(g.a,bx,g.b.y,"#ffd12e",1); bal(g.b,ax,g.a.y,"#9be37d",2);
+   if(s1>=5||s2>=5){ anota("Duelo Láser"); ganar(s1>=5?"🏆 ¡GANA JUGADOR 1!":"🏆 ¡GANA JUGADOR 2!",""); }
+ });
+
+// 19) CARRERA DE OBSTÁCULOS (vertical)
+let co;
+add("🚧","Obstáculos","<b>P1:</b> A/D &nbsp;·&nbsp; <b>P2:</b> ←/→ — ¡llega más lejos!",
+ ()=>{ co={a:{x:W*0.25,vivo:true,d:0},b:{x:W*0.75,vivo:true,d:0},obs:[],t:0,vel:5}; },
+ ()=>{ const g=co; fondo("#0a1020"); g.t++; g.vel+=0.0022;
+   if(g.t%30===0){ g.obs.push({x:20+Math.random()*(W/2-80),y:-30,lado:1});
+                    g.obs.push({x:W/2+30+Math.random()*(W/2-80),y:-30,lado:2}); }
+   ctx.strokeStyle="rgba(255,255,255,.2)"; ctx.lineWidth=3;
+   ctx.beginPath(); ctx.moveTo(W/2,0); ctx.lineTo(W/2,H); ctx.stroke();
+   if(keys["a"])g.a.x-=7; if(keys["d"])g.a.x+=7;
+   if(keys["arrowleft"])g.b.x-=7; if(keys["arrowright"])g.b.x+=7;
+   g.a.x=Math.max(22,Math.min(W/2-22,g.a.x)); g.b.x=Math.max(W/2+22,Math.min(W-22,g.b.x));
+   for(let i=g.obs.length-1;i>=0;i--){ const o=g.obs[i]; o.y+=g.vel;
+     texto("🚧",o.x,o.y,32);
+     if(o.y>H+30){ g.obs.splice(i,1); continue; }
+     const p = o.lado===1?g.a:g.b;
+     if(p.vivo && Math.abs(o.x-p.x)<28 && Math.abs(o.y-(H-60))<28) p.vivo=false; }
+   if(g.a.vivo){ g.a.d++; texto("🔴",g.a.x,H-44,36); } else texto("💥",g.a.x,H-44,36);
+   if(g.b.vivo){ g.b.d++; texto("🔵",g.b.x,H-44,36); } else texto("💥",g.b.x,H-44,36);
+   setSc(Math.floor(g.a.d/10), Math.floor(g.b.d/10));
+   if(!g.a.vivo&&!g.b.vivo){ anota("Obstáculos");
+     ganar(s1>s2?"🏆 ¡GANA JUGADOR 1!":s2>s1?"🏆 ¡GANA JUGADOR 2!":"🤝 ¡EMPATE!", s1+" vs "+s2); }
+ });
+
+// 20) PIEDRA PAPEL TIJERA
+let pp;
+add("✂️","Piedra Papel Tijera","<b>P1:</b> A=piedra S=papel D=tijera &nbsp;·&nbsp; <b>P2:</b> J / K / L",
+ ()=>{ pp={e1:null,e2:null,msg:"¡Elijan!",t:0,k:{}}; },
+ ()=>{ const g=pp; fondo("#1a1a2e"); g.t++;
+   const once=(k,fn)=>{ if(keys[k]&&!g.k[k]){g.k[k]=true;fn();} if(!keys[k])g.k[k]=false; };
+   if(g.t>0 && !g.msg.startsWith("🏆") && !g.msg.startsWith("🤝")){
+     once("a",()=>{ if(!g.e1) g.e1="piedra"; }); once("s",()=>{ if(!g.e1) g.e1="papel"; }); once("d",()=>{ if(!g.e1) g.e1="tijera"; });
+     once("j",()=>{ if(!g.e2) g.e2="piedra"; }); once("k",()=>{ if(!g.e2) g.e2="papel"; }); once("l",()=>{ if(!g.e2) g.e2="tijera"; });
+   }
+   if(g.e1&&g.e2&&!g.msg.startsWith("🏆")&&!g.msg.startsWith("🤝")){
+     const gana={piedra:"tijera",papel:"piedra",tijera:"papel"};
+     if(g.e1===g.e2) g.msg="🤝 ¡EMPATE!";
+     else if(gana[g.e1]===g.e2){ setSc(s1+1,s2); g.msg="🏆 ¡Punto para J1!"; }
+     else { setSc(s1,s2+1); g.msg="🏆 ¡Punto para J2!"; }
+     g.t=-70;
+   }
+   if(g.t===0){ g.e1=g.e2=null; g.msg="¡Elijan!"; }
+   const emo={piedra:"✊",papel:"✋",tijera:"✌️"};
+   const oculto = !(g.e1&&g.e2);
+   texto(g.e1?(oculto?"❓":emo[g.e1]):"❓", W*0.3, H/2+20, 90);
+   texto(g.e2?(oculto?"❓":emo[g.e2]):"❓", W*0.7, H/2+20, 90);
+   texto("P1",W*0.3,H/2-90,22,"#ff5b6e"); texto("P2",W*0.7,H/2-90,22,"#2fd0ff");
+   texto(g.msg,W/2,H-50,30,"#ffd12e");
+   if(s1>=5||s2>=5){ anota("PPT"); ganar(s1>=5?"🏆 ¡GANA JUGADOR 1!":"🏆 ¡GANA JUGADOR 2!",""); }
+ });
+
+/* ---------- pintar el menú ---------- */
+$("grid").innerHTML = JUEGOS.map((j,i)=>
+  '<div class="gbtn" data-i="'+i+'"><span class="ico">'+j.ico+'</span>'+
+  '<span class="nm">'+j.nom+'</span><div class="ctl">2 jugadores</div></div>').join("");
+document.querySelectorAll(".gbtn").forEach(b=> b.onclick=()=>abrir(JUEGOS[+b.dataset.i]));
+fit();
+</script>
+</body>
+</html>
