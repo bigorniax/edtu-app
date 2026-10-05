@@ -314,20 +314,29 @@
   #hubGamesMount #gamePick .gp-card{max-width:none;width:100%;background:none;border:none;box-shadow:none;padding:0;max-height:none;overflow:visible;
     display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
   #hubGamesMount #gamePick .gp-card > h2{display:none}   /* el hub ya tiene su propio título */
-  #hubGamesMount #gamePick .pickgame{margin:0}
+  #hubGamesMount #gamePick .gp-card .pickgame{margin:0;width:100%;max-width:100%;min-width:0}
   /* celular: barra lateral arriba, horizontal */
   @media (max-width:720px){
     #hubFs{flex-direction:column}
-    #hubGamesMount #gamePick .gp-card{grid-template-columns:1fr 1fr}
-    .hub-side{width:auto;flex-direction:row;align-items:center;overflow-x:auto;padding:10px;gap:8px;
+    /* móvil: UNA columna, y los botones se ajustan al ancho (si no, se salen) */
+    #hubGamesMount #gamePick .gp-card{grid-template-columns:1fr}
+    #hubGamesMount #gamePick .gp-card .pickgame{min-width:0;width:100%;max-width:100%;white-space:normal;font-size:14px;padding:12px 10px}
+    /* móvil: barra de arriba compacta, SIN scroll lateral (todo tiene que caber) */
+    .hub-side{width:auto;flex-direction:row;align-items:center;overflow-x:hidden;padding:8px 6px;gap:4px;
       border-right:none;border-bottom:1.5px solid rgba(47,208,255,.25)}
-    .hub-logo{padding:0 12px 0 4px;border-bottom:none;margin:0;border-right:1px solid rgba(47,208,255,.15)}
-    .hub-logo-edtu{font-size:22px}.hub-logo-play{display:none}
-    .hub-nav{flex-direction:row;gap:6px}
-    .hub-navbtn{padding:9px 12px;font-size:14px}.hub-navbtn span{display:none}
-    .hub-navbtn{font-size:20px}
-    .hub-side-foot{border-top:none;border-left:1px solid rgba(47,208,255,.15);padding:0 0 0 10px;margin:0;display:flex;align-items:center;gap:8px}
-    .hub-me-name{display:none}.hub-side-exit{width:auto;padding:9px 12px;white-space:nowrap}
+    .hub-logo{padding:0 6px 0 2px;border-bottom:none;margin:0;border-right:1px solid rgba(47,208,255,.15);flex-shrink:0}
+    .hub-logo-edtu{font-size:17px;letter-spacing:.02em}.hub-logo-play{display:none}
+    .hub-nav{flex-direction:row;gap:2px;flex:1;justify-content:space-around;min-width:0}
+    .hub-navbtn{padding:8px 6px;font-size:19px;flex:0 0 auto}.hub-navbtn span{display:none}
+    .hub-side-foot{border-top:none;border-left:1px solid rgba(47,208,255,.15);padding:0 0 0 6px;margin:0;
+      display:flex;align-items:center;gap:5px;flex-shrink:0}
+    .hub-me{margin:0}
+    .hub-me-name{display:none}
+    .hub-me-ava{width:30px;height:30px;font-size:14px}
+    /* en móvil el botón de admin es solo la corona (el texto no cabe) */
+    .hub-admin-btn{width:auto;margin:0;padding:7px 9px;font-size:0;white-space:nowrap}
+    .hub-admin-btn::before{content:"👑";font-size:17px}
+    .hub-side-exit{width:auto;padding:7px 9px;white-space:nowrap;font-size:12px}
     .hub-main{padding:22px 16px}
     .hub-hello h1{font-size:24px}.hub-h1{font-size:22px}
   }
