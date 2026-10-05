@@ -60,7 +60,14 @@ const K_HIST="edtu_reflejos_hist";
 let estado="listo";      // listo | espera | ya | resultado | falso
 let t0=0, timer=null, raf=null;   // raf = el intervalo del cronómetro
 let hist=[];
-try{ hist=JSON.parse(localStorage.getItem(K_HIST)||"[]"); }catch(e){ hist=[]; }
+try{
+  hist=JSON.parse(localStorage.getItem(K_HIST)||"[]");
+  // 🧹 limpieza: fuera los tiempos imposibles que se colaron antes del arreglo
+  // (los de más de 1s eran despistes, no intentos de verdad)
+  const antes = hist.length;
+  hist = hist.filter(v=> v>0 && v<=1000);
+  if(hist.length !== antes) localStorage.setItem(K_HIST, JSON.stringify(hist));
+}catch(e){ hist=[]; }
 let best=null;
 try{ const b=parseInt(localStorage.getItem(K_BEST)||"0",10); if(b>0) best=b; }catch(e){}
 
@@ -102,7 +109,18 @@ function empezar(){
     $("crono").textContent = "0 ms";
     clearInterval(raf);
     raf = setInterval(()=>{ if(estado!=="ya"){ clearInterval(raf); return; }
-      $("crono").textContent = Math.round(performance.now()-t0)+" ms"; }, 10);
+      const ms = Math.round(performance.now()-t0);
+      $("crono").textContent = ms+" ms";
+      // ⏰ Si pasa 1 segundo sin tocar, no cuenta: se te fue. Si no, un
+      // despiste de 3 segundos quedaba guardado y arruinaba tu promedio.
+      if(ms > 1000){
+        clearInterval(raf); estado="falso"; setCuerpo("listo");
+        $("big").textContent="😴 ¡Te dormiste!";
+        $("crono").style.display="none";
+        $("sub").textContent="Más de 1 segundo no cuenta. Toca para reintentar.";
+        $("rank").textContent="";
+      }
+    }, 10);
   }, espera);
 }
 
@@ -151,6 +169,22 @@ function guardarEnCuenta(ms){
   // en reflejos gana el MENOR, así que guardamos solo si mejora
   try{ C.guardarRecordMenor ? C.guardarRecordMenor("reflejos", ms) : C.guardarRecord("reflejos", ms); }catch(e){}
 }
+/* 🧹 Arreglo de récords viejos mal guardados.
+   Antes del arreglo, el sistema guardaba el tiempo MÁS ALTO (trataba los
+   milisegundos como si fueran puntos), así que a mucha gente le quedó un
+   tiempo malísimo como "récord". Si el de la cuenta es peor que el de este
+   dispositivo, lo corregimos con el bueno. */
+async function arreglaRecordViejo(){
+  const C = cuentaDeArriba(); if(!C || best==null) return;
+  try{
+    const enNube = await C.leerRecord("reflejos");
+    if(enNube > 0 && enNube > best){
+      // el de la nube es peor: lo pisamos con el bueno de este dispositivo
+      await C.guardarRecordMenor("reflejos", best);
+    }
+  }catch(e){}
+}
+
 async function verPuesto(){
   const C = cuentaDeArriba();
   if(!C){ $("puesto").textContent = "Entra con tu cuenta para competir con los demás 🏅"; return; }
@@ -165,7 +199,8 @@ async function verPuesto(){
 $("zona").addEventListener("pointerdown", e=>{ e.preventDefault(); tocar(); });
 addEventListener("keydown", e=>{ if(e.key===" "||e.key==="Enter"){ e.preventDefault(); tocar(); } });
 pinta();
-verPuesto();
+// al abrir: corrige el récord si quedó mal guardado antes, y muestra el puesto
+(async ()=>{ await arreglaRecordViejo(); verPuesto(); })();
 </script>
 </body>
 </html>

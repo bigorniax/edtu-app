@@ -10,7 +10,8 @@
 // v53: arreglado el scroll lateral en móvil (barra de arriba y lista de juegos).
 // v54: Test de Reflejos (1 jugador con récord) y cronómetro en el de 2.
 // v55: récords en la cuenta + puesto (medalla) en cada récord.
-const CACHE = "edtu-v55";
+// v56: arreglado el récord de Reflejos (guardaba el PEOR tiempo).
+const CACHE = "edtu-v56";
 const SHELL = ["./", "./index.html", "./starwars.html", "./wally-kb.js", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 // Estas SIEMPRE se piden a la red primero: son las que cambian con cada mejora.
 const FRESCOS = [".html", "/"];
