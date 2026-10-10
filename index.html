@@ -2935,7 +2935,15 @@ const Cuenta = {
       if(!data || !data.length) return null;
       // los récords imposibles no compiten (si no, uno de 6 ms sería siempre primero)
       const limpios = data.filter(r=>recordValido(juego, r.best));
-      const orden = (limpios.length?limpios:data).slice().sort((a,b)=> menorEsMejor ? a.best-b.best : b.best-a.best);
+      const miId = this.user.id;
+      const orden = (limpios.length?limpios:data).slice().sort((a,b)=>{
+        const dif = menorEsMejor ? a.best-b.best : b.best-a.best;
+        if(dif !== 0) return dif;
+        // 🤝 en empate, tú vas primero
+        if(a.player_id===miId) return -1;
+        if(b.player_id===miId) return 1;
+        return 0;
+      });
       const i = orden.findIndex(r=>r.player_id===this.user.id);
       if(i<0) return null;
       return { puesto: i+1, total: orden.length };
@@ -3005,7 +3013,15 @@ const Cuenta = {
         return { id:s.player_id, best:s.best, cuando:s.updated_at,
                  nombre:(p && p.username) || "jugador", avatar:(p && p.avatar) || null,
                  soyYo: this.user && s.player_id===this.user.id };
-      }).sort((a,b)=> menorEsMejor ? a.best-b.best : b.best-a.best);
+      }).sort((a,b)=>{
+        const dif = menorEsMejor ? a.best-b.best : b.best-a.best;
+        if(dif !== 0) return dif;
+        // 🤝 EMPATE: tú vas primero (es tu marca, la ves como tuya)
+        if(a.soyYo && !b.soyYo) return -1;
+        if(b.soyYo && !a.soyYo) return 1;
+        // entre otros dos empatados, gana quien lo hizo antes
+        return new Date(a.cuando||0) - new Date(b.cuando||0);
+      });
     }catch(e){ return []; }
   },
 
@@ -3025,7 +3041,14 @@ const Cuenta = {
         const delJuego = (todos||[]).filter(x=>x.game===r.game && recordValido(x.game, x.best));
         // en los juegos de tiempo gana el MÁS BAJO; en el resto, el más alto
         const menorEsMejor = JUEGOS_DE_TIEMPO.includes(r.game);
-        delJuego.sort((a,b)=> menorEsMejor ? a.best-b.best : b.best-a.best);
+        const miId = this.user.id;
+        delJuego.sort((a,b)=>{
+          const dif = menorEsMejor ? a.best-b.best : b.best-a.best;
+          if(dif !== 0) return dif;
+          if(a.player_id===miId) return -1;   // 🤝 en empate, tú vas primero
+          if(b.player_id===miId) return 1;
+          return 0;
+        });
         const i = delJuego.findIndex(x=>x.player_id===this.user.id);
         return { ...r, puesto: i>=0 ? i+1 : null, total: delJuego.length };
       });
