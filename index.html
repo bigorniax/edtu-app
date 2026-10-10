@@ -3235,6 +3235,14 @@ const Cuenta = {
     }
   },
 };
+/* 🔑 Los juegos viven en un iframe y preguntan por window.parent.Cuenta.
+   Como arriba está declarada con `const`, NO se pega sola a window y el
+   iframe no la veía: por eso salía "entra con tu cuenta" aunque hubiera
+   sesión, y el récord de la nube no se leía. Aquí la exponemos. */
+window.Cuenta = Cuenta;
+window.nombreJuego = nombreJuego;
+window.recordValido = recordValido;
+window.JUEGOS_DE_TIEMPO = JUEGOS_DE_TIEMPO;
 
 /* 🎮 RÉCORDS A LA CUENTA (sin tocar los 40 juegos uno por uno).
    Los juegos guardan su récord con localStorage.setItem("xxx_best", n).

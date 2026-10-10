@@ -191,6 +191,21 @@ async function arreglaRecordViejo(){
   }catch(e){}
 }
 
+/* ☁️ Traer el récord de la CUENTA.
+   El récord vive en la nube, así que te sigue a cualquier computador. Si el
+   de la cuenta es mejor que el de este aparato, se muestra ese. */
+async function traeRecordDeCuenta(){
+  const C = cuentaDeArriba(); if(!C) return;
+  try{
+    const enNube = await C.leerRecord("reflejos");
+    if(enNube > 0 && (best == null || enNube < best)){
+      best = enNube;
+      try{ localStorage.setItem(K_BEST, String(best)); }catch(e){}
+      pinta();
+    }
+  }catch(e){}
+}
+
 async function verPuesto(){
   const C = cuentaDeArriba();
   if(!C){ $("puesto").textContent = "Entra con tu cuenta para competir con los demás 🏅"; return; }
@@ -205,8 +220,15 @@ async function verPuesto(){
 $("zona").addEventListener("pointerdown", e=>{ e.preventDefault(); tocar(); });
 addEventListener("keydown", e=>{ if(e.key===" "||e.key==="Enter"){ e.preventDefault(); tocar(); } });
 pinta();
-// al abrir: corrige el récord si quedó mal guardado antes, y muestra el puesto
-(async ()=>{ await arreglaRecordViejo(); verPuesto(); })();
+/* Al abrir: trae el récord de la cuenta, corrige lo que esté mal y muestra
+   el puesto. La sesión de la página de arriba puede tardar un poco en estar
+   lista, así que reintentamos unas cuantas veces antes de rendirnos. */
+(async ()=>{
+  for(let i=0; i<10 && !cuentaDeArriba(); i++) await new Promise(r=>setTimeout(r,400));
+  await traeRecordDeCuenta();
+  await arreglaRecordViejo();
+  verPuesto();
+})();
 
 /* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
 ["mousedown","mouseup","auxclick"].forEach(ev=>{
