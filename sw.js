@@ -21,7 +21,8 @@
 // v65: los juegos ya ven tu cuenta (Cuenta no llegaba al iframe).
 // v66: 🫧 Burbujas, el regalo para José Antonio (1 añito).
 // v67: 18 juegos clásicos (damas, sudoku, laberinto, hanoi…).
-const CACHE = "edtu-v67";
+// v68: 16 juegos de acción.
+const CACHE = "edtu-v68";
 const SHELL = ["./", "./index.html", "./starwars.html", "./wally-kb.js", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 // Estas SIEMPRE se piden a la red primero: son las que cambian con cada mejora.
 const FRESCOS = [".html", "/"];
