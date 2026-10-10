@@ -2661,6 +2661,23 @@ function paintAvatar(el, photo, initial){
    En todos los demás gana el número más alto (puntos, kills, victorias). */
 const JUEGOS_DE_TIEMPO = ["reflejos","rubik","scream"];
 
+/* 🚫 LÍMITES DE LO POSIBLE, por juego.
+   Sin esto, un error (o un listillo) mete un tiempo de 6 ms y queda primero
+   para siempre, arruinando el ranking de todos. Aquí decimos qué valores
+   tienen sentido; lo que se salga no se guarda. */
+const LIMITES = {
+  reflejos: { min:100, max:1000 },   // nadie reacciona en menos de 100 ms
+  rubik:    { min:3,   max:36000 },  // armar el cubo en menos de 3 s es imposible
+  scream:   { min:5,   max:36000 },
+};
+// ¿Este valor tiene sentido para este juego?
+function recordValido(juego, valor){
+  if(!isFinite(valor) || valor <= 0) return false;
+  const L = LIMITES[juego];
+  if(!L) return valor < 10000000;    // juegos de puntos: solo un tope por si acaso
+  return valor >= L.min && valor <= L.max;
+}
+
 const Cuenta = {
   sb: null,            // cliente de Supabase (se crea al arrancar)
   user: null,          // el jugador que entró (o null si nadie entró)
@@ -2801,6 +2818,7 @@ const Cuenta = {
   // Lo llaman los juegos al terminar: Cuenta.guardarRecord("tennis", 1200)
   async guardarRecord(juego, puntos){
     if(!this.sb || !this.user) return;   // sin cuenta, no se guarda en la nube (pero el juego sigue)
+    if(!recordValido(juego, puntos)) return;   // 🚫 fuera los imposibles
     try{
       // ¿cuál es su récord actual en este juego?
       const { data: prev } = await this.sb.from("player_scores")
@@ -2818,6 +2836,7 @@ const Cuenta = {
      Lo usan los juegos como Reflejos: solo guarda si el tiempo es más bajo. */
   async guardarRecordMenor(juego, valor){
     if(!this.sb || !this.user) return;
+    if(!recordValido(juego, valor)) return;    // 🚫 fuera los imposibles
     try{
       const { data: prev } = await this.sb.from("player_scores")
         .select("best").eq("player_id", this.user.id).eq("game", juego).maybeSingle();
@@ -2847,7 +2866,9 @@ const Cuenta = {
     try{
       const { data } = await this.sb.from("player_scores").select("player_id,best").eq("game", juego);
       if(!data || !data.length) return null;
-      const orden = data.slice().sort((a,b)=> menorEsMejor ? a.best-b.best : b.best-a.best);
+      // los récords imposibles no compiten (si no, uno de 6 ms sería siempre primero)
+      const limpios = data.filter(r=>recordValido(juego, r.best));
+      const orden = (limpios.length?limpios:data).slice().sort((a,b)=> menorEsMejor ? a.best-b.best : b.best-a.best);
       const i = orden.findIndex(r=>r.player_id===this.user.id);
       if(i<0) return null;
       return { puesto: i+1, total: orden.length };
@@ -2864,15 +2885,22 @@ const Cuenta = {
     if(!this.sb || !this.user) return;
     for(const juego of JUEGOS_DE_TIEMPO){
       try{
-        // el mejor tiempo que tiene este dispositivo
+        const nube = await this.leerRecord(juego);
+        if(!nube) continue;
+
+        // 1) si lo que hay en la nube es IMPOSIBLE (6 ms, por ejemplo), fuera
+        if(!recordValido(juego, nube)){
+          await this.sb.from("player_scores").delete()
+            .eq("player_id", this.user.id).eq("game", juego);
+          continue;
+        }
+        // 2) si este dispositivo tiene un tiempo mejor Y válido, lo ponemos
         let local = 0;
         for(const k of ["edtu_"+juego+"_best", juego+"_best"]){
-          const v = parseFloat(localStorage.getItem(k) || "0");
-          if(v > 0 && (local === 0 || v < local)) local = Math.round(v);
+          const v = Math.round(parseFloat(localStorage.getItem(k) || "0"));
+          if(recordValido(juego, v) && (local === 0 || v < local)) local = v;
         }
-        if(!local) continue;
-        const nube = await this.leerRecord(juego);
-        if(nube > 0 && local < nube){
+        if(local && local < nube){
           await this.sb.from("player_scores").upsert({
             player_id: this.user.id, game: juego, best: local, updated_at: new Date().toISOString()
           }, { onConflict: "player_id,game" });
@@ -2893,7 +2921,8 @@ const Cuenta = {
       const { data: todos } = await this.sb.from("player_scores")
         .select("game,player_id,best").in("game", juegos);
       return mios.map(r=>{
-        const delJuego = (todos||[]).filter(x=>x.game===r.game);
+        // los récords imposibles no compiten en el ranking
+        const delJuego = (todos||[]).filter(x=>x.game===r.game && recordValido(x.game, x.best));
         // en los juegos de tiempo gana el MÁS BAJO; en el resto, el más alto
         const menorEsMejor = JUEGOS_DE_TIEMPO.includes(r.game);
         delJuego.sort((a,b)=> menorEsMejor ? a.best-b.best : b.best-a.best);
