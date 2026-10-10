@@ -252,11 +252,11 @@
   .hub-cfg-save:hover{box-shadow:0 0 12px rgba(47,208,255,.5)}
   .hub-cfg-note{color:#7a98b0;font-size:11px;margin-top:6px}
   .hub-cfg-msg{min-height:20px;margin:14px 0 0;text-align:center;font-size:13px;font-weight:600}
-  .hub-records{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;max-width:760px}
+  .hub-records{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px;max-width:900px}
   .hub-rec{display:flex;align-items:center;gap:10px;
     background:linear-gradient(160deg,rgba(12,30,56,.7),rgba(6,16,32,.7));border:2px solid rgba(255,255,255,.14);
     border-radius:14px;padding:14px 16px;transition:all .15s}
-  .hub-rec-game{font-weight:700;color:#fff;text-transform:capitalize;flex:1;min-width:0;
+  .hub-rec-game{font-weight:700;color:#fff;flex:1;min-width:0;font-size:15px;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .hub-rec-best{font-weight:900;color:#ffd12e;font-size:19px;text-shadow:0 0 10px rgba(255,209,46,.4);white-space:nowrap}
   /* 🏅 el puesto, con el borde de la tarjeta del color de la medalla */
@@ -2696,6 +2696,34 @@ function paintAvatar(el, photo, initial){
 /* ⏱️ Juegos donde gana el MENOR (son de tiempo: menos milisegundos/segundos = mejor).
    En todos los demás gana el número más alto (puntos, kills, victorias). */
 const JUEGOS_DE_TIEMPO = ["reflejos","rubik","scream"];
+
+/* 📛 EL NOMBRE COMPLETO DE CADA JUEGO.
+   Los récords se guardan con la clave corta que usa cada juego ("cue",
+   "atz", "abd"…), que no se entiende. Aquí está el nombre de verdad, el
+   mismo que sale en el menú, con su emoji. */
+const NOMBRES_JUEGOS = {
+  rush:"🚀 EDTU Rush", foot:"⚽ The Football Rush", canela:"🧸 La Cocina de Canela",
+  ten:"🎾 EDTU Tennis", tennis:"🎾 EDTU Tennis", turbo:"🏎️ EDTU Nitro",
+  mon:"➤ Swarm", swarm:"➤ Swarm", f1:"🏎️ F1 RB Rush", edtu_f1:"🏎️ F1 RB Rush",
+  gato:"⭕ Gato", chess:"♟️ Ajedrez", snake:"🐍 Snake", c4:"🔴 Conecta 4",
+  mem:"🃏 Memoria", mines:"💣 Buscaminas", break:"🧱 Breakout",
+  inv:"👾 Space Invaders", flap:"🐤 Flappy", fly:"✈️ Fly",
+  sal:"🪂 Salto", rsc:"🚁 Rescate", trr:"🏗️ Torre", tor:"🌩️ Tormenta",
+  abd:"🛸 Abducción", ima:"⚡ Energy", cue:"🐉 Cueva", fra:"🎯 Francotirador",
+  atz:"🪂 Aterrizaje", pong:"🏓 Pong", rps:"✂️ Piedra Papel Tijera",
+  simon:"🎨 Simón Dice", hang:"🪝 Ahorcado", guess:"🔢 Adivina",
+  nag:"🧟 Not a Game", notagame:"🧟 Not a Game", rk:"🧩 Cubo 3x3", rubik:"🧩 Cubo 3x3",
+  jp:"🦖 Jurassic", jurassic:"🦖 Jurassic", sw:"⭐ Star Wars", scr:"🕷️ Scream", scream:"🕷️ Scream",
+  // los juegos nuevos
+  duo:"👥 2 Jugadores", reflejos:"⚡ Test de Reflejos",
+  estilista:"💇‍♀️ Salón de Estilo", heroe:"🕷️ Héroe Araña", piano:"🎹 Piano Mágico",
+};
+// Devuelve el nombre bonito; si no lo conoce, deja la clave con la primera en mayúscula.
+function nombreJuego(clave){
+  if(NOMBRES_JUEGOS[clave]) return NOMBRES_JUEGOS[clave];
+  const k = String(clave||"").replace(/^edtu_/,"");
+  return NOMBRES_JUEGOS[k] || (k.charAt(0).toUpperCase()+k.slice(1));
+}
 
 /* 🚫 LÍMITES DE LO POSIBLE, por juego.
    Sin esto, un error (o un listillo) mete un tiempo de 6 ms y queda primero
@@ -10861,7 +10889,7 @@ const Hub = {
   async verTabla(juego, nombreBonito){
     const fs = $("tablaFs"), lista = $("tablaLista");
     if(!fs || !lista) return;
-    $("tablaTitulo").textContent = "🏆 " + (nombreBonito || juego);
+    $("tablaTitulo").textContent = nombreBonito || nombreJuego(juego);
     const esTiempo = JUEGOS_DE_TIEMPO.includes(juego);
     $("tablaSub").textContent = esTiempo ? "Gana el tiempo más BAJO ⏱️" : "Gana el puntaje más ALTO 🔝";
     lista.innerHTML = '<p class="hub-sub">Cargando…</p>';
@@ -10895,11 +10923,8 @@ const Hub = {
       return;
     }
     // nombres bonitos para algunos juegos
-    const lindo = { snake:"Snake", flap:"Flappy", fly:"Fly", inv:"Space Invaders", mem:"Memoria",
-      break:"Breakout", sal:"Salto", rsc:"Rescate", trr:"Torre", guess:"Adivina", simon:"Simón",
-      swarm:"Swarm", f1:"F1 RB Rush", sw:"Star Wars", nag:"Not a Game", jurassic:"Jurassic", scream:"Scream" };
     cont.innerHTML = recs.map(r=>{
-      const nom = lindo[r.game] || r.game;
+      const nom = nombreJuego(r.game);
       // 🏅 el puesto: medalla si estás en el podio, si no el número
       let medalla = "", clase = "";
       if(r.puesto === 1){ medalla = "🥇"; clase = " oro"; }
