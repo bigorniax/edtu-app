@@ -17,7 +17,8 @@
 // v61: nombres completos de los juegos en los récords.
 // v62: no se borran récords rápidos, y se recupera el que se perdió.
 // v63: en empate de récord, tú vas primero.
-const CACHE = "edtu-v63";
+// v64: puesto general en EDTU (promedio de todos los juegos).
+const CACHE = "edtu-v64";
 const SHELL = ["./", "./index.html", "./starwars.html", "./wally-kb.js", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 // Estas SIEMPRE se piden a la red primero: son las que cambian con cada mejora.
 const FRESCOS = [".html", "/"];
