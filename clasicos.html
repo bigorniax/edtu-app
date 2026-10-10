@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Clásicos</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;
+    background:radial-gradient(ellipse at 50% 0%,#1f2a4a,#080c18 60%);color:#eff}
+  #menu{position:absolute;inset:0;overflow-y:auto;padding:16px}
+  #menu h1{text-align:center;font-size:25px;color:#ffd12e;text-shadow:0 0 16px rgba(255,209,46,.45)}
+  #menu .sub{text-align:center;color:#9ab;font-size:13px;margin:4px 0 16px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;max-width:1000px;margin:0 auto}
+  .gbtn{cursor:pointer;border:2px solid rgba(255,209,46,.3);border-radius:14px;padding:13px 9px;text-align:center;
+    background:linear-gradient(160deg,rgba(28,34,60,.9),rgba(10,14,28,.9));transition:all .14s}
+  .gbtn:hover{transform:translateY(-3px);border-color:#ffd12e;box-shadow:0 7px 20px rgba(255,209,46,.22)}
+  .gbtn .ico{font-size:28px;display:block;margin-bottom:4px}
+  .gbtn .nm{font-weight:800;font-size:13px;color:#fff}
+  #play{position:absolute;inset:0;display:none;flex-direction:column}
+  #play.on{display:flex}
+  .bar{display:flex;align-items:center;justify-content:space-between;padding:9px 13px;background:rgba(5,8,18,.9);
+    border-bottom:1px solid rgba(255,209,46,.25);flex-shrink:0;gap:8px}
+  .bar h2{font-size:16px;color:#ffd12e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bar .info{font-weight:800;font-size:14px;color:#9be37d;white-space:nowrap}
+  .bar button{cursor:pointer;background:rgba(255,91,110,.15);border:1.5px solid rgba(255,91,110,.5);color:#ff8fa0;
+    border-radius:9px;padding:6px 11px;font-weight:700;font-size:12px;white-space:nowrap}
+  #stage{flex:1;position:relative;overflow:auto;display:flex;align-items:center;justify-content:center;padding:10px}
+  canvas{display:block;max-width:100%;max-height:100%;touch-action:none;border-radius:10px}
+  .help{position:absolute;bottom:6px;left:0;right:0;text-align:center;color:#8ab;font-size:12px;pointer-events:none}
+  .win{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(4,8,18,.92);text-align:center;padding:20px;z-index:5}
+  .win.on{display:flex}
+  .win h2{font-size:28px;margin-bottom:8px;color:#ffd12e}
+  .win button{margin-top:16px;cursor:pointer;font-size:17px;font-weight:900;border:none;border-radius:14px;padding:13px 30px;
+    color:#021018;background:linear-gradient(90deg,#ffd12e,#ff9f1c)}
+</style>
+</head>
+<body>
+<div id="menu">
+  <h1>🎲 Juegos Clásicos</h1>
+  <p class="sub">Los de toda la vida · <b>18 juegos</b></p>
+  <div class="grid" id="grid"></div>
+</div>
+<div id="play">
+  <div class="bar">
+    <h2 id="gname">Juego</h2>
+    <span class="info" id="info"></span>
+    <button id="back">✕ Menú</button>
+  </div>
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div class="help" id="help"></div>
+    <div class="win" id="win"><h2 id="winTxt">¡Bien!</h2><p id="winSub"></p><button id="again">▶ Otra vez</button></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+let W=640,H=560;
+function tam(w,h){ W=w; H=h; cv.width=w; cv.height=h; fit(); }
+function fit(){ const st=$("stage"); const m=Math.min((st.clientWidth-20)/W,(st.clientHeight-20)/H,1.6);
+  cv.style.width=(W*m)+"px"; cv.style.height=(H*m)+"px"; }
+addEventListener("resize",fit);
+
+// ---- utilidades de dibujo ----
+function fondo(c){ ctx.fillStyle=c||"#101a2e"; ctx.fillRect(0,0,W,H); }
+function texto(t,x,y,s,c,a){ ctx.fillStyle=c||"#fff"; ctx.font="900 "+(s||20)+"px Segoe UI,sans-serif";
+  ctx.textAlign=a||"center"; ctx.textBaseline="middle"; ctx.fillText(t,x,y); }
+function caja(x,y,w,h,relleno,borde,r){ r=r||8;
+  ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+  if(relleno){ ctx.fillStyle=relleno; ctx.fill(); }
+  if(borde){ ctx.strokeStyle=borde; ctx.lineWidth=2; ctx.stroke(); } }
+function info(t){ $("info").textContent=t||""; }
+function ganar(t,s){ $("winTxt").innerHTML=t; $("winSub").textContent=s||""; $("win").classList.add("on"); }
+function anota(nombre,puntos){
+  try{ const k="edtu_clasicos_best"; const n=Math.max(parseInt(localStorage.getItem(k)||"0",10)||0,puntos||1);
+    localStorage.setItem(k,String(n));
+    if(window.parent&&window.parent.edtuPlayDay) window.parent.edtuPlayDay("Clásico: "+nombre,puntos,puntos);
+  }catch(e){}
+}
+// ---- entrada ----
+let clics=[];
+function posEn(e){ const r=cv.getBoundingClientRect();
+  return { x:(e.clientX-r.left)*(W/r.width), y:(e.clientY-r.top)*(H/r.height) }; }
+cv.addEventListener("pointerdown",e=>{ e.preventDefault(); const p=posEn(e); if(juego&&juego.clic) juego.clic(p.x,p.y); });
+const teclas={};
+addEventListener("keydown",e=>{ teclas[e.key.toLowerCase()]=true; if(juego&&juego.tecla) juego.tecla(e.key.toLowerCase());
+  if(["arrowup","arrowdown","arrowleft","arrowright"," "].includes(e.key.toLowerCase())) e.preventDefault(); });
+addEventListener("keyup",e=>{ teclas[e.key.toLowerCase()]=false; });
+
+// ---- motor ----
+let juego=null, raf=null;
+function abrir(j){
+  juego=j; $("gname").textContent=j.ico+" "+j.nom; $("help").innerHTML=j.ayuda||"";
+  $("menu").style.display="none"; $("play").classList.add("on"); $("win").classList.remove("on");
+  info(""); tam(j.w||640,j.h||560); j.init();
+  if(raf) cancelAnimationFrame(raf);
+  const bucle=()=>{ raf=requestAnimationFrame(bucle); if(!$("win").classList.contains("on")) j.paso(); };
+  bucle();
+}
+function cerrar(){ if(raf) cancelAnimationFrame(raf); raf=null; juego=null;
+  $("play").classList.remove("on"); $("menu").style.display="block"; }
+$("back").onclick=cerrar;
+$("again").onclick=()=>{ $("win").classList.remove("on"); info(""); juego.init(); };
+
+const JUEGOS=[];
+const add=(ico,nom,ayuda,init,paso,clic,tecla,w,h)=>JUEGOS.push({ico,nom,ayuda,init,paso,clic,tecla,w,h});
+
+/* ===================== LOS 18 CLÁSICOS ===================== */
+
+// 1) DAMAS (vs máquina simple)
+let dm;
+add("⚫","Damas","Toca tu ficha y luego dónde quieres ir",
+ ()=>{ const g=[]; for(let r=0;r<8;r++){ g.push([]); for(let c=0;c<8;c++){
+     const osc=(r+c)%2===1;
+     g[r].push(!osc?0 : r<3?2 : r>4?1 : 0); } }
+   dm={g,sel:null,turno:1}; },
+ ()=>{ fondo("#2a1a0e"); const S=64, ox=(W-8*S)/2, oy=(H-8*S)/2;
+   for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+     ctx.fillStyle=(r+c)%2 ? "#6b4423" : "#d9b08c";
+     ctx.fillRect(ox+c*S,oy+r*S,S,S);
+     const v=dm.g[r][c];
+     if(v){ ctx.fillStyle=v===1?"#f0f0f0":"#1a1a1a";
+       ctx.beginPath(); ctx.arc(ox+c*S+S/2,oy+r*S+S/2,S*0.36,0,7); ctx.fill();
+       ctx.strokeStyle=v===1?"#aaa":"#555"; ctx.lineWidth=3; ctx.stroke(); } }
+   if(dm.sel){ ctx.strokeStyle="#ffd12e"; ctx.lineWidth=4;
+     ctx.strokeRect(ox+dm.sel.c*S+2,oy+dm.sel.r*S+2,S-4,S-4); }
+   const n1=dm.g.flat().filter(v=>v===1).length, n2=dm.g.flat().filter(v=>v===2).length;
+   info("⚪ "+n1+"  ⚫ "+n2);
+   if(n1===0){ ganar("😢 Ganó la máquina",""); } if(n2===0){ anota("Damas",1); ganar("🏆 ¡GANASTE!",""); }
+ },
+ (x,y)=>{ const S=64, ox=(W-8*S)/2, oy=(H-8*S)/2;
+   const c=Math.floor((x-ox)/S), r=Math.floor((y-oy)/S);
+   if(r<0||r>7||c<0||c>7) return;
+   const g=dm.g;
+   if(g[r][c]===1){ dm.sel={r,c}; return; }
+   if(dm.sel && g[r][c]===0){
+     const dr=r-dm.sel.r, dc=c-dm.sel.c;
+     if(Math.abs(dc)===1 && dr===-1){ g[r][c]=1; g[dm.sel.r][dm.sel.c]=0; dm.sel=null; maquina(); }
+     else if(Math.abs(dc)===2 && dr===-2){
+       const mr=dm.sel.r-1, mc=dm.sel.c+dc/2;
+       if(g[mr][mc]===2){ g[mr][mc]=0; g[r][c]=1; g[dm.sel.r][dm.sel.c]=0; dm.sel=null; maquina(); } }
+   }
+   function maquina(){
+     const g=dm.g, movs=[];
+     for(let r=0;r<8;r++) for(let c=0;c<8;c++){ if(g[r][c]!==2) continue;
+       for(const dc of [-1,1]){
+         if(r+1<8 && c+dc>=0 && c+dc<8 && g[r+1][c+dc]===0) movs.push([r,c,r+1,c+dc,null]);
+         if(r+2<8 && c+dc*2>=0 && c+dc*2<8 && g[r+1][c+dc]===1 && g[r+2][c+dc*2]===0)
+           movs.push([r,c,r+2,c+dc*2,[r+1,c+dc]]); } }
+     const comen=movs.filter(m=>m[4]);
+     const m=(comen.length?comen:movs)[Math.floor(Math.random()*(comen.length?comen.length:movs.length))];
+     if(!m) return;
+     g[m[2]][m[3]]=2; g[m[0]][m[1]]=0; if(m[4]) g[m[4][0]][m[4][1]]=0;
+   }
+ });
+
+// 2) SUDOKU (4x4, fácil para empezar)
+let su;
+add("🔢","Sudoku 4x4","Toca una casilla y escribe 1-4",
+ ()=>{ const base=[[1,2,3,4],[3,4,1,2],[2,1,4,3],[4,3,2,1]];
+   // mezclar un poco
+   const g=base.map(f=>f.slice());
+   const sol=g.map(f=>f.slice());
+   const vis=g.map(f=>f.map(()=>true));
+   let quitar=7; while(quitar>0){ const r=(Math.random()*4)|0,c=(Math.random()*4)|0;
+     if(vis[r][c]){ vis[r][c]=false; quitar--; } }
+   su={g:g.map((f,r)=>f.map((v,c)=>vis[r][c]?v:0)), sol, fijo:vis, sel:null}; },
+ ()=>{ fondo("#0e1a2e"); const S=90, ox=(W-4*S)/2, oy=(H-4*S)/2;
+   for(let r=0;r<4;r++) for(let c=0;c<4;c++){
+     const fijo=su.fijo[r][c];
+     caja(ox+c*S+2,oy+r*S+2,S-4,S-4, fijo?"#1a2f52":"#15253f", "#3a5a8a",6);
+     const v=su.g[r][c];
+     if(v) texto(v,ox+c*S+S/2,oy+r*S+S/2,38,fijo?"#8fd0ff":"#ffd12e"); }
+   ctx.strokeStyle="#ffd12e"; ctx.lineWidth=3;
+   ctx.strokeRect(ox,oy,4*S,4*S); ctx.strokeRect(ox,oy,2*S,2*S); ctx.strokeRect(ox+2*S,oy+2*S,2*S,2*S);
+   if(su.sel){ ctx.strokeStyle="#39ff14"; ctx.lineWidth=4; ctx.strokeRect(ox+su.sel.c*S+3,oy+su.sel.r*S+3,S-6,S-6); }
+   texto("Escribe 1, 2, 3 o 4",W/2,oy+4*S+34,17,"#9ab");
+   const lleno=su.g.every((f,r)=>f.every((v,c)=>v===su.sol[r][c]));
+   if(lleno){ anota("Sudoku",1); ganar("🏆 ¡SUDOKU RESUELTO!",""); }
+ },
+ (x,y)=>{ const S=90, ox=(W-4*S)/2, oy=(H-4*S)/2;
+   const c=Math.floor((x-ox)/S), r=Math.floor((y-oy)/S);
+   if(r>=0&&r<4&&c>=0&&c<4&&!su.fijo[r][c]) su.sel={r,c}; },
+ (k)=>{ if(!su.sel) return; const n=parseInt(k,10);
+   if(n>=1&&n<=4) su.g[su.sel.r][su.sel.c]=n;
+   if(k==="backspace"||k==="0") su.g[su.sel.r][su.sel.c]=0; });
+
+// 3) LABERINTO
+let lb;
+add("🌀","Laberinto","Flechas o WASD para llegar a la meta 🏁",
+ ()=>{ const N=15; const g=[];
+   for(let r=0;r<N;r++){ g.push([]); for(let c=0;c<N;c++) g[r].push(1); }
+   // excavar con backtracking
+   const pila=[[1,1]]; g[1][1]=0;
+   while(pila.length){ const [r,c]=pila[pila.length-1];
+     const vec=[[r-2,c],[r+2,c],[r,c-2],[r,c+2]].filter(([a,b])=>a>0&&b>0&&a<N-1&&b<N-1&&g[a][b]===1);
+     if(!vec.length){ pila.pop(); continue; }
+     const [nr,nc]=vec[(Math.random()*vec.length)|0];
+     g[nr][nc]=0; g[(r+nr)/2][(c+nc)/2]=0; pila.push([nr,nc]); }
+   g[N-2][N-2]=0;
+   lb={g,N,p:{r:1,c:1},pasos:0}; },
+ ()=>{ fondo("#0a1020"); const N=lb.N, S=Math.min((W-40)/N,(H-40)/N), ox=(W-N*S)/2, oy=(H-N*S)/2;
+   for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+     ctx.fillStyle = lb.g[r][c] ? "#2a3a6a" : "#0d1428";
+     ctx.fillRect(ox+c*S,oy+r*S,S,S); }
+   texto("🏁",ox+(N-2)*S+S/2,oy+(N-2)*S+S/2,S*0.8);
+   texto("🙂",ox+lb.p.c*S+S/2,oy+lb.p.r*S+S/2,S*0.8);
+   info("pasos: "+lb.pasos);
+   if(lb.p.r===N-2&&lb.p.c===N-2){ anota("Laberinto",lb.pasos); ganar("🏆 ¡LLEGASTE!","en "+lb.pasos+" pasos"); }
+ }, null,
+ (k)=>{ const m={arrowup:[-1,0],w:[-1,0],arrowdown:[1,0],s:[1,0],arrowleft:[0,-1],a:[0,-1],arrowright:[0,1],d:[0,1]}[k];
+   if(!m) return; const nr=lb.p.r+m[0], nc=lb.p.c+m[1];
+   if(lb.g[nr] && lb.g[nr][nc]===0){ lb.p.r=nr; lb.p.c=nc; lb.pasos++; } });
+
+// 4) TANGRAM (ordenar formas)
+let tg;
+add("🔺","Formas","Toca las formas en orden de tamaño, de mayor a menor",
+ ()=>{ const n=6; const tams=[]; for(let i=0;i<n;i++) tams.push(28+i*16);
+   tams.sort(()=>Math.random()-0.5);
+   tg={formas:tams.map((t,i)=>({t, x:70+i*((W-140)/(n-1)), y:H/2, hecha:false})), esperado:n}; },
+ ()=>{ fondo("#1a1430");
+   texto("Toca de MAYOR a menor",W/2,60,22,"#ffd12e");
+   tg.formas.forEach((f,i)=>{ if(f.hecha) return;
+     ctx.fillStyle="#ff8cc6"; ctx.beginPath();
+     ctx.moveTo(f.x,f.y-f.t); ctx.lineTo(f.x+f.t,f.y+f.t); ctx.lineTo(f.x-f.t,f.y+f.t); ctx.closePath(); ctx.fill();
+     ctx.strokeStyle="#fff"; ctx.lineWidth=2; ctx.stroke(); });
+   const faltan=tg.formas.filter(f=>!f.hecha).length;
+   info("faltan: "+faltan);
+   if(faltan===0){ anota("Formas",1); ganar("🏆 ¡PERFECTO!",""); }
+ },
+ (x,y)=>{ const vivas=tg.formas.filter(f=>!f.hecha);
+   if(!vivas.length) return;
+   const mayor=vivas.reduce((a,b)=>a.t>b.t?a:b);
+   const toco=vivas.find(f=>Math.abs(f.x-x)<f.t+10 && Math.abs(f.y-y)<f.t+10);
+   if(!toco) return;
+   if(toco===mayor){ toco.hecha=true; } else { tg.formas.forEach(f=>f.hecha=false); } });
+
+// 5) TORRES DE HANOI
+let hn;
+add("🗼","Hanoi","Mueve todos los discos a la última torre",
+ ()=>{ hn={t:[[4,3,2,1],[],[]],sel:null,movs:0}; },
+ ()=>{ fondo("#1a1206");
+   const bases=[W*0.2,W*0.5,W*0.8];
+   ctx.fillStyle="#6b4423"; ctx.fillRect(40,H-90,W-80,16);
+   bases.forEach((bx,i)=>{ ctx.fillStyle="#8a5a2b"; ctx.fillRect(bx-6,H-240,12,152);
+     if(hn.sel===i){ ctx.strokeStyle="#ffd12e"; ctx.lineWidth=3; ctx.strokeRect(bx-70,H-250,140,170); }
+     hn.t[i].forEach((d,j)=>{ const w=34+d*26, hh=22;
+       const yy=H-96-(j+1)*hh+4;
+       caja(bx-w/2,yy,w,hh-3, ["#ff5b6e","#ffd12e","#39ff14","#2fd0ff"][d-1], "#fff",6); }); });
+   info("movimientos: "+hn.movs);
+   if(hn.t[2].length===4){ anota("Hanoi",hn.movs); ganar("🏆 ¡RESUELTO!","en "+hn.movs+" movimientos"); }
+ },
+ (x)=>{ const i = x<W/3?0 : x<W*2/3?1 : 2;
+   if(hn.sel===null){ if(hn.t[i].length) hn.sel=i; }
+   else { const de=hn.t[hn.sel], a=hn.t[i];
+     if(hn.sel!==i && de.length && (!a.length || a[a.length-1] > de[de.length-1])){
+       a.push(de.pop()); hn.movs++; }
+     hn.sel=null; } });
+
+// 6) PUZZLE DESLIZANTE
+let pz;
+add("🧩","Puzzle","Toca una ficha al lado del hueco para moverla",
+ ()=>{ const n=16; const a=[...Array(15).keys()].map(i=>i+1).concat([0]);
+   // mezclar con movimientos válidos (así siempre tiene solución)
+   let h=15;
+   for(let i=0;i<200;i++){ const vec=[h-4,h+4,h%4?h-1:-1,(h%4)<3?h+1:-1].filter(v=>v>=0&&v<16);
+     const m=vec[(Math.random()*vec.length)|0]; a[h]=a[m]; a[m]=0; h=m; }
+   pz={a,hueco:a.indexOf(0),movs:0}; },
+ ()=>{ fondo("#101a2e"); const S=100, ox=(W-4*S)/2, oy=(H-4*S)/2;
+   pz.a.forEach((v,i)=>{ if(!v) return; const r=(i/4)|0, c=i%4;
+     caja(ox+c*S+3,oy+r*S+3,S-6,S-6,"#2fd0ff","#9be3ff",10);
+     texto(v,ox+c*S+S/2,oy+r*S+S/2,34,"#021018"); });
+   info("movimientos: "+pz.movs);
+   const ok=pz.a.every((v,i)=> i===15 ? v===0 : v===i+1);
+   if(ok){ anota("Puzzle",pz.movs); ganar("🏆 ¡ARMADO!","en "+pz.movs+" movimientos"); }
+ },
+ (x,y)=>{ const S=100, ox=(W-4*S)/2, oy=(H-4*S)/2;
+   const c=Math.floor((x-ox)/S), r=Math.floor((y-oy)/S);
+   if(r<0||r>3||c<0||c>3) return;
+   const i=r*4+c, h=pz.hueco;
+   const vecino = (Math.abs(i-h)===4) || (Math.abs(i-h)===1 && ((i/4)|0)===((h/4)|0));
+   if(vecino){ pz.a[h]=pz.a[i]; pz.a[i]=0; pz.hueco=i; pz.movs++; } });
+
+// 7) TRES EN RAYA vs máquina
+let tr;
+add("⭕","Tres en Raya","Gana a la máquina haciendo 3 en línea",
+ ()=>{ tr={g:Array(9).fill(0)}; },
+ ()=>{ fondo("#1a1024"); const S=120, ox=(W-3*S)/2, oy=(H-3*S)/2;
+   ctx.strokeStyle="#4a7fc8"; ctx.lineWidth=4;
+   for(let i=1;i<3;i++){ ctx.beginPath(); ctx.moveTo(ox+i*S,oy); ctx.lineTo(ox+i*S,oy+3*S); ctx.stroke();
+     ctx.beginPath(); ctx.moveTo(ox,oy+i*S); ctx.lineTo(ox+3*S,oy+i*S); ctx.stroke(); }
+   tr.g.forEach((v,i)=>{ if(!v) return;
+     texto(v===1?"⭕":"❌",ox+(i%3)*S+S/2,oy+((i/3)|0)*S+S/2,62); });
+   const L=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+   const gana=p=>L.some(l=>l.every(i=>tr.g[i]===p));
+   if(gana(1)){ anota("Tres en Raya",1); ganar("🏆 ¡GANASTE!",""); }
+   else if(gana(2)) ganar("😢 Ganó la máquina","");
+   else if(tr.g.every(v=>v)) ganar("🤝 ¡EMPATE!","");
+ },
+ (x,y)=>{ const S=120, ox=(W-3*S)/2, oy=(H-3*S)/2;
+   const c=Math.floor((x-ox)/S), r=Math.floor((y-oy)/S);
+   if(r<0||r>2||c<0||c>2) return;
+   const i=r*3+c; if(tr.g[i]) return;
+   tr.g[i]=1;
+   const L=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+   const gana=p=>L.some(l=>l.every(j=>tr.g[j]===p));
+   if(gana(1)||tr.g.every(v=>v)) return;
+   // la máquina: gana si puede, si no bloquea, si no al azar
+   const libres=tr.g.map((v,j)=>v?-1:j).filter(j=>j>=0);
+   const prueba=(p)=>{ for(const j of libres){ tr.g[j]=p; const g=gana(p); tr.g[j]=0; if(g) return j; } return -1; };
+   let m=prueba(2); if(m<0) m=prueba(1);
+   if(m<0) m=libres.includes(4)?4:libres[(Math.random()*libres.length)|0];
+   tr.g[m]=2; });
+
+// 8) MEMORIA (1 jugador, contra el reloj)
+let me;
+add("🃏","Memoria","Encuentra todas las parejas",
+ ()=>{ const e=["🍎","🍌","🍇","🍓","🍊","🥝","🍉","🥑"];
+   me={c:[...e,...e].sort(()=>Math.random()-0.5).map(x=>({e:x,ab:false,ok:false})),
+       abiertas:[],espera:0,movs:0}; },
+ ()=>{ fondo("#101a2e"); const CW=110,CH=110,cols=4,ox=(W-cols*CW)/2,oy=(H-4*CH)/2;
+   if(me.espera>0 && --me.espera===0){ const [i,j]=me.abiertas;
+     if(me.c[i].e===me.c[j].e){ me.c[i].ok=me.c[j].ok=true; }
+     else { me.c[i].ab=me.c[j].ab=false; }
+     me.abiertas=[]; }
+   me.c.forEach((c,i)=>{ const x=ox+(i%cols)*CW, y=oy+((i/cols)|0)*CH;
+     caja(x+4,y+4,CW-8,CH-8, c.ok?"rgba(57,255,20,.2)":(c.ab?"#2a3a5e":"#1a2440"), "#3a5a8a",10);
+     if(c.ab||c.ok) texto(c.e,x+CW/2,y+CH/2,44); else texto("?",x+CW/2,y+CH/2,34,"#4a6a9a"); });
+   info("intentos: "+me.movs);
+   if(me.c.every(c=>c.ok)){ anota("Memoria",me.movs); ganar("🏆 ¡TODAS!","en "+me.movs+" intentos"); }
+ },
+ (x,y)=>{ if(me.espera>0) return; const CW=110,CH=110,cols=4,ox=(W-cols*CW)/2,oy=(H-4*CH)/2;
+   const c=Math.floor((x-ox)/CW), r=Math.floor((y-oy)/CH);
+   if(r<0||r>3||c<0||c>=cols) return;
+   const i=r*cols+c, k=me.c[i]; if(!k||k.ab||k.ok) return;
+   k.ab=true; me.abiertas.push(i);
+   if(me.abiertas.length===2){ me.espera=40; me.movs++; } });
+
+// 9) BUSCAMINAS
+let bm;
+add("💣","Buscaminas","Toca para destapar · evita las minas",
+ ()=>{ const N=9, minas=10; const g=[];
+   for(let r=0;r<N;r++){ g.push([]); for(let c=0;c<N;c++) g[r].push({m:false,ab:false,n:0}); }
+   let p=minas; while(p>0){ const r=(Math.random()*N)|0, c=(Math.random()*N)|0;
+     if(!g[r][c].m){ g[r][c].m=true; p--; } }
+   for(let r=0;r<N;r++) for(let c=0;c<N;c++){ let n=0;
+     for(let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++){
+       const a=r+dr,b=c+dc; if(a>=0&&b>=0&&a<N&&b<N&&g[a][b].m) n++; }
+     g[r][c].n=n; }
+   bm={g,N,minas,perdio:false}; },
+ ()=>{ fondo("#1a2030"); const N=bm.N, S=52, ox=(W-N*S)/2, oy=(H-N*S)/2;
+   let abiertas=0;
+   for(let r=0;r<N;r++) for(let c=0;c<N;c++){ const k=bm.g[r][c];
+     caja(ox+c*S+2,oy+r*S+2,S-4,S-4, k.ab?"#0d1424":"#38445e", "#55637f",5);
+     if(k.ab){ abiertas++;
+       if(k.m) texto("💣",ox+c*S+S/2,oy+r*S+S/2,26);
+       else if(k.n) texto(k.n,ox+c*S+S/2,oy+r*S+S/2,22,
+         ["","#5fd1ff","#9be37d","#ffd12e","#ff9f68","#ff5b6e","#c58cff","#fff","#aaa"][k.n]); } }
+   info("faltan: "+(N*N-bm.minas-abiertas));
+   if(bm.perdio) ganar("💥 ¡BOOM!","Pisaste una mina");
+   else if(abiertas===N*N-bm.minas){ anota("Buscaminas",1); ganar("🏆 ¡LIMPIO!",""); }
+ },
+ (x,y)=>{ const N=bm.N, S=52, ox=(W-N*S)/2, oy=(H-N*S)/2;
+   const c=Math.floor((x-ox)/S), r=Math.floor((y-oy)/S);
+   if(r<0||r>=N||c<0||c>=N) return;
+   const k=bm.g[r][c]; if(k.ab) return;
+   k.ab=true;
+   if(k.m){ bm.g.forEach(f=>f.forEach(z=>{ if(z.m) z.ab=true; })); bm.perdio=true; return; }
+   if(k.n===0){ // destapar alrededor en cadena
+     const cola=[[r,c]];
+     while(cola.length){ const [a,b]=cola.pop();
+       for(let dr=-1;dr<=1;dr++) for(let dc=-1;dc<=1;dc++){
+         const i=a+dr,j=b+dc; if(i<0||j<0||i>=N||j>=N) continue;
+         const z=bm.g[i][j]; if(z.ab||z.m) continue; z.ab=true; if(z.n===0) cola.push([i,j]); } } } });
+
+// 10) 2048
+let dk;
+add("🔢","2048","Flechas o WASD para juntar números iguales",
+ ()=>{ const g=[[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]];
+   const nuevo=()=>{ const l=[]; g.forEach((f,r)=>f.forEach((v,c)=>{ if(!v) l.push([r,c]); }));
+     if(l.length){ const [r,c]=l[(Math.random()*l.length)|0]; g[r][c]=Math.random()<0.9?2:4; } };
+   nuevo(); nuevo(); dk={g,pts:0,nuevo}; },
+ ()=>{ fondo("#1a1610"); const S=110, ox=(W-4*S)/2, oy=(H-4*S)/2;
+   caja(ox-8,oy-8,4*S+16,4*S+16,"#2d2820",null,12);
+   const col={0:"#3a342a",2:"#eee4da",4:"#ede0c8",8:"#f2b179",16:"#f59563",32:"#f67c5f",
+     64:"#f65e3b",128:"#edcf72",256:"#edcc61",512:"#edc850",1024:"#edc53f",2048:"#edc22e"};
+   for(let r=0;r<4;r++) for(let c=0;c<4;c++){ const v=dk.g[r][c];
+     caja(ox+c*S+5,oy+r*S+5,S-10,S-10, col[v]||"#edc22e", null,8);
+     if(v) texto(v,ox+c*S+S/2,oy+r*S+S/2, v>=1024?30:v>=128?36:42, v<=4?"#776e65":"#fff"); }
+   info("puntos: "+dk.pts);
+   if(dk.g.flat().includes(2048)){ anota("2048",dk.pts); ganar("🏆 ¡LLEGASTE A 2048!",""); }
+ }, null,
+ (k)=>{ const d={arrowleft:"l",a:"l",arrowright:"r",d:"r",arrowup:"u",w:"u",arrowdown:"d",s:"d"}[k];
+   if(!d) return;
+   const g=dk.g; let movio=false;
+   const linea=a=>{ const f=a.filter(v=>v); const o=[];
+     for(let i=0;i<f.length;i++){ if(f[i]===f[i+1]){ o.push(f[i]*2); dk.pts+=f[i]*2; i++; } else o.push(f[i]); }
+     while(o.length<4) o.push(0); return o; };
+   const antes=JSON.stringify(g);
+   if(d==="l") for(let r=0;r<4;r++) g[r]=linea(g[r]);
+   if(d==="r") for(let r=0;r<4;r++) g[r]=linea(g[r].slice().reverse()).reverse();
+   if(d==="u") for(let c=0;c<4;c++){ const col=linea([g[0][c],g[1][c],g[2][c],g[3][c]]); for(let r=0;r<4;r++) g[r][c]=col[r]; }
+   if(d==="d") for(let c=0;c<4;c++){ const col=linea([g[3][c],g[2][c],g[1][c],g[0][c]]); for(let r=0;r<4;r++) g[3-r][c]=col[r]; }
+   if(JSON.stringify(g)!==antes) dk.nuevo(); });
+
+// 11) AHORCADO
+let ah;
+add("🪝","Ahorcado","Escribe letras para adivinar la palabra",
+ ()=>{ const ps=["ROBOT","CHILE","JUEGO","PLANETA","AMIGO","ESCUELA","MUSICA","COHETE","DRAGON","CASTILLO"];
+   ah={p:ps[(Math.random()*ps.length)|0],usadas:new Set(),fallos:0}; },
+ ()=>{ fondo("#141a28");
+   // horca
+   ctx.strokeStyle="#9ab"; ctx.lineWidth=5;
+   ctx.beginPath(); ctx.moveTo(W/2-140,H-120); ctx.lineTo(W/2-40,H-120);
+   ctx.moveTo(W/2-90,H-120); ctx.lineTo(W/2-90,120); ctx.lineTo(W/2+10,120); ctx.lineTo(W/2+10,160); ctx.stroke();
+   const f=ah.fallos;
+   ctx.strokeStyle="#ff8fa0"; ctx.lineWidth=4;
+   if(f>0){ ctx.beginPath(); ctx.arc(W/2+10,186,26,0,7); ctx.stroke(); }
+   if(f>1){ ctx.beginPath(); ctx.moveTo(W/2+10,212); ctx.lineTo(W/2+10,290); ctx.stroke(); }
+   if(f>2){ ctx.beginPath(); ctx.moveTo(W/2+10,230); ctx.lineTo(W/2-25,265); ctx.stroke(); }
+   if(f>3){ ctx.beginPath(); ctx.moveTo(W/2+10,230); ctx.lineTo(W/2+45,265); ctx.stroke(); }
+   if(f>4){ ctx.beginPath(); ctx.moveTo(W/2+10,290); ctx.lineTo(W/2-25,335); ctx.stroke(); }
+   if(f>5){ ctx.beginPath(); ctx.moveTo(W/2+10,290); ctx.lineTo(W/2+45,335); ctx.stroke(); }
+   const vista=ah.p.split("").map(c=>ah.usadas.has(c)?c:"_").join(" ");
+   texto(vista,W/2,H-70,34,"#ffd12e");
+   texto([...ah.usadas].filter(c=>!ah.p.includes(c)).join(" "),W/2,H-30,18,"#ff8fa0");
+   info("fallos: "+f+"/6");
+   if(!vista.includes("_")){ anota("Ahorcado",1); ganar("🏆 ¡ADIVINASTE!",ah.p); }
+   else if(f>=6) ganar("😢 Perdiste","era "+ah.p);
+ }, null,
+ (k)=>{ const c=k.toUpperCase();
+   if(!/^[A-ZÑ]$/.test(c) || ah.usadas.has(c)) return;
+   ah.usadas.add(c); if(!ah.p.includes(c)) ah.fallos++; });
+
+// 12) SIMÓN DICE
+let sm;
+add("🎨","Simón Dice","Repite la secuencia de colores",
+ ()=>{ sm={sec:[],paso:0,mostrando:true,t:0,idx:0,brilla:-1}; sm.sec.push((Math.random()*4)|0); },
+ ()=>{ fondo("#0d1220");
+   const cols=["#ff5b6e","#39ff14","#2fd0ff","#ffd12e"];
+   const R=130, cx=W/2, cy=H/2;
+   for(let i=0;i<4;i++){
+     const a0=i*Math.PI/2, a1=a0+Math.PI/2;
+     ctx.fillStyle = sm.brilla===i ? "#fff" : cols[i];
+     ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,R,a0+0.04,a1-0.04); ctx.closePath(); ctx.fill(); }
+   ctx.fillStyle="#0d1220"; ctx.beginPath(); ctx.arc(cx,cy,42,0,7); ctx.fill();
+   texto(sm.sec.length,cx,cy,30,"#fff");
+   if(sm.mostrando){
+     sm.t++;
+     if(sm.t<22) sm.brilla=sm.sec[sm.idx];
+     else if(sm.t<36) sm.brilla=-1;
+     else { sm.t=0; sm.idx++; if(sm.idx>=sm.sec.length){ sm.mostrando=false; sm.idx=0; sm.paso=0; sm.brilla=-1; } }
+     texto("Mira...",cx,cy+R+40,20,"#9ab");
+   } else texto("¡Tu turno!",cx,cy+R+40,20,"#39ff14");
+   info("ronda: "+sm.sec.length);
+ },
+ (x,y)=>{ if(sm.mostrando) return;
+   const cx=W/2, cy=H/2; const dx=x-cx, dy=y-cy;
+   if(Math.hypot(dx,dy)>130 || Math.hypot(dx,dy)<42) return;
+   let a=Math.atan2(dy,dx); if(a<0) a+=Math.PI*2;
+   const i=Math.floor(a/(Math.PI/2));
+   sm.brilla=i; setTimeout(()=>{ if(sm) sm.brilla=-1; },160);
+   if(i===sm.sec[sm.paso]){ sm.paso++;
+     if(sm.paso>=sm.sec.length){ anota("Simón",sm.sec.length);
+       sm.sec.push((Math.random()*4)|0); sm.mostrando=true; sm.t=0; sm.idx=0; } }
+   else ganar("😢 ¡Fallaste!","llegaste a la ronda "+sm.sec.length); });
+
+// 13) CONECTA 4 vs máquina
+let c4;
+add("🔴","Conecta 4","Toca una columna para soltar tu ficha",
+ ()=>{ c4={g:Array.from({length:6},()=>Array(7).fill(0))}; },
+ ()=>{ fondo("#0a1838"); const S=76, ox=(W-7*S)/2, oy=(H-6*S)/2;
+   caja(ox-8,oy-8,7*S+16,6*S+16,"#1a3a6e",null,12);
+   for(let r=0;r<6;r++) for(let c=0;c<7;c++){
+     ctx.fillStyle = c4.g[r][c]===1?"#ff5b6e" : c4.g[r][c]===2?"#ffd12e" : "#071226";
+     ctx.beginPath(); ctx.arc(ox+c*S+S/2,oy+r*S+S/2,S*0.4,0,7); ctx.fill(); }
+   const gana=p=>{ for(let r=0;r<6;r++) for(let c=0;c<7;c++){
+     for(const [dr,dc] of [[0,1],[1,0],[1,1],[1,-1]]){ let n=0;
+       for(let i=0;i<4;i++){ const a=r+dr*i,b=c+dc*i;
+         if(a<0||a>5||b<0||b>6||c4.g[a][b]!==p) break; n++; }
+       if(n>=4) return true; } } return false; };
+   if(gana(1)){ anota("Conecta 4",1); ganar("🏆 ¡GANASTE!",""); }
+   else if(gana(2)) ganar("😢 Ganó la máquina","");
+ },
+ (x)=>{ const S=76, ox=(W-7*S)/2;
+   const c=Math.floor((x-ox)/S); if(c<0||c>6) return;
+   const soltar=(col,p)=>{ for(let r=5;r>=0;r--) if(!c4.g[r][col]){ c4.g[r][col]=p; return true; } return false; };
+   if(!soltar(c,1)) return;
+   const libres=[...Array(7).keys()].filter(i=>!c4.g[0][i]);
+   if(libres.length) soltar(libres[(Math.random()*libres.length)|0],2); });
+
+// 14) SERPIENTE
+let sn;
+add("🐍","Serpiente","Flechas o WASD · come 🍎 y no choques",
+ ()=>{ sn={c:[{x:8,y:8}],d:{x:1,y:0},com:{x:14,y:8},t:0,pts:0,G:28}; },
+ ()=>{ const G=sn.G, cols=(W/G)|0, rows=(H/G)|0;
+   fondo("#071a10");
+   if(++sn.t%7===0){
+     const h={x:sn.c[0].x+sn.d.x, y:sn.c[0].y+sn.d.y};
+     if(h.x<0||h.y<0||h.x>=cols||h.y>=rows||sn.c.some(p=>p.x===h.x&&p.y===h.y)){
+       anota("Serpiente",sn.pts); ganar("😢 ¡Chocaste!",sn.pts+" puntos"); return; }
+     sn.c.unshift(h);
+     if(h.x===sn.com.x&&h.y===sn.com.y){ sn.pts+=10;
+       sn.com={x:(Math.random()*cols)|0,y:(Math.random()*rows)|0}; }
+     else sn.c.pop();
+   }
+   ctx.fillStyle="#ff5b6e"; texto("🍎",sn.com.x*G+G/2,sn.com.y*G+G/2,G*0.85);
+   sn.c.forEach((p,i)=>{ ctx.fillStyle=i?"#2a8f2a":"#39ff14"; ctx.fillRect(p.x*G+1,p.y*G+1,G-2,G-2); });
+   info("puntos: "+sn.pts);
+ }, null,
+ (k)=>{ const m={arrowup:[0,-1],w:[0,-1],arrowdown:[0,1],s:[0,1],arrowleft:[-1,0],a:[-1,0],arrowright:[1,0],d:[1,0]}[k];
+   if(!m) return; if(m[0]===-sn.d.x&&m[1]===-sn.d.y) return;
+   sn.d={x:m[0],y:m[1]}; });
+
+// 15) CÁLCULO RÁPIDO
+let cal;
+add("➗","Cálculo","Responde las sumas lo más rápido que puedas",
+ ()=>{ cal={pts:0,t:60*60,q:null,ops:[]}; nuevaCuenta(); },
+ ()=>{ fondo("#0e1a26"); cal.t--;
+   texto(cal.q.txt,W/2,H/2-80,52,"#ffd12e");
+   cal.ops.forEach((o,i)=>{ const x=W/2+(i-1.5)*140, y=H/2+40;
+     caja(x-60,y-30,120,60,"#1e3a5a","#4a7fc8",10);
+     texto(o,x,y,30,"#fff"); });
+   texto("⏱ "+Math.ceil(cal.t/60)+"s",W/2,60,24,"#9be37d");
+   info("puntos: "+cal.pts);
+   if(cal.t<=0){ anota("Cálculo",cal.pts); ganar("⏱ ¡Tiempo!",cal.pts+" respuestas correctas"); }
+ },
+ (x,y)=>{ if(Math.abs(y-(H/2+40))>34) return;
+   const i=Math.round((x-W/2)/140+1.5);
+   if(i<0||i>3) return;
+   if(cal.ops[i]===cal.q.r){ cal.pts++; nuevaCuenta(); }
+   else cal.t-=120; });
+function nuevaCuenta(){
+  const a=2+((Math.random()*18)|0), b=2+((Math.random()*18)|0);
+  const op=["+","-","×"][(Math.random()*3)|0];
+  const r = op==="+"?a+b : op==="-"?a-b : a*b;
+  const ops=new Set([r]);
+  while(ops.size<4) ops.add(r + (((Math.random()*14)|0)-7) || r+1);
+  cal.q={txt:a+" "+op+" "+b+" = ?", r};
+  cal.ops=[...ops].sort(()=>Math.random()-0.5);
+}
+
+// 16) PIEDRA PAPEL TIJERA vs máquina
+let pp;
+add("✂️","Piedra Papel Tijera","Toca tu jugada · llega a 5",
+ ()=>{ pp={yo:0,ia:0,msg:"¡Elige!",ultimo:null}; },
+ ()=>{ fondo("#1a1a2e");
+   texto(pp.msg,W/2,110,30,"#ffd12e");
+   if(pp.ultimo) texto(pp.ultimo,W/2,180,40,"#fff");
+   ["✊","✋","✌️"].forEach((e,i)=>{ const x=W/2+(i-1)*170;
+     caja(x-70,H/2,140,140,"#2a2a4e","#5a5a8e",16);
+     texto(e,x,H/2+70,62); });
+   texto("TÚ "+pp.yo+"  —  "+pp.ia+" MÁQUINA",W/2,H-60,26,"#9be37d");
+   if(pp.yo>=5){ anota("PPT",pp.yo); ganar("🏆 ¡GANASTE!",""); }
+   if(pp.ia>=5) ganar("😢 Ganó la máquina","");
+ },
+ (x,y)=>{ if(y<H/2||y>H/2+140) return;
+   const i=Math.round((x-W/2)/170+1); if(i<0||i>2) return;
+   const m=(Math.random()*3)|0;
+   const n=["✊","✋","✌️"];
+   if(i===m){ pp.msg="🤝 ¡Empate!"; }
+   else if((i===0&&m===2)||(i===1&&m===0)||(i===2&&m===1)){ pp.yo++; pp.msg="🏆 ¡Punto para ti!"; }
+   else { pp.ia++; pp.msg="😅 Punto de la máquina"; }
+   pp.ultimo="Tú "+n[i]+"  vs  "+n[m]+" Máquina"; });
+
+// 17) ADIVINA EL NÚMERO
+let ad;
+add("🔮","Adivina","Adivina el número del 1 al 100",
+ ()=>{ ad={n:1+((Math.random()*100)|0),intentos:0,pista:"Escribe un número y pulsa Enter",buf:""}; },
+ ()=>{ fondo("#141028");
+   texto("🔮 Pienso un número del 1 al 100",W/2,140,26,"#c58cff");
+   caja(W/2-120,H/2-45,240,90,"#1e1840","#6a4fa8",12);
+   texto(ad.buf||"?",W/2,H/2,48,"#ffd12e");
+   texto(ad.pista,W/2,H/2+100,24,"#9be37d");
+   info("intentos: "+ad.intentos);
+ }, null,
+ (k)=>{ if(/^[0-9]$/.test(k) && ad.buf.length<3){ ad.buf+=k; return; }
+   if(k==="backspace"){ ad.buf=ad.buf.slice(0,-1); return; }
+   if(k!=="enter"||!ad.buf) return;
+   const v=parseInt(ad.buf,10); ad.buf=""; ad.intentos++;
+   if(v===ad.n){ anota("Adivina",ad.intentos); ganar("🏆 ¡ADIVINASTE!","en "+ad.intentos+" intentos"); }
+   else ad.pista = v<ad.n ? "⬆️ Más ALTO" : "⬇️ Más BAJO"; });
+
+// 18) DOMINÓ (contar puntos)
+let dom;
+add("🀄","Dominó","Toca la ficha que siga la cadena",
+ ()=>{ const fichas=[]; for(let a=0;a<=6;a++) for(let b=a;b<=6;b++) fichas.push([a,b]);
+   fichas.sort(()=>Math.random()-0.5);
+   const mano=fichas.splice(0,6);
+   const mesa=[fichas.pop()];
+   dom={mano,mesa,pozo:fichas}; },
+ ()=>{ fondo("#0d2818");
+   // mesa
+   const m=dom.mesa; const ancho=Math.min(60, (W-60)/Math.max(m.length,1));
+   m.forEach((f,i)=>{ const x=W/2+(i-(m.length-1)/2)*ancho;
+     caja(x-ancho/2+2,110,ancho-4,76,"#f5f0e0","#8a7a5a",6);
+     texto(f[0],x,130,18,"#222"); texto(f[1],x,168,18,"#222");
+     ctx.strokeStyle="#8a7a5a"; ctx.beginPath(); ctx.moveTo(x-ancho/2+4,148); ctx.lineTo(x+ancho/2-4,148); ctx.stroke(); });
+   const izq=m[0][0], der=m[m.length-1][1];
+   texto("extremos: "+izq+" y "+der,W/2,70,22,"#9be37d");
+   // mano
+   dom.mano.forEach((f,i)=>{ const x=70+i*((W-140)/Math.max(dom.mano.length-1,1));
+     const puede = f.includes(izq)||f.includes(der);
+     caja(x-32,H-150,64,96, puede?"#fffbe8":"#c8c0a8", puede?"#ffd12e":"#8a7a5a",8);
+     texto(f[0],x,H-125,22,"#222"); texto(f[1],x,H-78,22,"#222"); });
+   info("en mano: "+dom.mano.length);
+   if(!dom.mano.length){ anota("Dominó",1); ganar("🏆 ¡TE QUEDASTE SIN FICHAS!",""); }
+   else if(!dom.mano.some(f=>f.includes(izq)||f.includes(der))){
+     if(dom.pozo.length) { dom.mano.push(dom.pozo.pop()); }
+     else ganar("🚫 Cerrado","no puedes mover");
+   }
+ },
+ (x,y)=>{ if(y<H-150) return;
+   const i=Math.round((x-70)/((W-140)/Math.max(dom.mano.length-1,1)));
+   const f=dom.mano[i]; if(!f) return;
+   const m=dom.mesa, izq=m[0][0], der=m[m.length-1][1];
+   if(f[1]===izq){ m.unshift(f); }
+   else if(f[0]===izq){ m.unshift([f[1],f[0]]); }
+   else if(f[0]===der){ m.push(f); }
+   else if(f[1]===der){ m.push([f[1],f[0]]); }
+   else return;
+   dom.mano.splice(i,1); });
+
+/* ---------- menú ---------- */
+$("grid").innerHTML = JUEGOS.map((j,i)=>
+  '<div class="gbtn" data-i="'+i+'"><span class="ico">'+j.ico+'</span><span class="nm">'+j.nom+'</span></div>').join("");
+document.querySelectorAll(".gbtn").forEach(b=> b.onclick=()=>abrir(JUEGOS[+b.dataset.i]));
+fit();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>

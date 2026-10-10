@@ -20,7 +20,8 @@
 // v64: puesto general en EDTU (promedio de todos los juegos).
 // v65: los juegos ya ven tu cuenta (Cuenta no llegaba al iframe).
 // v66: 🫧 Burbujas, el regalo para José Antonio (1 añito).
-const CACHE = "edtu-v66";
+// v67: 18 juegos clásicos (damas, sudoku, laberinto, hanoi…).
+const CACHE = "edtu-v67";
 const SHELL = ["./", "./index.html", "./starwars.html", "./wally-kb.js", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 // Estas SIEMPRE se piden a la red primero: son las que cambian con cada mejora.
 const FRESCOS = [".html", "/"];
