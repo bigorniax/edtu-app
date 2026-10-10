@@ -15,7 +15,8 @@
 // v59: récords con límites de lo posible (fuera los 6 ms imposibles).
 // v60: tabla de jugadores al tocar un récord; sin mínimo de tiempo.
 // v61: nombres completos de los juegos en los récords.
-const CACHE = "edtu-v61";
+// v62: no se borran récords rápidos, y se recupera el que se perdió.
+const CACHE = "edtu-v62";
 const SHELL = ["./", "./index.html", "./starwars.html", "./wally-kb.js", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 // Estas SIEMPRE se piden a la red primero: son las que cambian con cada mejora.
 const FRESCOS = [".html", "/"];

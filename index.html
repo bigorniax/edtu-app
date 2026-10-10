@@ -2953,20 +2953,33 @@ const Cuenta = {
     for(const juego of JUEGOS_DE_TIEMPO){
       try{
         const nube = await this.leerRecord(juego);
-        if(!nube) continue;
-
-        // 1) si lo que hay en la nube es IMPOSIBLE (6 ms, por ejemplo), fuera
-        if(!recordValido(juego, nube)){
-          await this.sb.from("player_scores").delete()
-            .eq("player_id", this.user.id).eq("game", juego);
-          continue;
-        }
-        // 2) si este dispositivo tiene un tiempo mejor Y válido, lo ponemos
+        // el mejor tiempo guardado en este dispositivo
         let local = 0;
         for(const k of ["edtu_"+juego+"_best", juego+"_best"]){
           const v = Math.round(parseFloat(localStorage.getItem(k) || "0"));
           if(recordValido(juego, v) && (local === 0 || v < local)) local = v;
         }
+        // si en la nube no hay nada pero aquí sí, lo subimos (así se recupera
+        // un récord que se perdió, sin tener que volver a jugar)
+        if(!nube){
+          if(local) await this.sb.from("player_scores").upsert({
+            player_id: this.user.id, game: juego, best: local, updated_at: new Date().toISOString()
+          }, { onConflict: "player_id,game" });
+          continue;
+        }
+
+        /* 1) Solo se borra lo que es basura de verdad: un número absurdo o un
+           despiste de varios segundos guardado como récord. Los tiempos
+           RÁPIDOS nunca se borran, por bajos que sean — a David le borramos
+           sin querer su 6 ms una vez y no vuelve a pasar. */
+        const L = LIMITES[juego];
+        const esBasura = !isFinite(nube) || nube <= 0 || (L && nube > L.max);
+        if(esBasura){
+          await this.sb.from("player_scores").delete()
+            .eq("player_id", this.user.id).eq("game", juego);
+          continue;
+        }
+        // 2) si este dispositivo tiene un tiempo mejor, lo subimos
         if(local && local < nube){
           await this.sb.from("player_scores").upsert({
             player_id: this.user.id, game: juego, best: local, updated_at: new Date().toISOString()
