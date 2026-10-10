@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Para los peques</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;
+    background:linear-gradient(170deg,#ffe9a8,#ffd6ec 50%,#c8f0ff);color:#5a3a52}
+  #menu{position:absolute;inset:0;overflow-y:auto;padding:16px}
+  #menu h1{text-align:center;font-size:26px;color:#c0397f;text-shadow:0 2px 0 #fff}
+  #menu .sub{text-align:center;color:#9c6a8a;font-size:14px;margin:4px 0 16px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:11px;max-width:900px;margin:0 auto}
+  .gbtn{cursor:pointer;border:3px solid #fff;border-radius:20px;padding:15px 9px;text-align:center;
+    background:rgba(255,255,255,.75);box-shadow:0 4px 12px rgba(192,57,127,.14);transition:all .14s}
+  .gbtn:hover,.gbtn:active{transform:translateY(-3px) scale(1.03);border-color:#ff8cc6}
+  .gbtn .ico{font-size:36px;display:block;margin-bottom:4px}
+  .gbtn .nm{font-weight:800;font-size:14px;color:#a03a6e}
+  #play{position:absolute;inset:0;display:none;flex-direction:column}
+  #play.on{display:flex}
+  .bar{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;
+    background:rgba(255,255,255,.75);border-bottom:3px solid #ffb3da;flex-shrink:0;gap:8px}
+  .bar h2{font-size:18px;color:#c0397f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bar .info{font-weight:800;font-size:16px;color:#1a9e00;white-space:nowrap}
+  .bar button{cursor:pointer;background:#ffe3f1;border:2px solid #ff8cc6;color:#a03a6e;
+    border-radius:12px;padding:8px 14px;font-weight:800;font-size:13px;white-space:nowrap}
+  #stage{flex:1;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:8px}
+  canvas{display:block;max-width:100%;max-height:100%;touch-action:none;border-radius:16px}
+  .help{position:absolute;bottom:6px;left:0;right:0;text-align:center;color:#9c6a8a;font-size:13px;pointer-events:none}
+  .win{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(255,240,250,.95);text-align:center;padding:20px;z-index:5}
+  .win.on{display:flex}
+  .win h2{font-size:32px;margin-bottom:8px;color:#c0397f}
+  .win button{margin-top:16px;cursor:pointer;font-size:19px;font-weight:900;border:none;border-radius:16px;padding:14px 32px;
+    color:#fff;background:linear-gradient(90deg,#ff5ba8,#c0397f);box-shadow:0 4px 0 #9c2a62}
+</style>
+</head>
+<body>
+<div id="menu">
+  <h1>🧸 Para los más chiquitos</h1>
+  <p class="sub">Fáciles, bonitos y sin perder · <b>16 juegos</b></p>
+  <div class="grid" id="grid"></div>
+</div>
+<div id="play">
+  <div class="bar">
+    <h2 id="gname">Juego</h2>
+    <span class="info" id="info"></span>
+    <button id="back">✕ Menú</button>
+  </div>
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div class="help" id="help"></div>
+    <div class="win" id="win"><h2 id="winTxt">¡Muy bien!</h2><p id="winSub"></p><button id="again">▶ Otra vez</button></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+let W=700,H=520;
+function tam(w,h){ W=w;H=h;cv.width=w;cv.height=h;fit(); }
+function fit(){ const st=$("stage"); const m=Math.min((st.clientWidth-16)/W,(st.clientHeight-16)/H,1.7);
+  cv.style.width=(W*m)+"px"; cv.style.height=(H*m)+"px"; }
+addEventListener("resize",fit);
+function fondo(c){ ctx.fillStyle=c||"#fff6fb"; ctx.fillRect(0,0,W,H); }
+function texto(t,x,y,s,c,a){ ctx.fillStyle=c||"#5a3a52"; ctx.font="900 "+(s||22)+"px Segoe UI,sans-serif";
+  ctx.textAlign=a||"center"; ctx.textBaseline="middle"; ctx.fillText(t,x,y); }
+function caja(x,y,w,h,f,b,r){ r=r||12; ctx.beginPath(); ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+  if(f){ctx.fillStyle=f;ctx.fill();} if(b){ctx.strokeStyle=b;ctx.lineWidth=3;ctx.stroke();} }
+function info(t){ $("info").textContent=t||""; }
+function ganar(t,s){ $("winTxt").innerHTML=t; $("winSub").textContent=s||""; $("win").classList.add("on"); festejo(); }
+function anota(n,p){ try{ const k="edtu_peques_best"; const v=Math.max(parseInt(localStorage.getItem(k)||"0",10)||0,p||1);
+  localStorage.setItem(k,String(v));
+  if(window.parent&&window.parent.edtuPlayDay) window.parent.edtuPlayDay("Peques: "+n,p,p); }catch(e){} }
+
+// sonidos amables
+let AC=null;
+const ESC=[523.25,587.33,659.25,783.99,880];
+function nota(f,d,t){ try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)();
+  if(AC.state==="suspended") AC.resume();
+  const o=AC.createOscillator(),g=AC.createGain(); o.type=t||"sine"; o.frequency.value=f;
+  g.gain.setValueAtTime(.17,AC.currentTime); g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+(d||.35));
+  o.connect(g); g.connect(AC.destination); o.start(); o.stop(AC.currentTime+(d||.35)); }catch(e){} }
+function bien(){ nota(ESC[(Math.random()*ESC.length)|0],.4); }
+function festejo(){ ESC.forEach((f,i)=>setTimeout(()=>nota(f,.3),i*110)); }
+function decir(t){ try{ if(!window.speechSynthesis) return;
+  const u=new SpeechSynthesisUtterance(t); u.lang="es-ES"; u.pitch=1.4; u.rate=.9;
+  speechSynthesis.cancel(); speechSynthesis.speak(u); }catch(e){} }
+
+const chispas=[];
+function chispear(x,y,c,n){ for(let i=0;i<(n||14);i++){ const a=Math.random()*7,v=1.5+Math.random()*4;
+  chispas.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,vida:1,c:c||"#ffd166"}); } }
+function pintaChispas(){ for(let i=chispas.length-1;i>=0;i--){ const p=chispas[i];
+  p.x+=p.vx; p.y+=p.vy; p.vy+=.14; p.vida-=.022;
+  if(p.vida<=0){ chispas.splice(i,1); continue; }
+  ctx.globalAlpha=Math.max(0,p.vida); ctx.fillStyle=p.c;
+  ctx.beginPath(); ctx.arc(p.x,p.y,4,0,7); ctx.fill(); ctx.globalAlpha=1; } }
+
+let raton={x:W/2,y:H/2};
+function posEn(e){ const r=cv.getBoundingClientRect();
+  return { x:(e.clientX-r.left)*(W/r.width), y:(e.clientY-r.top)*(H/r.height) }; }
+cv.addEventListener("pointermove",e=>{ const p=posEn(e); raton.x=p.x; raton.y=p.y; });
+cv.addEventListener("pointerdown",e=>{ e.preventDefault(); const p=posEn(e); raton.x=p.x; raton.y=p.y;
+  if(juego&&juego.clic) juego.clic(p.x,p.y); });
+
+let juego=null, raf=null;
+function abrir(j){ juego=j; $("gname").textContent=j.ico+" "+j.nom; $("help").innerHTML=j.ayuda||"";
+  $("menu").style.display="none"; $("play").classList.add("on"); $("win").classList.remove("on");
+  info(""); chispas.length=0; tam(j.w||700,j.h||520); j.init();
+  if(raf) cancelAnimationFrame(raf);
+  const b=()=>{ raf=requestAnimationFrame(b); if(!$("win").classList.contains("on")){ j.paso(); pintaChispas(); } }; b(); }
+function cerrar(){ if(raf) cancelAnimationFrame(raf); raf=null; juego=null;
+  $("play").classList.remove("on"); $("menu").style.display="block"; }
+$("back").onclick=cerrar;
+$("again").onclick=()=>{ $("win").classList.remove("on"); info(""); chispas.length=0; juego.init(); };
+
+const JUEGOS=[];
+const add=(ico,nom,ayuda,init,paso,clic,w,h)=>JUEGOS.push({ico,nom,ayuda,init,paso,clic,w,h});
+const COL=["#ff6b9d","#ffd166","#6bcB77","#4d96ff","#c58cff","#ff9f68"];
+
+/* ===================== 16 JUEGOS PARA PEQUES ===================== */
+
+// 1) COLORES
+let co;
+add("🎨","Colores","Toca el color que te piden",
+ ()=>{ const nombres=["rojo","amarillo","verde","azul","morado","naranjo"];
+   const i=(Math.random()*6)|0; co={pide:i,nombres,aciertos:0}; decir("Toca el "+nombres[i]); },
+ ()=>{ fondo("#fff6fb");
+   texto("Toca el "+co.nombres[co.pide].toUpperCase(),W/2,60,30,"#c0397f");
+   COL.forEach((c,i)=>{ const x=W/2+((i%3)-1)*180, y=H/2+(((i/3)|0)-0.5)*170;
+     caja(x-78,y-62,156,124,c,"#fff",22); });
+   info("⭐ "+co.aciertos);
+ },
+ (x,y)=>{ for(let i=0;i<6;i++){ const cx=W/2+((i%3)-1)*180, cy=H/2+(((i/3)|0)-0.5)*170;
+   if(Math.abs(x-cx)<78 && Math.abs(y-cy)<62){
+     if(i===co.pide){ co.aciertos++; bien(); chispear(cx,cy,COL[i],18);
+       if(co.aciertos>=6){ anota("Colores",co.aciertos); ganar("🏆 ¡MUY BIEN!",""); return; }
+       co.pide=(Math.random()*6)|0; decir("Ahora el "+co.nombres[co.pide]); }
+     else { nota(180,.3,"sawtooth"); }
+     return; } } });
+
+// 2) ANIMALES
+let an;
+add("🐶","Animales","Toca el animal y escucha su sonido",
+ ()=>{ an={lista:[{e:"🐶",s:"guau guau"},{e:"🐱",s:"miau"},{e:"🐮",s:"muu"},{e:"🐷",s:"oink"},
+   {e:"🐸",s:"croac"},{e:"🦆",s:"cuac"},{e:"🐔",s:"co co co"},{e:"🐴",s:"iiih"},{e:"🦁",s:"roar"}],toques:0}; },
+ ()=>{ fondo("#eaf8e0");
+   texto("¡Toca un animal!",W/2,45,26,"#1a9e00");
+   an.lista.forEach((a,i)=>{ const x=W/2+((i%3)-1)*190, y=130+((i/3)|0)*135;
+     caja(x-70,y-54,140,108,"#fff","#9be37d",20); texto(a.e,x,y,58); });
+   info("🔊 "+an.toques);
+ },
+ (x,y)=>{ an.lista.forEach((a,i)=>{ const cx=W/2+((i%3)-1)*190, cy=130+((i/3)|0)*135;
+   if(Math.abs(x-cx)<70 && Math.abs(y-cy)<54){ decir(a.s); chispear(cx,cy,"#9be37d",12);
+     an.toques++; if(an.toques>=12){ anota("Animales",an.toques); ganar("🏆 ¡LOS CONOCES TODOS!",""); } } }); });
+
+// 3) CONTAR
+let cn;
+add("🔢","Contar","¿Cuántos hay? Toca el número",
+ ()=>{ const n=1+((Math.random()*5)|0);
+   cn={n,e:["🍎","⭐","🎈","🐟","🌸"][(Math.random()*5)|0],aciertos:0}; decir("¿Cuántos hay?"); },
+ ()=>{ fondo("#fff9e8");
+   texto("¿Cuántos hay?",W/2,45,28,"#c9971b");
+   for(let i=0;i<cn.n;i++) texto(cn.e, W/2+(i-(cn.n-1)/2)*86, 160, 56);
+   for(let i=1;i<=5;i++){ const x=W/2+(i-3)*110;
+     caja(x-46,H-130,92,92,"#ffd166","#fff",18); texto(i,x,H-84,44,"#7a5a0a"); }
+   info("⭐ "+cn.aciertos);
+ },
+ (x,y)=>{ if(Math.abs(y-(H-84))>46) return;
+   for(let i=1;i<=5;i++){ const cx=W/2+(i-3)*110;
+     if(Math.abs(x-cx)<46){
+       if(i===cn.n){ cn.aciertos++; bien(); chispear(cx,H-84,"#ffd166",16); decir("¡"+i+"! ¡Muy bien!");
+         if(cn.aciertos>=5){ anota("Contar",cn.aciertos); ganar("🏆 ¡SABES CONTAR!",""); return; }
+         cn.n=1+((Math.random()*5)|0); cn.e=["🍎","⭐","🎈","🐟","🌸"][(Math.random()*5)|0]; }
+       else nota(180,.3,"sawtooth");
+       return; } } });
+
+// 4) FORMAS
+let fo;
+add("🔷","Formas","Toca la forma igual a la de arriba",
+ ()=>{ fo={formas:["círculo","cuadrado","triángulo","estrella","corazón"],pide:(Math.random()*5)|0,aciertos:0}; },
+ ()=>{ fondo("#eef4ff");
+   const dibuja=(k,x,y,s,c)=>{ ctx.fillStyle=c;
+     if(k===0){ ctx.beginPath(); ctx.arc(x,y,s,0,7); ctx.fill(); }
+     if(k===1){ ctx.fillRect(x-s,y-s,s*2,s*2); }
+     if(k===2){ ctx.beginPath(); ctx.moveTo(x,y-s); ctx.lineTo(x+s,y+s); ctx.lineTo(x-s,y+s); ctx.closePath(); ctx.fill(); }
+     if(k===3){ ctx.font="900 "+(s*2.4)+"px serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("★",x,y); }
+     if(k===4){ ctx.font="900 "+(s*2.2)+"px serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("❤",x,y); } };
+   texto("¿Cuál es igual?",W/2,40,26,"#2a5a9e");
+   dibuja(fo.pide,W/2,120,46,"#4d96ff");
+   for(let i=0;i<5;i++){ const x=W/2+(i-2)*140;
+     caja(x-58,H-170,116,116,"#fff","#bcd",18); dibuja(i,x,H-112,38,"#6bcB77"); }
+   info("⭐ "+fo.aciertos);
+ },
+ (x,y)=>{ if(Math.abs(y-(H-112))>58) return;
+   for(let i=0;i<5;i++){ const cx=W/2+(i-2)*140;
+     if(Math.abs(x-cx)<58){
+       if(i===fo.pide){ fo.aciertos++; bien(); chispear(cx,H-112,"#6bcB77",16);
+         if(fo.aciertos>=5){ anota("Formas",fo.aciertos); ganar("🏆 ¡MUY BIEN!",""); return; }
+         fo.pide=(Math.random()*5)|0; }
+       else nota(180,.3,"sawtooth");
+       return; } } });
+
+// 5) PARES
+let pa;
+add("👯","Pares","Encuentra las dos iguales",
+ ()=>{ const e=["🐶","🐱","🐸","🦆","🐝","🐠"];
+   pa={c:[...e,...e].sort(()=>Math.random()-0.5).map(x=>({e:x,ab:false,ok:false})),ab:[],esp:0}; },
+ ()=>{ fondo("#fff0f8");
+   if(pa.esp>0 && --pa.esp===0){ const [i,j]=pa.ab;
+     if(pa.c[i].e===pa.c[j].e){ pa.c[i].ok=pa.c[j].ok=true; bien(); }
+     else pa.c[i].ab=pa.c[j].ab=false;
+     pa.ab=[]; }
+   const CW=150,CH=130,cols=4,ox=(W-cols*CW)/2,oy=(H-3*CH)/2;
+   pa.c.forEach((c,i)=>{ const x=ox+(i%cols)*CW, y=oy+((i/cols)|0)*CH;
+     caja(x+6,y+6,CW-12,CH-12, c.ok?"#d8ffd0":(c.ab?"#fff":"#ffd6ec"), "#ff8cc6",18);
+     if(c.ab||c.ok) texto(c.e,x+CW/2,y+CH/2,54); else texto("?",x+CW/2,y+CH/2,40,"#ff8cc6"); });
+   info("parejas: "+pa.c.filter(c=>c.ok).length/2+"/6");
+   if(pa.c.every(c=>c.ok)){ anota("Pares",6); ganar("🏆 ¡TODAS LAS PAREJAS!",""); }
+ },
+ (x,y)=>{ if(pa.esp>0) return; const CW=150,CH=130,cols=4,ox=(W-cols*CW)/2,oy=(H-3*CH)/2;
+   const c=Math.floor((x-ox)/CW), r=Math.floor((y-oy)/CH);
+   if(r<0||r>2||c<0||c>=cols) return;
+   const i=r*cols+c, k=pa.c[i]; if(!k||k.ab||k.ok) return;
+   k.ab=true; pa.ab.push(i); nota(660,.2);
+   if(pa.ab.length===2) pa.esp=40; });
+
+// 6) GLOBOS
+let gl;
+add("🎈","Globos","Toca todos los globos",
+ ()=>{ gl={g:[],t:0,rotos:0}; for(let i=0;i<6;i++) gl.g.push({x:80+Math.random()*(W-160),y:H+60+i*70,
+   v:1+Math.random()*1.4,c:COL[(Math.random()*COL.length)|0],bal:Math.random()*7}); },
+ ()=>{ fondo("#e8f6ff"); const g=gl; g.t++;
+   if(g.g.length<6 && g.t%40===0) g.g.push({x:80+Math.random()*(W-160),y:H+50,
+     v:1+Math.random()*1.4,c:COL[(Math.random()*COL.length)|0],bal:Math.random()*7});
+   g.g.forEach(o=>{ o.y-=o.v; o.bal+=.03; o.x+=Math.sin(o.bal)*.6;
+     if(o.y<-70) o.y=H+50;
+     ctx.strokeStyle="#bbb"; ctx.lineWidth=2;
+     ctx.beginPath(); ctx.moveTo(o.x,o.y+44); ctx.quadraticCurveTo(o.x+8,o.y+70,o.x,o.y+90); ctx.stroke();
+     ctx.fillStyle=o.c; ctx.beginPath(); ctx.ellipse(o.x,o.y,36,44,0,0,7); ctx.fill();
+     ctx.fillStyle="rgba(255,255,255,.55)"; ctx.beginPath(); ctx.ellipse(o.x-12,o.y-14,10,14,0,0,7); ctx.fill(); });
+   info("💥 "+g.rotos);
+   if(g.rotos>=12){ anota("Globos",g.rotos); ganar("🏆 ¡LOS REVENTASTE TODOS!",""); }
+ },
+ (x,y)=>{ for(let i=gl.g.length-1;i>=0;i--){ const o=gl.g[i];
+   if(Math.abs(o.x-x)<40 && Math.abs(o.y-y)<48){ chispear(o.x,o.y,o.c,20); gl.g.splice(i,1); gl.rotos++; bien(); return; } } });
+
+// 7) DIBUJA
+let db;
+add("✏️","Dibuja","Pinta con el dedo · toca un color para cambiar",
+ ()=>{ db={color:COL[0],trazos:[],ult:null}; fondo("#fff"); },
+ ()=>{ // no borramos el fondo: lo dibujado se queda
+   COL.forEach((c,i)=>{ const x=40+i*58; caja(x-24,16,48,48,c,db.color===c?"#333":"#fff",12); });
+   caja(W-96,16,80,48,"#eee","#999",12); texto("borrar",W-56,40,15,"#666");
+   if(raton.abajo){}
+   info("🎨");
+ },
+ (x,y)=>{ if(y<70){ COL.forEach((c,i)=>{ const cx=40+i*58; if(Math.abs(x-cx)<24) db.color=c; });
+     if(x>W-96){ ctx.fillStyle="#fff"; ctx.fillRect(0,0,W,H); } nota(700,.15); return; }
+   ctx.fillStyle=db.color; ctx.beginPath(); ctx.arc(x,y,13,0,7); ctx.fill(); });
+
+// 8) SIGUE EL CAMINO
+let sc;
+add("🐾","Camino","Toca las huellas en orden, de la 1 a la 6",
+ ()=>{ const p=[]; for(let i=0;i<6;i++) p.push({x:90+Math.random()*(W-180),y:110+Math.random()*(H-220),n:i+1,ok:false});
+   sc={p,sig:1}; },
+ ()=>{ fondo("#f0fff0");
+   texto("Toca del 1 al 6",W/2,45,26,"#1a9e00");
+   sc.p.forEach(o=>{ caja(o.x-38,o.y-38,76,76, o.ok?"#d8ffd0":"#fff", o.n===sc.sig?"#39ff14":"#9be37d",38);
+     texto(o.ok?"✔":o.n,o.x,o.y,34,o.ok?"#1a9e00":"#5a3a52"); });
+   info("➡ "+sc.sig+"/6");
+   if(sc.sig>6){ anota("Camino",6); ganar("🏆 ¡LO LOGRASTE!",""); }
+ },
+ (x,y)=>{ const o=sc.p.find(p=>!p.ok && Math.hypot(p.x-x,p.y-y)<42);
+   if(!o) return;
+   if(o.n===sc.sig){ o.ok=true; sc.sig++; bien(); chispear(o.x,o.y,"#9be37d",14); }
+   else nota(180,.3,"sawtooth"); });
+
+// 9) GRANDE Y CHICO
+let gc;
+add("📏","Grande","Toca el más GRANDE",
+ ()=>{ gc={a:40+Math.random()*30,b:75+Math.random()*40,e:["🐘","🐭","🎈","⭐","🍎"][(Math.random()*5)|0],
+   lado:Math.random()<.5,aciertos:0}; },
+ ()=>{ fondo("#fff6e8");
+   texto("Toca el más GRANDE",W/2,50,28,"#c9971b");
+   const izq=gc.lado?gc.b:gc.a, der=gc.lado?gc.a:gc.b;
+   texto(gc.e,W*0.3,H/2,izq*2); texto(gc.e,W*0.7,H/2,der*2);
+   info("⭐ "+gc.aciertos);
+ },
+ (x)=>{ const grandeIzq=gc.lado;
+   const acerto = (x<W/2) === grandeIzq;
+   if(acerto){ gc.aciertos++; bien(); chispear(x,H/2,"#ffd166",16);
+     if(gc.aciertos>=6){ anota("Grande",gc.aciertos); ganar("🏆 ¡MUY BIEN!",""); return; }
+     gc.a=40+Math.random()*30; gc.b=75+Math.random()*40;
+     gc.e=["🐘","🐭","🎈","⭐","🍎"][(Math.random()*5)|0]; gc.lado=Math.random()<.5; }
+   else nota(180,.3,"sawtooth"); });
+
+// 10) ¿QUÉ FALTA?
+let qf;
+add("❓","Qué falta","Mira bien y di cuál desapareció",
+ ()=>{ const todos=["🍎","🍌","🍇","🍓","🍊"];
+   qf={todos,ver:[...todos],falta:null,t:0,fase:"mira",aciertos:0}; },
+ ()=>{ fondo("#fdf0ff"); qf.t++;
+   if(qf.fase==="mira"){
+     texto("¡Mira bien!",W/2,55,28,"#8e44ad");
+     qf.ver.forEach((e,i)=>texto(e,W/2+(i-2)*120,H/2,62));
+     if(qf.t>110){ qf.fase="pregunta"; qf.falta=qf.todos[(Math.random()*5)|0];
+       qf.ver=qf.todos.filter(e=>e!==qf.falta); decir("¿Cuál falta?"); }
+   } else {
+     texto("¿Cuál falta?",W/2,55,28,"#8e44ad");
+     qf.ver.forEach((e,i)=>texto(e,W/2+(i-1.5)*120,H/2-40,54));
+     qf.todos.forEach((e,i)=>{ const x=W/2+(i-2)*120;
+       caja(x-46,H-150,92,92,"#fff","#c58cff",18); texto(e,x,H-104,48); });
+   }
+   info("⭐ "+qf.aciertos);
+ },
+ (x,y)=>{ if(qf.fase!=="pregunta" || Math.abs(y-(H-104))>46) return;
+   for(let i=0;i<5;i++){ const cx=W/2+(i-2)*120;
+     if(Math.abs(x-cx)<46){
+       if(qf.todos[i]===qf.falta){ qf.aciertos++; bien(); chispear(cx,H-104,"#c58cff",16);
+         if(qf.aciertos>=5){ anota("Qué falta",qf.aciertos); ganar("🏆 ¡QUÉ MEMORIA!",""); return; }
+         qf.fase="mira"; qf.t=0; qf.ver=[...qf.todos]; }
+       else nota(180,.3,"sawtooth");
+       return; } } });
+
+// 11) LETRAS
+let lt;
+add("🔤","Letras","Toca la letra que escuchas",
+ ()=>{ const L="AEIOUMPSTL".split("");
+   lt={L,pide:L[(Math.random()*L.length)|0],aciertos:0};
+   setTimeout(()=>decir("Toca la letra "+lt.pide),300); },
+ ()=>{ fondo("#e8f4ff");
+   texto("Toca la letra "+lt.pide,W/2,50,30,"#2a5a9e");
+   lt.L.forEach((c,i)=>{ const x=W/2+((i%5)-2)*130, y=H/2+(((i/5)|0)-0.5)*150;
+     caja(x-52,y-52,104,104,"#fff","#4d96ff",18); texto(c,x,y,52,"#2a5a9e"); });
+   info("⭐ "+lt.aciertos);
+ },
+ (x,y)=>{ lt.L.forEach((c,i)=>{ const cx=W/2+((i%5)-2)*130, cy=H/2+(((i/5)|0)-0.5)*150;
+   if(Math.abs(x-cx)<52 && Math.abs(y-cy)<52){
+     if(c===lt.pide){ lt.aciertos++; bien(); chispear(cx,cy,"#4d96ff",16); decir("¡"+c+"! Muy bien");
+       if(lt.aciertos>=6){ anota("Letras",lt.aciertos); ganar("🏆 ¡SABES LAS LETRAS!",""); return; }
+       lt.pide=lt.L[(Math.random()*lt.L.length)|0]; setTimeout(()=>decir("Ahora la "+lt.pide),500); }
+     else nota(180,.3,"sawtooth"); } }); });
+
+// 12) ORDENA POR TAMAÑO
+let ot;
+add("📊","Ordena","Toca de más CHICO a más grande",
+ ()=>{ const t=[26,38,50,62,74].sort(()=>Math.random()-0.5);
+   ot={p:t.map((s,i)=>({s,x:W/2+(i-2)*140,ok:false})),sig:0}; },
+ ()=>{ fondo("#f0fff8");
+   texto("De más CHICO a más grande",W/2,50,25,"#1a9e00");
+   ot.p.forEach(o=>{ if(o.ok) return;
+     ctx.fillStyle="#6bcB77"; ctx.beginPath(); ctx.arc(o.x,H/2,o.s,0,7); ctx.fill();
+     ctx.strokeStyle="#fff"; ctx.lineWidth=4; ctx.stroke(); });
+   info("➡ "+ot.sig+"/5");
+   if(ot.sig>=5){ anota("Ordena",5); ganar("🏆 ¡ORDENADO!",""); }
+ },
+ (x,y)=>{ const vivos=ot.p.filter(o=>!o.ok); if(!vivos.length) return;
+   const menor=vivos.reduce((a,b)=>a.s<b.s?a:b);
+   const toco=vivos.find(o=>Math.hypot(o.x-x,H/2-y)<o.s+12);
+   if(!toco) return;
+   if(toco===menor){ toco.ok=true; ot.sig++; bien(); chispear(toco.x,H/2,"#6bcB77",14); }
+   else { ot.p.forEach(o=>o.ok=false); ot.sig=0; nota(180,.3,"sawtooth"); } });
+
+// 13) BURBUJAS DE COLORES
+let bc;
+add("🫧","Burbujas","Toca las burbujas",
+ ()=>{ bc={b:[],t:0,pop:0}; for(let i=0;i<7;i++) bc.b.push({x:60+Math.random()*(W-120),y:H*.3+Math.random()*H*.6,
+   r:28+Math.random()*26,v:.5+Math.random(),c:COL[(Math.random()*COL.length)|0],bal:Math.random()*7}); },
+ ()=>{ fondo("#e0f4ff"); const g=bc; g.t++;
+   if(g.b.length<9 && g.t%34===0) g.b.push({x:60+Math.random()*(W-120),y:H+40,
+     r:28+Math.random()*26,v:.5+Math.random(),c:COL[(Math.random()*COL.length)|0],bal:Math.random()*7});
+   g.b.forEach(o=>{ o.y-=o.v; o.bal+=.03; o.x+=Math.sin(o.bal)*.6; if(o.y<-60) o.y=H+40;
+     const gr=ctx.createRadialGradient(o.x-o.r*.3,o.y-o.r*.3,o.r*.1,o.x,o.y,o.r);
+     gr.addColorStop(0,"rgba(255,255,255,.9)"); gr.addColorStop(1,o.c+"55");
+     ctx.fillStyle=gr; ctx.beginPath(); ctx.arc(o.x,o.y,o.r,0,7); ctx.fill();
+     ctx.strokeStyle="rgba(255,255,255,.8)"; ctx.lineWidth=2; ctx.stroke(); });
+   info("💥 "+g.pop);
+   if(g.pop>=15){ anota("Burbujas",g.pop); ganar("🏆 ¡15 BURBUJAS!",""); }
+ },
+ (x,y)=>{ for(let i=bc.b.length-1;i>=0;i--){ const o=bc.b[i];
+   if(Math.hypot(o.x-x,o.y-y)<o.r+10){ chispear(o.x,o.y,o.c,18); bc.b.splice(i,1); bc.pop++; bien(); return; } } });
+
+// 14) VISTE AL MUÑECO
+let vm;
+add("👕","Viste","Toca la ropa para cambiarla",
+ ()=>{ vm={camisa:0,pelo:0,gorro:0,toques:0}; },
+ ()=>{ fondo("#fff0f8");
+   const cx=W/2, cy=H/2+20;
+   // cuerpo
+   ctx.fillStyle=COL[vm.camisa]; caja(cx-56,cy-10,112,110,COL[vm.camisa],"#fff",22);
+   ctx.fillStyle="#f2c9a8"; ctx.beginPath(); ctx.arc(cx,cy-60,52,0,7); ctx.fill();
+   // pelo
+   ctx.fillStyle=["#6b4423","#c9962e","#2a1a0e","#e8a0b8"][vm.pelo];
+   ctx.beginPath(); ctx.arc(cx,cy-72,50,Math.PI,0); ctx.fill();
+   // ojos y boca
+   ctx.fillStyle="#333"; ctx.beginPath(); ctx.arc(cx-17,cy-62,6,0,7); ctx.arc(cx+17,cy-62,6,0,7); ctx.fill();
+   ctx.strokeStyle="#c0397f"; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(cx,cy-46,15,0.2,Math.PI-0.2); ctx.stroke();
+   // gorro
+   if(vm.gorro) texto(["","👑","🎩","🧢","🎀"][vm.gorro],cx,cy-120,54);
+   // botones
+   caja(60,H-96,130,64,"#ffd6ec","#ff8cc6",16); texto("👕 ropa",125,H-64,18,"#a03a6e");
+   caja(W/2-65,H-96,130,64,"#ffd6ec","#ff8cc6",16); texto("💇 pelo",W/2,H-64,18,"#a03a6e");
+   caja(W-190,H-96,130,64,"#ffd6ec","#ff8cc6",16); texto("👑 gorro",W-125,H-64,18,"#a03a6e");
+   info("✨ "+vm.toques);
+   if(vm.toques>=10){ anota("Viste",vm.toques); ganar("🏆 ¡QUÉ LINDO QUEDÓ!",""); }
+ },
+ (x,y)=>{ if(y<H-96) return; vm.toques++; nota(700,.2);
+   if(x<210) vm.camisa=(vm.camisa+1)%COL.length;
+   else if(x<W/2+65) vm.pelo=(vm.pelo+1)%4;
+   else vm.gorro=(vm.gorro+1)%5; });
+
+// 15) SOMBRAS
+let so;
+add("🌑","Sombras","¿De quién es esta sombra?",
+ ()=>{ const e=["🐶","🐱","🐘","🦆","🐸","🦁"];
+   so={e,cual:(Math.random()*6)|0,aciertos:0}; },
+ ()=>{ fondo("#eceff8");
+   texto("¿De quién es la sombra?",W/2,50,26,"#555");
+   ctx.save(); ctx.filter="brightness(0)";
+   texto(so.e[so.cual],W/2,150,80); ctx.restore();
+   so.e.forEach((x2,i)=>{ const x=W/2+((i%3)-1)*170, y=H-180+((i/3)|0)*110;
+     caja(x-54,y-46,108,92,"#fff","#aab",16); texto(x2,x,y,48); });
+   info("⭐ "+so.aciertos);
+ },
+ (x,y)=>{ so.e.forEach((e,i)=>{ const cx=W/2+((i%3)-1)*170, cy=H-180+((i/3)|0)*110;
+   if(Math.abs(x-cx)<54 && Math.abs(y-cy)<46){
+     if(i===so.cual){ so.aciertos++; bien(); chispear(cx,cy,"#aab",14);
+       if(so.aciertos>=5){ anota("Sombras",so.aciertos); ganar("🏆 ¡LOS ADIVINASTE!",""); return; }
+       so.cual=(Math.random()*6)|0; }
+     else nota(180,.3,"sawtooth"); } }); });
+
+// 16) PIANITO
+let pi;
+add("🎹","Pianito","Toca las teclas de colores",
+ ()=>{ pi={notas:0,brilla:-1}; },
+ ()=>{ fondo("#f8f0ff");
+   texto("¡Toca las teclas!",W/2,45,26,"#8e44ad");
+   const n=7, w=(W-80)/n;
+   for(let i=0;i<n;i++){ const x=40+i*w;
+     caja(x+4,110,w-8,H-200, pi.brilla===i?"#fff":["#ffd6d6","#ffe8c2","#fdffc2","#d2ffc2","#c2fff0","#c2e8ff","#e0c2ff"][i],"#ddd",14);
+     texto(["DO","RE","MI","FA","SOL","LA","SI"][i], x+w/2, H-120, 20,"#8a5a9e"); }
+   info("🎵 "+pi.notas);
+   if(pi.notas>=20){ anota("Pianito",pi.notas); ganar("🏆 ¡ERES MÚSICO!",""); }
+ },
+ (x,y)=>{ if(y<110||y>H-90) return;
+   const n=7, w=(W-80)/n, i=Math.floor((x-40)/w);
+   if(i<0||i>=n) return;
+   nota([261.63,293.66,329.63,349.23,392,440,493.88][i],.5,"triangle");
+   pi.brilla=i; setTimeout(()=>{ if(pi) pi.brilla=-1; },140);
+   pi.notas++; });
+
+/* ---------- menú ---------- */
+$("grid").innerHTML = JUEGOS.map((j,i)=>
+  '<div class="gbtn" data-i="'+i+'"><span class="ico">'+j.ico+'</span><span class="nm">'+j.nom+'</span></div>').join("");
+document.querySelectorAll(".gbtn").forEach(b=> b.onclick=()=>abrir(JUEGOS[+b.dataset.i]));
+fit();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>
