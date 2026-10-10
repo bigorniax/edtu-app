@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Aventura</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;
+    background:radial-gradient(ellipse at 50% 0%,#10302a,#050f0c 60%);color:#dff}
+  #menu{position:absolute;inset:0;overflow-y:auto;padding:16px}
+  #menu h1{text-align:center;font-size:25px;color:#5fe0a0;text-shadow:0 0 16px rgba(95,224,160,.45)}
+  #menu .sub{text-align:center;color:#8ba;font-size:13px;margin:4px 0 16px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;max-width:1000px;margin:0 auto}
+  .gbtn{cursor:pointer;border:2px solid rgba(95,224,160,.3);border-radius:14px;padding:13px 9px;text-align:center;
+    background:linear-gradient(160deg,rgba(16,44,38,.9),rgba(6,16,14,.9));transition:all .14s}
+  .gbtn:hover{transform:translateY(-3px);border-color:#5fe0a0;box-shadow:0 7px 20px rgba(95,224,160,.22)}
+  .gbtn .ico{font-size:28px;display:block;margin-bottom:4px}
+  .gbtn .nm{font-weight:800;font-size:13px;color:#fff}
+  #play{position:absolute;inset:0;display:none;flex-direction:column}
+  #play.on{display:flex}
+  .bar{display:flex;align-items:center;justify-content:space-between;padding:9px 13px;background:rgba(4,12,10,.9);
+    border-bottom:1px solid rgba(95,224,160,.25);flex-shrink:0;gap:8px}
+  .bar h2{font-size:16px;color:#5fe0a0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bar .info{font-weight:800;font-size:15px;color:#ffd12e;white-space:nowrap}
+  .bar button{cursor:pointer;background:rgba(255,91,110,.15);border:1.5px solid rgba(255,91,110,.5);color:#ff8fa0;
+    border-radius:9px;padding:6px 11px;font-weight:700;font-size:12px;white-space:nowrap}
+  #stage{flex:1;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:8px}
+  canvas{display:block;max-width:100%;max-height:100%;touch-action:none;border-radius:10px}
+  .help{position:absolute;bottom:6px;left:0;right:0;text-align:center;color:#8ba;font-size:12px;pointer-events:none}
+  .win{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(3,10,8,.93);text-align:center;padding:20px;z-index:5}
+  .win.on{display:flex}
+  .win h2{font-size:28px;margin-bottom:8px;color:#5fe0a0}
+  .win button{margin-top:16px;cursor:pointer;font-size:17px;font-weight:900;border:none;border-radius:14px;padding:13px 30px;
+    color:#021018;background:linear-gradient(90deg,#5fe0a0,#2fd0ff)}
+</style>
+</head>
+<body>
+<div id="menu">
+  <h1>🗺️ Aventura y Estrategia</h1>
+  <p class="sub">Para pensar y explorar · <b>18 juegos</b></p>
+  <div class="grid" id="grid"></div>
+</div>
+<div id="play">
+  <div class="bar">
+    <h2 id="gname">Juego</h2>
+    <span class="info" id="info"></span>
+    <button id="back">✕ Menú</button>
+  </div>
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div class="help" id="help"></div>
+    <div class="win" id="win"><h2 id="winTxt">¡Bien!</h2><p id="winSub"></p><button id="again">▶ Otra vez</button></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+let W=700,H=560;
+function tam(w,h){ W=w;H=h;cv.width=w;cv.height=h;fit(); }
+function fit(){ const st=$("stage"); const m=Math.min((st.clientWidth-16)/W,(st.clientHeight-16)/H,1.6);
+  cv.style.width=(W*m)+"px"; cv.style.height=(H*m)+"px"; }
+addEventListener("resize",fit);
+function fondo(c){ ctx.fillStyle=c||"#081812"; ctx.fillRect(0,0,W,H); }
+function texto(t,x,y,s,c,a){ ctx.fillStyle=c||"#fff"; ctx.font="900 "+(s||20)+"px Segoe UI,sans-serif";
+  ctx.textAlign=a||"center"; ctx.textBaseline="middle"; ctx.fillText(t,x,y); }
+function caja(x,y,w,h,f,b,r){ r=r||8; ctx.beginPath(); ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+  if(f){ctx.fillStyle=f;ctx.fill();} if(b){ctx.strokeStyle=b;ctx.lineWidth=2;ctx.stroke();} }
+function info(t){ $("info").textContent=t||""; }
+function ganar(t,s){ $("winTxt").innerHTML=t; $("winSub").textContent=s||""; $("win").classList.add("on"); }
+function anota(n,p){ try{ const k="edtu_aventura_best"; const v=Math.max(parseInt(localStorage.getItem(k)||"0",10)||0,p||1);
+  localStorage.setItem(k,String(v));
+  if(window.parent&&window.parent.edtuPlayDay) window.parent.edtuPlayDay("Aventura: "+n,p,p); }catch(e){} }
+
+const teclas={}; let raton={x:W/2,y:H/2};
+function posEn(e){ const r=cv.getBoundingClientRect();
+  return { x:(e.clientX-r.left)*(W/r.width), y:(e.clientY-r.top)*(H/r.height) }; }
+cv.addEventListener("pointermove",e=>{ const p=posEn(e); raton.x=p.x; raton.y=p.y; });
+cv.addEventListener("pointerdown",e=>{ e.preventDefault(); const p=posEn(e); raton.x=p.x; raton.y=p.y;
+  if(juego&&juego.clic) juego.clic(p.x,p.y); });
+addEventListener("keydown",e=>{ const k=e.key.toLowerCase(); teclas[k]=true; if(juego&&juego.tecla) juego.tecla(k);
+  if(["arrowup","arrowdown","arrowleft","arrowright"," "].includes(k)) e.preventDefault(); });
+addEventListener("keyup",e=>{ teclas[e.key.toLowerCase()]=false; });
+
+let juego=null, raf=null;
+function abrir(j){ juego=j; $("gname").textContent=j.ico+" "+j.nom; $("help").innerHTML=j.ayuda||"";
+  $("menu").style.display="none"; $("play").classList.add("on"); $("win").classList.remove("on");
+  info(""); tam(j.w||700,j.h||560); j.init();
+  if(raf) cancelAnimationFrame(raf);
+  const b=()=>{ raf=requestAnimationFrame(b); if(!$("win").classList.contains("on")) j.paso(); }; b(); }
+function cerrar(){ if(raf) cancelAnimationFrame(raf); raf=null; juego=null;
+  $("play").classList.remove("on"); $("menu").style.display="block"; }
+$("back").onclick=cerrar;
+$("again").onclick=()=>{ $("win").classList.remove("on"); info(""); juego.init(); };
+
+const JUEGOS=[];
+const add=(ico,nom,ayuda,init,paso,clic,tecla,w,h)=>JUEGOS.push({ico,nom,ayuda,init,paso,clic,tecla,w,h});
+
+/* ===================== 18 DE AVENTURA Y ESTRATEGIA ===================== */
+
+// 1) BUSCA EL TESORO
+let bt;
+add("🗺️","Tesoro","Toca para cavar · te dice si estás cerca (🔥 o ❄️)",
+ ()=>{ const N=8; bt={N,t:{r:(Math.random()*N)|0,c:(Math.random()*N)|0},
+   abiertas:Array.from({length:N},()=>Array(N).fill(null)),intentos:0}; },
+ ()=>{ fondo("#1a1408"); const N=bt.N, S=58, ox=(W-N*S)/2, oy=(H-N*S)/2;
+   texto("🗺️ Busca el tesoro",W/2,46,26,"#ffd12e");
+   for(let r=0;r<N;r++) for(let c=0;c<N;c++){ const v=bt.abiertas[r][c];
+     caja(ox+c*S+2,oy+r*S+2,S-4,S-4, v===null?"#5a4a28":"#2a2010","#8a7a4a",6);
+     if(v!==null) texto(v,ox+c*S+S/2,oy+r*S+S/2,24); }
+   info("cavadas: "+bt.intentos);
+ },
+ (x,y)=>{ const N=bt.N, S=58, ox=(W-N*S)/2, oy=(H-N*S)/2;
+   const c=Math.floor((x-ox)/S), r=Math.floor((y-oy)/S);
+   if(r<0||r>=N||c<0||c>=N||bt.abiertas[r][c]!==null) return;
+   bt.intentos++;
+   const d=Math.max(Math.abs(r-bt.t.r),Math.abs(c-bt.t.c));
+   if(d===0){ bt.abiertas[r][c]="💎"; anota("Tesoro",bt.intentos);
+     ganar("💎 ¡TESORO!","en "+bt.intentos+" intentos"); return; }
+   bt.abiertas[r][c] = d===1?"🔥" : d===2?"🌡️" : d<=4?"❄️" : "🧊"; });
+
+// 2) BARCOS
+let ba;
+add("🚢","Barcos","Hunde los 5 barcos escondidos",
+ ()=>{ const N=8; const g=Array.from({length:N},()=>Array(N).fill(0));
+   [4,3,3,2,2].forEach(len=>{ let puesto=false;
+     while(!puesto){ const hor=Math.random()<.5, r=(Math.random()*N)|0, c=(Math.random()*N)|0;
+       if(hor? c+len>N : r+len>N) continue;
+       let libre=true;
+       for(let i=0;i<len;i++){ if(g[r+(hor?0:i)][c+(hor?i:0)]) libre=false; }
+       if(!libre) continue;
+       for(let i=0;i<len;i++) g[r+(hor?0:i)][c+(hor?i:0)]=1;
+       puesto=true; } });
+   ba={N,g,v:Array.from({length:N},()=>Array(N).fill(0)),tiros:0,tocados:0}; },
+ ()=>{ fondo("#06243a"); const N=ba.N, S=60, ox=(W-N*S)/2, oy=(H-N*S)/2;
+   texto("🚢 Hunde los barcos",W/2,44,26,"#5fd1ff");
+   for(let r=0;r<N;r++) for(let c=0;c<N;c++){ const v=ba.v[r][c];
+     caja(ox+c*S+2,oy+r*S+2,S-4,S-4, v===0?"#0d3a5a":(v===1?"#8a2020":"#1a2a3a"),"#2a5a7a",6);
+     if(v===1) texto("💥",ox+c*S+S/2,oy+r*S+S/2,26);
+     if(v===2) texto("🌊",ox+c*S+S/2,oy+r*S+S/2,22); }
+   info("tiros: "+ba.tiros+"  tocados: "+ba.tocados+"/14");
+   if(ba.tocados>=14){ anota("Barcos",ba.tiros); ganar("🏆 ¡FLOTA HUNDIDA!","en "+ba.tiros+" tiros"); }
+ },
+ (x,y)=>{ const N=ba.N, S=60, ox=(W-N*S)/2, oy=(H-N*S)/2;
+   const c=Math.floor((x-ox)/S), r=Math.floor((y-oy)/S);
+   if(r<0||r>=N||c<0||c>=N||ba.v[r][c]) return;
+   ba.tiros++;
+   if(ba.g[r][c]){ ba.v[r][c]=1; ba.tocados++; } else ba.v[r][c]=2; });
+
+// 3) TORRE DEFENSA simple
+let td;
+add("🏰","Defensa","Toca para poner torres · no dejes pasar enemigos",
+ ()=>{ td={torres:[],enem:[],t:0,vidas:5,oro:3,pts:0}; },
+ ()=>{ fondo("#102418"); const g=td; g.t++;
+   // camino
+   ctx.fillStyle="#3a2a1a"; ctx.fillRect(0,H/2-34,W,68);
+   if(g.t%70===0) g.enem.push({x:-30,hp:3,v:1+g.pts*0.01});
+   if(g.t%180===0) g.oro++;
+   g.torres.forEach(t2=>{ texto("🏹",t2.x,t2.y,34);
+     ctx.strokeStyle="rgba(95,224,160,.2)"; ctx.beginPath(); ctx.arc(t2.x,t2.y,90,0,7); ctx.stroke();
+     if(g.t%26===0){ const e=g.enem.find(e2=>Math.hypot(e2.x-t2.x,H/2-t2.y)<90);
+       if(e){ e.hp--; ctx.strokeStyle="#ffd12e"; ctx.lineWidth=2;
+         ctx.beginPath(); ctx.moveTo(t2.x,t2.y); ctx.lineTo(e.x,H/2); ctx.stroke(); } } });
+   for(let i=g.enem.length-1;i>=0;i--){ const e=g.enem[i]; e.x+=e.v;
+     texto("👾",e.x,H/2,32);
+     caja(e.x-16,H/2-30,32,5,"#333",null,2); caja(e.x-16,H/2-30,32*(e.hp/3),5,"#39ff14",null,2);
+     if(e.hp<=0){ g.enem.splice(i,1); g.pts+=10; g.oro++; continue; }
+     if(e.x>W){ g.enem.splice(i,1); g.vidas--;
+       if(g.vidas<=0){ anota("Defensa",g.pts); ganar("💀 Te invadieron",g.pts+" puntos"); return; } } }
+   info("❤️"+g.vidas+"  💰"+g.oro+"  ⭐"+g.pts);
+ },
+ (x,y)=>{ if(td.oro<3) return; if(Math.abs(y-H/2)<40) return;
+   td.torres.push({x,y}); td.oro-=3; });
+
+// 4) SNAKE CON OBSTÁCULOS
+let so;
+add("🐲","Serpiente+","Flechas · esquiva las piedras",
+ ()=>{ const G=28, cols=(700/G)|0, rows=(560/G)|0;
+   const ob=[]; for(let i=0;i<14;i++) ob.push({x:(Math.random()*cols)|0,y:(Math.random()*rows)|0});
+   so={G,cols,rows,c:[{x:3,y:3}],d:{x:1,y:0},com:{x:12,y:8},ob,t:0,pts:0}; },
+ ()=>{ const s=so; fondo("#0a1a14");
+   if(++s.t%7===0){ const h={x:s.c[0].x+s.d.x,y:s.c[0].y+s.d.y};
+     if(h.x<0||h.y<0||h.x>=s.cols||h.y>=s.rows||s.c.some(p=>p.x===h.x&&p.y===h.y)
+       ||s.ob.some(p=>p.x===h.x&&p.y===h.y)){
+       anota("Serpiente+",s.pts); ganar("💥 ¡Chocaste!",s.pts+" puntos"); return; }
+     s.c.unshift(h);
+     if(h.x===s.com.x&&h.y===s.com.y){ s.pts+=10;
+       do{ s.com={x:(Math.random()*s.cols)|0,y:(Math.random()*s.rows)|0}; }
+       while(s.ob.some(p=>p.x===s.com.x&&p.y===s.com.y)); }
+     else s.c.pop(); }
+   s.ob.forEach(p=>texto("🪨",p.x*s.G+s.G/2,p.y*s.G+s.G/2,s.G*0.8));
+   texto("🍎",s.com.x*s.G+s.G/2,s.com.y*s.G+s.G/2,s.G*0.8);
+   s.c.forEach((p,i)=>{ ctx.fillStyle=i?"#2a8f6a":"#5fe0a0"; ctx.fillRect(p.x*s.G+1,p.y*s.G+1,s.G-2,s.G-2); });
+   info("⭐"+s.pts);
+ }, null,
+ (k)=>{ const m={arrowup:[0,-1],w:[0,-1],arrowdown:[0,1],s:[0,1],arrowleft:[-1,0],a:[-1,0],arrowright:[1,0],d:[1,0]}[k];
+   if(!m||(m[0]===-so.d.x&&m[1]===-so.d.y)) return; so.d={x:m[0],y:m[1]}; });
+
+// 5) RECOGE LLAVES
+let rl;
+add("🔑","Llaves","Junta las 5 llaves y llega a la puerta 🚪",
+ ()=>{ const N=13; const g=Array.from({length:N},()=>Array(N).fill(1));
+   const pila=[[1,1]]; g[1][1]=0;
+   while(pila.length){ const [r,c]=pila[pila.length-1];
+     const v=[[r-2,c],[r+2,c],[r,c-2],[r,c+2]].filter(([a,b])=>a>0&&b>0&&a<N-1&&b<N-1&&g[a][b]===1);
+     if(!v.length){ pila.pop(); continue; }
+     const [nr,nc]=v[(Math.random()*v.length)|0]; g[nr][nc]=0; g[(r+nr)/2][(c+nc)/2]=0; pila.push([nr,nc]); }
+   const libres=[]; for(let r=1;r<N-1;r++) for(let c=1;c<N-1;c++) if(!g[r][c]) libres.push([r,c]);
+   const ll=[]; for(let i=0;i<5;i++){ const k=libres.splice((Math.random()*libres.length)|0,1)[0]; ll.push({r:k[0],c:k[1]}); }
+   rl={g,N,p:{r:1,c:1},ll,tom:0}; },
+ ()=>{ fondo("#0a1020"); const N=rl.N, S=Math.min((W-40)/N,(H-40)/N), ox=(W-N*S)/2, oy=(H-N*S)/2;
+   for(let r=0;r<N;r++) for(let c=0;c<N;c++){ ctx.fillStyle=rl.g[r][c]?"#2a3a5a":"#0d1428";
+     ctx.fillRect(ox+c*S,oy+r*S,S,S); }
+   rl.ll.forEach(k=>texto("🔑",ox+k.c*S+S/2,oy+k.r*S+S/2,S*0.75));
+   texto(rl.tom>=5?"🚪":"🔒",ox+(N-2)*S+S/2,oy+(N-2)*S+S/2,S*0.8);
+   texto("🧑",ox+rl.p.c*S+S/2,oy+rl.p.r*S+S/2,S*0.8);
+   info("🔑 "+rl.tom+"/5");
+   if(rl.tom>=5 && rl.p.r===N-2 && rl.p.c===N-2){ anota("Llaves",5); ganar("🏆 ¡ESCAPASTE!",""); }
+ }, null,
+ (k)=>{ const m={arrowup:[-1,0],w:[-1,0],arrowdown:[1,0],s:[1,0],arrowleft:[0,-1],a:[0,-1],arrowright:[0,1],d:[0,1]}[k];
+   if(!m) return; const nr=rl.p.r+m[0], nc=rl.p.c+m[1];
+   if(rl.g[nr]&&rl.g[nr][nc]===0){ rl.p.r=nr; rl.p.c=nc;
+     const i=rl.ll.findIndex(k2=>k2.r===nr&&k2.c===nc);
+     if(i>=0){ rl.ll.splice(i,1); rl.tom++; } } });
+
+// 6) EMPUJA CAJAS (sokoban)
+let ec;
+add("📦","Cajas","Empuja las cajas hasta los puntos 🎯",
+ ()=>{ // nivel fijo sencillo
+   const mapa=[
+    "#########",
+    "#       #",
+    "# .$ $. #",
+    "#   @   #",
+    "# .$ $. #",
+    "#       #",
+    "#########"];
+   const g=mapa.map(f=>f.split(""));
+   let p={r:0,c:0};
+   g.forEach((f,r)=>f.forEach((v,c)=>{ if(v==="@"){ p={r,c}; g[r][c]=" "; } }));
+   ec={g,p,movs:0}; },
+ ()=>{ const g=ec.g, R=g.length, C=g[0].length;
+   fondo("#1a1408");
+   const S=Math.min((W-40)/C,(H-60)/R), ox=(W-C*S)/2, oy=(H-R*S)/2;
+   for(let r=0;r<R;r++) for(let c=0;c<C;c++){ const v=g[r][c];
+     ctx.fillStyle = v==="#" ? "#5a4a28" : "#2a2416";
+     ctx.fillRect(ox+c*S,oy+r*S,S,S);
+     if(v==="."||v==="*") texto("🎯",ox+c*S+S/2,oy+r*S+S/2,S*0.6);
+     if(v==="$"||v==="*") texto("📦",ox+c*S+S/2,oy+r*S+S/2,S*0.75); }
+   texto("🧑",ox+ec.p.c*S+S/2,oy+ec.p.r*S+S/2,S*0.75);
+   const faltan=g.flat().filter(v=>v==="$").length;
+   info("faltan: "+faltan+"  movs: "+ec.movs);
+   if(faltan===0){ anota("Cajas",ec.movs); ganar("🏆 ¡TODAS EN SU SITIO!","en "+ec.movs+" movimientos"); }
+ }, null,
+ (k)=>{ const m={arrowup:[-1,0],w:[-1,0],arrowdown:[1,0],s:[1,0],arrowleft:[0,-1],a:[0,-1],arrowright:[0,1],d:[0,1]}[k];
+   if(!m) return; const g=ec.g, nr=ec.p.r+m[0], nc=ec.p.c+m[1];
+   if(!g[nr]||g[nr][nc]==="#") return;
+   if(g[nr][nc]==="$"||g[nr][nc]==="*"){
+     const ar=nr+m[0], ac=nc+m[1];
+     if(!g[ar]||g[ar][ac]==="#"||g[ar][ac]==="$"||g[ar][ac]==="*") return;
+     g[ar][ac] = g[ar][ac]==="." ? "*" : "$";
+     g[nr][nc] = g[nr][nc]==="*" ? "." : " "; }
+   ec.p={r:nr,c:nc}; ec.movs++; });
+
+// 7) PINTA EL MAPA
+let pm;
+add("🎨","Conquista","Pinta más casillas que la máquina",
+ ()=>{ const N=12; pm={N,g:Array.from({length:N},()=>Array(N).fill(0)),
+   p:{r:0,c:0},m:{r:N-1,c:N-1},t:0,fin:30*60}; pm.g[0][0]=1; pm.g[N-1][N-1]=2; },
+ ()=>{ const N=pm.N; fondo("#0a1424"); pm.t++;
+   const S=Math.min((W-40)/N,(H-70)/N), ox=(W-N*S)/2, oy=(H-N*S)/2+10;
+   if(pm.t%8===0){
+     if(teclas["arrowup"]||teclas["w"]) pm.p.r--;
+     if(teclas["arrowdown"]||teclas["s"]) pm.p.r++;
+     if(teclas["arrowleft"]||teclas["a"]) pm.p.c--;
+     if(teclas["arrowright"]||teclas["d"]) pm.p.c++;
+     pm.p.r=Math.max(0,Math.min(N-1,pm.p.r)); pm.p.c=Math.max(0,Math.min(N-1,pm.p.c));
+     pm.g[pm.p.r][pm.p.c]=1;
+     // máquina
+     const d=[[0,1],[1,0],[0,-1],[-1,0]][(Math.random()*4)|0];
+     pm.m.r=Math.max(0,Math.min(N-1,pm.m.r+d[0])); pm.m.c=Math.max(0,Math.min(N-1,pm.m.c+d[1]));
+     pm.g[pm.m.r][pm.m.c]=2; }
+   let n1=0,n2=0;
+   for(let r=0;r<N;r++) for(let c=0;c<N;c++){ const v=pm.g[r][c];
+     ctx.fillStyle = v===1?"#5fe0a0" : v===2?"#ff5b6e" : "#152238";
+     ctx.fillRect(ox+c*S+1,oy+r*S+1,S-2,S-2); if(v===1)n1++; if(v===2)n2++; }
+   ctx.strokeStyle="#fff"; ctx.lineWidth=3; ctx.strokeRect(ox+pm.p.c*S+2,oy+pm.p.r*S+2,S-4,S-4);
+   info("🟢"+n1+"  🔴"+n2+"  ⏱"+Math.ceil((pm.fin-pm.t)/60)+"s");
+   if(pm.t>=pm.fin){ anota("Conquista",n1);
+     ganar(n1>n2?"🏆 ¡GANASTE!":n2>n1?"😢 Ganó la máquina":"🤝 Empate", n1+" vs "+n2); }
+ });
+
+// 8) RANA CRUZANDO
+let rc;
+add("🐸","Cruza","Llega arriba esquivando los autos",
+ ()=>{ rc={r:9,c:6,carr:[],t:0,pts:0};
+   for(let i=1;i<9;i++) rc.carr.push({fila:i,x:Math.random()*700,v:(i%2?1:-1)*(1.4+Math.random()*2.4)}); },
+ ()=>{ fondo("#141a1a"); const g=rc; g.t++;
+   const FS=H/10, CS=W/13;
+   for(let i=1;i<9;i++){ ctx.fillStyle="#2a2a2a"; ctx.fillRect(0,i*FS,W,FS); }
+   ctx.fillStyle="#1a4a2a"; ctx.fillRect(0,0,W,FS); ctx.fillRect(0,9*FS,W,FS);
+   texto("🏁",W/2,FS/2,30);
+   g.carr.forEach(c=>{ c.x+=c.v; if(c.x>W+40) c.x=-40; if(c.x<-40) c.x=W+40;
+     ctx.save(); ctx.translate(c.x,c.fila*FS+FS/2); if(c.v<0) ctx.scale(-1,1);
+     texto("🚗",0,0,FS*0.75); ctx.restore();
+     if(g.r===c.fila && Math.abs(c.x-(g.c*CS+CS/2))<32){
+       anota("Cruza",g.pts); ganar("💥 ¡Te atropellaron!",g.pts+" cruces"); } });
+   texto("🐸",g.c*CS+CS/2,g.r*FS+FS/2,FS*0.7);
+   info("🏁 "+g.pts);
+   if(g.r===0){ g.pts++; g.r=9; if(g.pts>=5){ anota("Cruza",g.pts); ganar("🏆 ¡5 CRUCES!",""); } }
+ }, null,
+ (k)=>{ const m={arrowup:[-1,0],w:[-1,0],arrowdown:[1,0],s:[1,0],arrowleft:[0,-1],a:[0,-1],arrowright:[0,1],d:[0,1]}[k];
+   if(!m) return; rc.r=Math.max(0,Math.min(9,rc.r+m[0])); rc.c=Math.max(0,Math.min(12,rc.c+m[1])); });
+
+// 9) ESCALERA
+let es;
+add("🪜","Escalera","Sube saltando de plataforma en plataforma",
+ ()=>{ es={x:W/2,y:H-100,vy:0,pl:[],alt:0,t:0};
+   for(let i=0;i<9;i++) es.pl.push({x:40+Math.random()*(W-160),y:H-60-i*70,w:110}); },
+ ()=>{ fondo("#0a1428"); const g=es; g.t++;
+   if(teclas["arrowleft"]||teclas["a"]) g.x-=6;
+   if(teclas["arrowright"]||teclas["d"]) g.x+=6;
+   g.x+=(raton.x-g.x)*0.12;
+   g.x=Math.max(16,Math.min(W-16,g.x));
+   g.vy+=0.48; g.y+=g.vy;
+   g.pl.forEach(p=>{ if(g.vy>0 && g.y>p.y-10 && g.y<p.y+16 && Math.abs(g.x-p.x-p.w/2)<p.w/2+8) g.vy=-13.5; });
+   // subir la cámara
+   if(g.y<H*0.4){ const d=H*0.4-g.y; g.y+=d; g.pl.forEach(p=>p.y+=d); g.alt+=d; }
+   g.pl.forEach(p=>{ if(p.y>H+20){ p.y=-20; p.x=40+Math.random()*(W-160); } });
+   g.pl.forEach(p=>caja(p.x,p.y,p.w,14,"#5fe0a0",null,7));
+   texto("🧗",g.x,g.y-16,34);
+   info("altura: "+Math.floor(g.alt/10)+"m");
+   if(g.y>H+40){ anota("Escalera",Math.floor(g.alt/10)); ganar("💥 ¡Te caíste!",Math.floor(g.alt/10)+" metros"); }
+ });
+
+// 10) ADIVINA LA PALABRA (tipo wordle simple)
+let ap;
+add("🔤","Palabra","Adivina la palabra de 5 letras",
+ ()=>{ const ps=["GATOS","CASAS","LIBRO","FUEGO","VERDE","NIEVE","PLAYA","NOCHE","CIELO","RATON"];
+   ap={p:ps[(Math.random()*ps.length)|0],filas:[],act:""}; },
+ ()=>{ fondo("#101820");
+   texto("Escribe una palabra de 5 letras",W/2,40,22,"#5fe0a0");
+   const S=68, ox=(W-5*S)/2, oy=80;
+   for(let f=0;f<6;f++){ for(let c=0;c<5;c++){
+     const fila=ap.filas[f];
+     let col="#1a2a3a", letra="";
+     if(fila){ letra=fila[c];
+       col = letra===ap.p[c] ? "#2a8f4a" : ap.p.includes(letra) ? "#b08a1a" : "#2a3a4a"; }
+     else if(f===ap.filas.length) letra=ap.act[c]||"";
+     caja(ox+c*S+3,oy+f*S+3,S-6,S-6,col,"#3a5a7a",8);
+     if(letra) texto(letra,ox+c*S+S/2,oy+f*S+S/2,32,"#fff"); } }
+   info("intento "+(ap.filas.length+1)+"/6");
+ }, null,
+ (k)=>{ if(/^[a-zñ]$/.test(k) && ap.act.length<5){ ap.act+=k.toUpperCase(); return; }
+   if(k==="backspace"){ ap.act=ap.act.slice(0,-1); return; }
+   if(k!=="enter"||ap.act.length!==5) return;
+   ap.filas.push(ap.act);
+   if(ap.act===ap.p){ anota("Palabra",7-ap.filas.length); ganar("🏆 ¡ADIVINASTE!","en "+ap.filas.length+" intentos"); }
+   else if(ap.filas.length>=6) ganar("😢 Se acabó","era "+ap.p);
+   ap.act=""; });
+
+// 11) MINERO
+let mi;
+add("⛏️","Minero","Cava y busca gemas · cuidado con la lava",
+ ()=>{ const N=10; const g=[];
+   for(let r=0;r<N;r++){ g.push([]); for(let c=0;c<N;c++){
+     const x=Math.random();
+     g[r].push(r===0?"aire" : x<0.1?"gema" : x<0.16?"lava" : "tierra"); } }
+   mi={g,N,p:{r:0,c:(N/2)|0},gemas:0,vida:3}; },
+ ()=>{ fondo("#140c04"); const N=mi.N, S=Math.min((W-40)/N,(H-60)/N), ox=(W-N*S)/2, oy=(H-N*S)/2;
+   for(let r=0;r<N;r++) for(let c=0;c<N;c++){ const v=mi.g[r][c];
+     ctx.fillStyle = v==="aire"?"#1a2a3a" : v==="tierra"?"#6b4423" : v==="gema"?"#6b4423" : "#6b4423";
+     ctx.fillRect(ox+c*S,oy+r*S,S,S);
+     ctx.strokeStyle="rgba(0,0,0,.25)"; ctx.strokeRect(ox+c*S,oy+r*S,S,S);
+     if(v==="gema") texto("💎",ox+c*S+S/2,oy+r*S+S/2,S*0.6);
+     if(v==="lava") texto("🔥",ox+c*S+S/2,oy+r*S+S/2,S*0.6); }
+   texto("⛏️",ox+mi.p.c*S+S/2,oy+mi.p.r*S+S/2,S*0.75);
+   info("💎"+mi.gemas+"  ❤️"+mi.vida);
+   if(mi.gemas>=8){ anota("Minero",mi.gemas); ganar("🏆 ¡RICO!",mi.gemas+" gemas"); }
+   if(mi.vida<=0) ganar("🔥 ¡Te quemaste!",mi.gemas+" gemas");
+ }, null,
+ (k)=>{ const m={arrowup:[-1,0],w:[-1,0],arrowdown:[1,0],s:[1,0],arrowleft:[0,-1],a:[0,-1],arrowright:[0,1],d:[0,1]}[k];
+   if(!m) return; const nr=mi.p.r+m[0], nc=mi.p.c+m[1];
+   if(nr<0||nc<0||nr>=mi.N||nc>=mi.N) return;
+   const v=mi.g[nr][nc];
+   if(v==="gema"){ mi.gemas++; } if(v==="lava"){ mi.vida--; }
+   mi.g[nr][nc]="aire"; mi.p={r:nr,c:nc}; });
+
+// 12) PUENTE
+let pu;
+add("🌉","Puente","Mantén pulsado para estirar el palo · suéltalo a tiempo",
+ ()=>{ pu={x:120,ancho:70,sig:null,palo:0,creciendo:false,estado:"listo",pts:0,anim:0}; nuevoHueco(); },
+ ()=>{ const p=pu; fondo("#1a1830");
+   ctx.fillStyle="#3a3a5a"; ctx.fillRect(0,H-160,p.x,160);
+   ctx.fillStyle="#3a3a5a"; ctx.fillRect(p.sig.x,H-160,p.sig.ancho,160);
+   if(p.creciendo){ p.palo+=4.5; }
+   ctx.save(); ctx.translate(p.x,H-160);
+   if(p.estado==="cae"){ p.anim=Math.min(90,p.anim+7); ctx.rotate(p.anim*Math.PI/180); }
+   ctx.fillStyle="#c9971b"; ctx.fillRect(-4,-p.palo,8,p.palo); ctx.restore();
+   if(p.estado==="cae" && p.anim>=90){
+     const fin=p.x+p.palo;
+     if(fin>=p.sig.x && fin<=p.sig.x+p.sig.ancho){ p.pts++;
+       p.x=p.sig.x+p.sig.ancho; p.palo=0; p.anim=0; p.estado="listo"; nuevoHueco();
+       if(p.x>W-200){ const d=p.x-180; p.x-=d; p.sig.x-=d; } }
+     else { anota("Puente",p.pts); ganar("💥 ¡Te caíste!",p.pts+" puentes"); return; } }
+   texto("🚶",p.x-20,H-180,30);
+   info("🌉 "+p.pts);
+ },
+ ()=>{ if(pu.estado==="listo"){ pu.creciendo=true; } },
+ null);
+function nuevoHueco(){ const hueco=70+Math.random()*120;
+  pu.sig={x:pu.x+hueco, ancho:50+Math.random()*60}; }
+cv.addEventListener("pointerup",()=>{ if(juego&&juego.nom==="Puente"&&pu.creciendo){ pu.creciendo=false; pu.estado="cae"; } });
+
+// 13) DEFIENDE LA BASE
+let db;
+add("🛡️","Base","Toca los enemigos antes de que lleguen",
+ ()=>{ db={e:[],t:0,vida:5,pts:0}; },
+ ()=>{ fondo("#0c1420"); const g=db; g.t++;
+   ctx.fillStyle="#2a4a7a"; ctx.beginPath(); ctx.arc(W/2,H/2,42,0,7); ctx.fill();
+   texto("🏛️",W/2,H/2,42);
+   if(g.t%40===0){ const a=Math.random()*7, R=Math.max(W,H)*0.6;
+     g.e.push({x:W/2+Math.cos(a)*R, y:H/2+Math.sin(a)*R, v:0.7+g.pts*0.008}); }
+   for(let i=g.e.length-1;i>=0;i--){ const e=g.e[i];
+     const dx=W/2-e.x, dy=H/2-e.y, d=Math.hypot(dx,dy);
+     e.x+=dx/d*e.v; e.y+=dy/d*e.v;
+     texto("👾",e.x,e.y,30);
+     if(d<48){ g.e.splice(i,1); g.vida--;
+       if(g.vida<=0){ anota("Base",g.pts); ganar("💀 Cayó la base",g.pts+" puntos"); return; } } }
+   info("❤️"+g.vida+"  ⭐"+g.pts);
+ },
+ (x,y)=>{ for(let i=db.e.length-1;i>=0;i--){ const e=db.e[i];
+   if(Math.hypot(e.x-x,e.y-y)<28){ db.e.splice(i,1); db.pts+=10; return; } } });
+
+// 14) ORDENA LOS COLORES
+let oc;
+add("🧪","Tubos","Toca dos tubos para pasar el líquido de uno a otro",
+ ()=>{ const cols=["#ff5b6e","#ffd12e","#39ff14","#2fd0ff"];
+   let bolas=[]; cols.forEach(c=>{ for(let i=0;i<4;i++) bolas.push(c); });
+   bolas.sort(()=>Math.random()-0.5);
+   const t=[[],[],[],[],[],[]];
+   for(let i=0;i<16;i++) t[(i/4)|0].push(bolas[i]);
+   oc={t,sel:null,cols,movs:0}; },
+ ()=>{ fondo("#101828"); const g=oc;
+   const n=6, w=66, ox=(W-n*w-((n-1)*18))/2;
+   texto("Ordena cada color en su tubo",W/2,44,22,"#5fe0a0");
+   for(let i=0;i<n;i++){ const x=ox+i*(w+18);
+     caja(x,120,w,270,"rgba(255,255,255,.07)", g.sel===i?"#ffd12e":"#3a5a7a",12);
+     g.t[i].forEach((c,j)=>{ ctx.fillStyle=c;
+       ctx.fillRect(x+6,120+270-((j+1)*64)+4,w-12,58); }); }
+   info("movimientos: "+g.movs);
+   const ok=g.t.every(t2=>!t2.length || (t2.length===4 && t2.every(c=>c===t2[0])));
+   if(ok){ anota("Tubos",g.movs); ganar("🏆 ¡ORDENADOS!","en "+g.movs+" movimientos"); }
+ },
+ (x,y)=>{ const n=6, w=66, ox=(W-n*w-((n-1)*18))/2;
+   for(let i=0;i<n;i++){ const bx=ox+i*(w+18);
+     if(x>bx&&x<bx+w&&y>120&&y<390){
+       if(oc.sel===null){ if(oc.t[i].length) oc.sel=i; }
+       else if(oc.sel===i){ oc.sel=null; }
+       else { const de=oc.t[oc.sel], a=oc.t[i];
+         if(de.length && a.length<4 && (!a.length || a[a.length-1]===de[de.length-1])){
+           a.push(de.pop()); oc.movs++; }
+         oc.sel=null; }
+       return; } } });
+
+// 15) ESCAPA DEL FANTASMA
+let ef;
+add("👻","Escapa","Huye del fantasma y junta monedas",
+ ()=>{ ef={p:{x:W/2,y:H-80},f:{x:W/2,y:60},m:[],t:0,pts:0};
+   for(let i=0;i<8;i++) ef.m.push({x:50+Math.random()*(W-100),y:50+Math.random()*(H-100)}); },
+ ()=>{ fondo("#0c0818"); const g=ef; g.t++;
+   g.p.x+=(raton.x-g.p.x)*0.2; g.p.y+=(raton.y-g.p.y)*0.2;
+   if(teclas["arrowleft"]||teclas["a"]) g.p.x-=5; if(teclas["arrowright"]||teclas["d"]) g.p.x+=5;
+   if(teclas["arrowup"]||teclas["w"]) g.p.y-=5; if(teclas["arrowdown"]||teclas["s"]) g.p.y+=5;
+   g.p.x=Math.max(20,Math.min(W-20,g.p.x)); g.p.y=Math.max(20,Math.min(H-20,g.p.y));
+   const dx=g.p.x-g.f.x, dy=g.p.y-g.f.y, d=Math.hypot(dx,dy)||1;
+   const vel=1.3+g.pts*0.07;
+   g.f.x+=dx/d*vel; g.f.y+=dy/d*vel;
+   for(let i=g.m.length-1;i>=0;i--){ const m=g.m[i]; texto("🪙",m.x,m.y,26);
+     if(Math.hypot(m.x-g.p.x,m.y-g.p.y)<28){ g.m.splice(i,1); g.pts++;
+       g.m.push({x:30+Math.random()*(W-60),y:30+Math.random()*(H-60)}); } }
+   texto("🏃",g.p.x,g.p.y,34); texto("👻",g.f.x,g.f.y,36);
+   info("🪙 "+g.pts);
+   if(d<30){ anota("Escapa",g.pts); ganar("👻 ¡Te atrapó!",g.pts+" monedas"); }
+ });
+
+// 16) CONSTRUYE LA TORRE
+let ct;
+add("🏗️","Torre","Toca para soltar el bloque justo encima",
+ ()=>{ ct={bloques:[{x:W/2-70,w:140}],x:0,dir:1,ancho:140,pts:0,cayendo:null}; },
+ ()=>{ const g=ct; fondo("#101828");
+   const HB=26, base=H-40;
+   g.x+=g.dir*3.4;
+   if(g.x>W-g.ancho||g.x<0) g.dir*=-1;
+   g.bloques.forEach((b,i)=>{ const y=base-(i+1)*HB;
+     caja(b.x,y,b.w,HB-3,["#ff5b6e","#ffd12e","#39ff14","#2fd0ff","#c58cff"][i%5],"#fff",4); });
+   const y=base-(g.bloques.length+1)*HB;
+   caja(g.x,y,g.ancho,HB-3,"#fff","#ffd12e",4);
+   info("🏗️ "+g.pts+" pisos");
+ },
+ ()=>{ const g=ct; const ult=g.bloques[g.bloques.length-1];
+   const izq=Math.max(g.x,ult.x), der=Math.min(g.x+g.ancho,ult.x+ult.w);
+   const nuevo=der-izq;
+   if(nuevo<=6){ anota("Torre",g.pts); ganar("💥 ¡Se cayó!",g.pts+" pisos"); return; }
+   g.bloques.push({x:izq,w:nuevo}); g.ancho=nuevo; g.pts++;
+   if(g.pts>=18){ anota("Torre",g.pts); ganar("🏆 ¡TORRE ALTÍSIMA!",g.pts+" pisos"); } });
+
+// 17) CAZA DEL NÚMERO
+let cz;
+add("🔍","Encuentra","Toca el número que te piden, rápido",
+ ()=>{ cz={n:[],pide:1,pts:0,t:45*60};
+   for(let i=1;i<=30;i++) cz.n.push({v:i,x:40+Math.random()*(W-80),y:90+Math.random()*(H-140)}); },
+ ()=>{ fondo("#0e1a28"); cz.t--;
+   texto("Busca el "+cz.pide,W/2,44,28,"#ffd12e");
+   cz.n.forEach(o=>{ if(o.v<cz.pide) return;
+     texto(o.v,o.x,o.y,24,o.v===cz.pide?"#fff":"#6a8aa8"); });
+   info("⭐"+cz.pts+"  ⏱"+Math.ceil(cz.t/60)+"s");
+   if(cz.t<=0){ anota("Encuentra",cz.pts); ganar("⏱ ¡Tiempo!",cz.pts+" encontrados"); }
+   if(cz.pide>30){ anota("Encuentra",30); ganar("🏆 ¡LOS 30!",""); }
+ },
+ (x,y)=>{ const o=cz.n.find(o2=>o2.v===cz.pide);
+   if(o && Math.hypot(o.x-x,o.y-y)<30){ cz.pts++; cz.pide++; } });
+
+// 18) RUTA MÁS CORTA
+let rm;
+add("📍","Ruta","Toca los puntos en el orden más corto",
+ ()=>{ const p=[]; for(let i=0;i<7;i++) p.push({x:70+Math.random()*(W-140),y:90+Math.random()*(H-180),ok:false});
+   rm={p,orden:[],dist:0}; },
+ ()=>{ fondo("#0a1824");
+   texto("Une todos los puntos",W/2,44,24,"#5fe0a0");
+   ctx.strokeStyle="#5fe0a0"; ctx.lineWidth=3; ctx.beginPath();
+   rm.orden.forEach((i,k)=>{ const o=rm.p[i]; k?ctx.lineTo(o.x,o.y):ctx.moveTo(o.x,o.y); });
+   ctx.stroke();
+   rm.p.forEach((o,i)=>{ ctx.fillStyle=o.ok?"#5fe0a0":"#ffd12e";
+     ctx.beginPath(); ctx.arc(o.x,o.y,18,0,7); ctx.fill();
+     texto(rm.orden.indexOf(i)>=0?(rm.orden.indexOf(i)+1):"",o.x,o.y,16,"#021018"); });
+   info("distancia: "+Math.round(rm.dist));
+   if(rm.orden.length===rm.p.length){ anota("Ruta",Math.max(1,2000-Math.round(rm.dist)));
+     ganar("🏆 ¡RUTA COMPLETA!",Math.round(rm.dist)+" de distancia"); }
+ },
+ (x,y)=>{ const i=rm.p.findIndex(o=>!o.ok && Math.hypot(o.x-x,o.y-y)<26);
+   if(i<0) return;
+   if(rm.orden.length){ const a=rm.p[rm.orden[rm.orden.length-1]];
+     rm.dist+=Math.hypot(a.x-rm.p[i].x,a.y-rm.p[i].y); }
+   rm.p[i].ok=true; rm.orden.push(i); });
+
+/* ---------- menú ---------- */
+$("grid").innerHTML = JUEGOS.map((j,i)=>
+  '<div class="gbtn" data-i="'+i+'"><span class="ico">'+j.ico+'</span><span class="nm">'+j.nom+'</span></div>').join("");
+document.querySelectorAll(".gbtn").forEach(b=> b.onclick=()=>abrir(JUEGOS[+b.dataset.i]));
+fit();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>
