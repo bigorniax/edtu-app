@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>EDTU · Burbujas — para José Antonio</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;user-select:none}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;touch-action:none}
+  body{background:linear-gradient(180deg,#8fd8ff,#c8f0ff 60%,#ffe9a8)}
+  canvas{display:block;width:100vw;height:100vh;position:absolute;inset:0}
+  /* menú de modos, grande y simple */
+  .modos{position:absolute;top:0;left:0;right:0;display:flex;gap:6px;padding:8px;justify-content:center;z-index:5;flex-wrap:wrap}
+  .modo{font-size:26px;background:rgba(255,255,255,.75);border:3px solid rgba(255,255,255,.95);border-radius:18px;
+    padding:8px 14px;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.12);transition:transform .12s}
+  .modo:active{transform:scale(.92)}
+  .modo.on{background:#fff;border-color:#ffb3da;box-shadow:0 0 0 3px rgba(255,140,198,.5)}
+  .titulo{position:absolute;bottom:10px;left:0;right:0;text-align:center;color:#fff;font-weight:900;
+    font-size:15px;text-shadow:0 2px 6px rgba(0,0,0,.3);z-index:5;pointer-events:none}
+</style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div class="modos" id="modos">
+    <span class="modo on" data-m="burbujas" title="Burbujas">🫧</span>
+    <span class="modo" data-m="animales" title="Animales">🐶</span>
+    <span class="modo" data-m="estrellas" title="Estrellas">⭐</span>
+    <span class="modo" data-m="globos" title="Globos">🎈</span>
+    <span class="modo" data-m="pastel" title="Cumpleaños">🎂</span>
+  </div>
+  <div class="titulo" id="titulo">🫧 ¡Toca las burbujas!</div>
+
+<script>
+const cv=document.getElementById("c"), ctx=cv.getContext("2d");
+let W,H;
+function fit(){ W=cv.width=innerWidth*devicePixelRatio; H=cv.height=innerHeight*devicePixelRatio;
+  ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0); W=innerWidth; H=innerHeight; }
+fit(); addEventListener("resize",fit);
+
+/* ---------- sonidos suaves (sin archivos) ---------- */
+let AC=null;
+function nota(f,dur,tipo){
+  try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)();
+    if(AC.state==="suspended") AC.resume();
+    const o=AC.createOscillator(), g=AC.createGain();
+    o.type=tipo||"sine"; o.frequency.value=f;
+    g.gain.setValueAtTime(0.18,AC.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,AC.currentTime+(dur||0.35));
+    o.connect(g); g.connect(AC.destination); o.start(); o.stop(AC.currentTime+(dur||0.35));
+  }catch(e){}
+}
+// la escala pentatónica: cualquier combinación suena bonita (nunca desafina)
+const ESCALA=[523.25,587.33,659.25,783.99,880.00,1046.5];
+function notaLinda(){ nota(ESCALA[Math.floor(Math.random()*ESCALA.length)], 0.4, "sine"); }
+function decir(txt){
+  try{ if(!window.speechSynthesis) return;
+    const u=new SpeechSynthesisUtterance(txt); u.lang="es-ES"; u.pitch=1.5; u.rate=0.9; u.volume=0.9;
+    speechSynthesis.cancel(); speechSynthesis.speak(u);
+  }catch(e){}
+}
+
+/* ---------- partículas (brillos al reventar) ---------- */
+const chispas=[];
+function chispear(x,y,color,n){
+  for(let i=0;i<(n||12);i++){
+    const a=Math.random()*Math.PI*2, v=1.5+Math.random()*4;
+    chispas.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,vida:1,color});
+  }
+}
+
+/* ---------- MODOS ---------- */
+let modo="burbujas";
+const cosas=[];   // lo que flota en pantalla
+
+const ANIMALES=[
+  {e:"🐶",n:"perro",s:"guau guau"},{e:"🐱",n:"gato",s:"miau"},{e:"🐮",n:"vaca",s:"muuu"},
+  {e:"🐷",n:"cerdito",s:"oink oink"},{e:"🐸",n:"rana",s:"croac"},{e:"🦆",n:"pato",s:"cuac cuac"},
+  {e:"🐘",n:"elefante",s:"el elefante"},{e:"🦁",n:"león",s:"roaaar"},{e:"🐵",n:"mono",s:"uh uh ah ah"},
+  {e:"🐔",n:"gallina",s:"co co co"},{e:"🐴",n:"caballo",s:"iiih"},{e:"🐝",n:"abeja",s:"bzzz"},
+];
+const COLORES=["#ff6b9d","#ffd166","#6bcB77","#4d96ff","#c58cff","#ff9f68","#4ecdc4","#ff5b6e"];
+
+function nace(){
+  const base={ x:30+Math.random()*(W-60), y:H+40, r:34+Math.random()*30,
+               v:0.5+Math.random()*1.0, bal:Math.random()*Math.PI*2, viva:true };
+  if(modo==="burbujas"){ return {...base, tipo:"burbuja", color:COLORES[(Math.random()*COLORES.length)|0]}; }
+  if(modo==="animales"){ const a=ANIMALES[(Math.random()*ANIMALES.length)|0]; return {...base, tipo:"emoji", emoji:a.e, animal:a, r:40+Math.random()*18}; }
+  if(modo==="estrellas"){ return {...base, tipo:"emoji", emoji:["⭐","🌟","✨","💫"][(Math.random()*4)|0], r:32+Math.random()*20}; }
+  if(modo==="globos"){ return {...base, tipo:"globo", color:COLORES[(Math.random()*COLORES.length)|0], r:38+Math.random()*22}; }
+  if(modo==="pastel"){ return {...base, tipo:"emoji", emoji:["🎂","🎈","🎁","🎉","🧁","🍭","⭐"][(Math.random()*7)|0], r:38+Math.random()*20}; }
+  return {...base, tipo:"burbuja", color:"#fff"};
+}
+
+/* ---------- dibujar ---------- */
+function dibujaBurbuja(o){
+  const g=ctx.createRadialGradient(o.x-o.r*0.3,o.y-o.r*0.3,o.r*0.1,o.x,o.y,o.r);
+  g.addColorStop(0,"rgba(255,255,255,.9)");
+  g.addColorStop(0.5,o.color+"66");
+  g.addColorStop(1,o.color+"33");
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(o.x,o.y,o.r,0,7); ctx.fill();
+  ctx.strokeStyle="rgba(255,255,255,.8)"; ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle="rgba(255,255,255,.85)";
+  ctx.beginPath(); ctx.arc(o.x-o.r*0.33,o.y-o.r*0.33,o.r*0.16,0,7); ctx.fill();
+}
+function dibujaGlobo(o){
+  ctx.strokeStyle="rgba(255,255,255,.6)"; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(o.x,o.y+o.r); ctx.quadraticCurveTo(o.x+8,o.y+o.r+26,o.x,o.y+o.r+44); ctx.stroke();
+  const g=ctx.createRadialGradient(o.x-o.r*0.3,o.y-o.r*0.35,o.r*0.1,o.x,o.y,o.r);
+  g.addColorStop(0,"#ffffff"); g.addColorStop(0.35,o.color); g.addColorStop(1,o.color);
+  ctx.fillStyle=g; ctx.beginPath(); ctx.ellipse(o.x,o.y,o.r*0.85,o.r,0,0,7); ctx.fill();
+  ctx.fillStyle=o.color; ctx.beginPath();
+  ctx.moveTo(o.x-5,o.y+o.r); ctx.lineTo(o.x+5,o.y+o.r); ctx.lineTo(o.x,o.y+o.r+9); ctx.fill();
+}
+
+let t=0, ultimoNacer=0;
+function bucle(){
+  requestAnimationFrame(bucle); t++;
+  // fondo según el modo
+  if(modo==="pastel") ctx.fillStyle="#ffe6f2";
+  else if(modo==="estrellas") ctx.fillStyle="#1a1a4e";
+  else ctx.fillStyle="transparent";
+  if(modo==="pastel"||modo==="estrellas"){ ctx.fillRect(0,0,W,H); }
+  else ctx.clearRect(0,0,W,H);
+
+  // estrellitas de fondo en modo noche
+  if(modo==="estrellas"){ ctx.fillStyle="rgba(255,255,255,.55)";
+    for(let i=0;i<40;i++){ const x=(i*97)%W, y=(i*53)%H, s=((t/20+i)%40)<20?1.6:1;
+      ctx.beginPath(); ctx.arc(x,y,s,0,7); ctx.fill(); } }
+
+  // nacen cosas nuevas (por tiempo real: así nunca se queda vacío aunque el
+  // navegador frene los frames)
+  const ahora=Date.now();
+  if(ahora-ultimoNacer>600 && cosas.length<16){ ultimoNacer=ahora; cosas.push(nace()); }
+
+  // mover y dibujar
+  for(let i=cosas.length-1;i>=0;i--){
+    const o=cosas[i];
+    o.y-=o.v; o.bal+=0.03; o.x+=Math.sin(o.bal)*0.7;
+    if(o.y<-80){ cosas.splice(i,1); continue; }
+    if(o.tipo==="burbuja") dibujaBurbuja(o);
+    else if(o.tipo==="globo") dibujaGlobo(o);
+    else { ctx.font=(o.r*1.8)+"px serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+           ctx.fillText(o.emoji,o.x,o.y); }
+  }
+
+  // chispas
+  for(let i=chispas.length-1;i>=0;i--){
+    const p=chispas[i];
+    p.x+=p.vx; p.y+=p.vy; p.vy+=0.12; p.vida-=0.022;
+    if(p.vida<=0){ chispas.splice(i,1); continue; }
+    ctx.globalAlpha=Math.max(0,p.vida);
+    ctx.fillStyle=p.color; ctx.beginPath(); ctx.arc(p.x,p.y,3.5,0,7); ctx.fill();
+    ctx.globalAlpha=1;
+  }
+}
+// arrancar con algunas ya flotando (que no se vea vacío al abrir)
+for(let i=0;i<7;i++){ const o=nace(); o.y=H*0.25+Math.random()*H*0.7; cosas.push(o); }
+bucle();
+
+/* ---------- tocar ---------- */
+function tocar(x,y){
+  let toco=false;
+  for(let i=cosas.length-1;i>=0;i--){
+    const o=cosas[i];
+    if(Math.hypot(o.x-x,o.y-y) < o.r+16){
+      cosas.splice(i,1); toco=true;
+      chispear(o.x,o.y, o.color || "#ffd166", 16);
+      if(o.animal){ decir(o.animal.s); }
+      else notaLinda();
+      if(navigator.vibrate){ try{ navigator.vibrate(30); }catch(e){} }
+      break;
+    }
+  }
+  // si no tocó nada, igual pasa algo bonito (nunca aburre a un bebé)
+  if(!toco){ chispear(x,y,COLORES[(Math.random()*COLORES.length)|0],8); nota(ESCALA[0],0.18,"triangle"); }
+}
+cv.addEventListener("pointerdown",e=>{ e.preventDefault(); tocar(e.clientX,e.clientY); });
+cv.addEventListener("pointermove",e=>{ if(e.pressure>0||e.buttons) tocar(e.clientX,e.clientY); });
+
+/* ---------- cambiar de modo ---------- */
+const TITULOS={ burbujas:"🫧 ¡Toca las burbujas!", animales:"🐶 ¡Toca los animales y escúchalos!",
+  estrellas:"⭐ ¡Atrapa las estrellas!", globos:"🎈 ¡Revienta los globos!",
+  pastel:"🎂 ¡Feliz cumpleaños, José Antonio!" };
+document.querySelectorAll(".modo").forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll(".modo").forEach(x=>x.classList.remove("on"));
+    b.classList.add("on");
+    modo=b.dataset.m; cosas.length=0;
+    document.getElementById("titulo").textContent=TITULOS[modo];
+    document.body.style.background = modo==="estrellas" ? "#1a1a4e"
+      : modo==="pastel" ? "linear-gradient(180deg,#ffd6ec,#ffe9a8)"
+      : "linear-gradient(180deg,#8fd8ff,#c8f0ff 60%,#ffe9a8)";
+    if(modo==="pastel") setTimeout(()=>decir("¡Feliz cumpleaños José Antonio!"),300);
+    notaLinda();
+  };
+});
+
+// para poder probarlo desde fuera
+window.cosas=cosas; window.chispas=chispas; window.tocar=tocar;
+Object.defineProperty(window,"modoActual",{get:()=>modo});
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>

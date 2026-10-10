@@ -19,7 +19,8 @@
 // v63: en empate de récord, tú vas primero.
 // v64: puesto general en EDTU (promedio de todos los juegos).
 // v65: los juegos ya ven tu cuenta (Cuenta no llegaba al iframe).
-const CACHE = "edtu-v65";
+// v66: 🫧 Burbujas, el regalo para José Antonio (1 añito).
+const CACHE = "edtu-v66";
 const SHELL = ["./", "./index.html", "./starwars.html", "./wally-kb.js", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 // Estas SIEMPRE se piden a la red primero: son las que cambian con cada mejora.
 const FRESCOS = [".html", "/"];
