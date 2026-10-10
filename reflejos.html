@@ -63,17 +63,15 @@ let hist=[];
 try{
   hist=JSON.parse(localStorage.getItem(K_HIST)||"[]");
   // 🧹 limpieza: fuera los tiempos imposibles que se colaron antes del arreglo.
-  // Menos de 100 ms = tocaste en el cambio (nadie reacciona tan rápido).
   // Más de 1000 ms = te despistaste, no fue un intento de verdad.
   const antes = hist.length;
-  hist = hist.filter(v=> v>=100 && v<=1000);
+  hist = hist.filter(v=> v>0 && v<=1000);
   if(hist.length !== antes) localStorage.setItem(K_HIST, JSON.stringify(hist));
 }catch(e){ hist=[]; }
 let best=null;
 try{
   const b=parseInt(localStorage.getItem(K_BEST)||"0",10);
-  // un récord menor a 100 ms es imposible: se coló antes del arreglo
-  if(b>=100 && b<=1000) best=b;
+  if(b>0 && b<=1000) best=b;
   else if(b>0){ best = hist.length ? Math.min(...hist) : null;
                 if(best) localStorage.setItem(K_BEST,String(best)); else localStorage.removeItem(K_BEST); }
 }catch(e){}
@@ -143,20 +141,7 @@ function tocar(){
   if(estado==="ya"){
     clearInterval(raf);
     const ms = Math.round(performance.now()-t0);
-    /* 🚫 TIEMPOS IMPOSIBLES.
-       Ningún ser humano reacciona en menos de ~100 ms: la señal tiene que
-       llegar del ojo al cerebro y volver al dedo. Un tiempo menor significa
-       que tocaste justo en el cambio o que mantenías el dedo apretado, no
-       que reaccionaste. Si lo dejáramos pasar, arruinaría el ranking de
-       todos (alguien con 6 ms sería siempre primero). */
-    if(ms < 100){
-      estado="falso"; setCuerpo("listo");
-      $("big").textContent="🤨 ¡Demasiado rápido!";
-      $("crono").style.display="none";
-      $("sub").textContent="Nadie reacciona en menos de 100 ms. Suelta el dedo y espera el verde.";
-      $("rank").textContent="";
-      return;
-    }
+    // Cuenta cualquier tiempo, por rápido que sea (David lo pidió así).
     estado="resultado"; setCuerpo("listo");
     $("crono").textContent = ms+" ms";
     $("big").textContent="⚡ "+ms+" ms";

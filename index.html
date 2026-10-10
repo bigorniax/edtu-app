@@ -267,6 +267,31 @@
   .hub-rec.plata{border-color:#c8d4e0;box-shadow:0 0 14px rgba(200,212,224,.22)}
   .hub-rec.bronce{border-color:#cd7f32;box-shadow:0 0 14px rgba(205,127,50,.25)}
   .hub-rec-pos.oro,.hub-rec-pos.plata,.hub-rec-pos.bronce{font-size:24px}
+  .hub-rec{cursor:pointer}
+  .hub-rec:hover{transform:translateY(-2px);filter:brightness(1.15)}
+  /* 🏆 TABLA DE UN JUEGO (todos los jugadores) */
+  #tablaFs{position:fixed;inset:0;z-index:500;display:none;align-items:center;justify-content:center;
+    background:rgba(2,6,16,.84);backdrop-filter:blur(6px);padding:16px}
+  #tablaFs.show{display:flex}
+  #tablaFs .tabla-card{position:relative;width:min(520px,94vw);max-height:84vh;display:flex;flex-direction:column;
+    background:linear-gradient(160deg,#0a1428,#060c18);border:1.5px solid rgba(255,209,46,.4);
+    border-radius:18px;padding:26px 22px 18px;box-shadow:0 0 44px rgba(255,209,46,.2)}
+  #tablaFs h2{margin:0 0 4px;color:#ffd12e;letter-spacing:.06em;text-shadow:0 0 12px rgba(255,209,46,.45)}
+  #tablaFs .v-sub{opacity:.6;font-size:11px;margin-bottom:14px}
+  .tabla-lista{overflow-y:auto;display:flex;flex-direction:column;gap:7px;min-height:0}
+  .tabla-fila{display:flex;align-items:center;gap:11px;padding:11px 13px;border-radius:12px;
+    background:rgba(47,208,255,.07);border:1.5px solid transparent}
+  .tabla-fila.yo{background:rgba(57,255,20,.12);border-color:#39ff14}
+  .tabla-fila.p1{border-color:#ffd12e;background:rgba(255,209,46,.1)}
+  .tabla-fila.p2{border-color:#c8d4e0}
+  .tabla-fila.p3{border-color:#cd7f32}
+  .tabla-pos{font-weight:900;font-size:17px;min-width:34px;text-align:center;color:#9fc0d8}
+  .tabla-ava{width:32px;height:32px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+    font-weight:900;font-size:15px;color:#021018;background:linear-gradient(135deg,#39ff14,#2fd0ff);
+    background-size:cover;background-position:center}
+  .tabla-nom{flex:1;min-width:0;color:#dff;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tabla-nom .tu{font-size:10px;color:#39ff14;margin-left:5px}
+  .tabla-val{font-weight:900;color:#ffd12e;font-size:17px;white-space:nowrap}
   .hub-rec-empty{text-align:center;padding:30px;color:#8fb0cc}
   /* chat de amigos */
   .hchat-wrap{display:flex;gap:14px;flex:1;min-height:0;max-width:1400px;width:100%}
@@ -1291,6 +1316,7 @@
     <!-- MIS RÉCORDS -->
     <section class="hub-sec" data-sec="records">
       <h1 class="hub-h1">🏆 Mis récords</h1>
+      <p class="hub-sub" style="margin:-12px 0 16px">Toca un récord para ver la tabla de todos los jugadores 👆</p>
       <div id="hubRecordsList" class="hub-records"><p class="hub-sub">Cargando…</p></div>
     </section>
 
@@ -1363,6 +1389,16 @@
       </div>
     </section>
   </main>
+</div>
+
+<!-- ============ TABLA DE UN JUEGO (al tocar un récord) ============ -->
+<div id="tablaFs">
+  <div class="tabla-card">
+    <button class="v-close" id="tablaClose" title="Cerrar">✕</button>
+    <h2 class="mono" id="tablaTitulo">🏆 Tabla</h2>
+    <div class="v-sub mono" id="tablaSub">Todos los que lo han intentado</div>
+    <div id="tablaLista" class="tabla-lista"><p class="hub-sub">Cargando…</p></div>
+  </div>
 </div>
 
 <!-- ============ ACCESO SECRETO: hackeo -> bóveda -> biometría ============ -->
@@ -2665,10 +2701,13 @@ const JUEGOS_DE_TIEMPO = ["reflejos","rubik","scream"];
    Sin esto, un error (o un listillo) mete un tiempo de 6 ms y queda primero
    para siempre, arruinando el ranking de todos. Aquí decimos qué valores
    tienen sentido; lo que se salga no se guarda. */
+// David pidió quitar el mínimo: cuenta cualquier tiempo, por rápido que sea.
+// Solo queda el tope de arriba, para que un despiste de varios segundos no
+// se guarde como si fuera un récord.
 const LIMITES = {
-  reflejos: { min:100, max:1000 },   // nadie reacciona en menos de 100 ms
-  rubik:    { min:3,   max:36000 },  // armar el cubo en menos de 3 s es imposible
-  scream:   { min:5,   max:36000 },
+  reflejos: { min:1, max:1000 },
+  rubik:    { min:1, max:36000 },
+  scream:   { min:1, max:36000 },
 };
 // ¿Este valor tiene sentido para este juego?
 function recordValido(juego, valor){
@@ -2907,6 +2946,26 @@ const Cuenta = {
         }
       }catch(e){}
     }
+  },
+
+  /* 🏆 LA TABLA DE UN JUEGO: todos los que lo intentaron, con su récord,
+     ordenados del mejor al peor. Para ver contra quién compites. */
+  async tablaDe(juego){
+    if(!this.sb) return [];
+    try{
+      const { data: scores } = await this.sb.from("player_scores")
+        .select("player_id,best,updated_at").eq("game", juego);
+      if(!scores || !scores.length) return [];
+      const ids = scores.map(s=>s.player_id);
+      const { data: perfiles } = await this.sb.from("players").select("id,username,avatar").in("id", ids);
+      const menorEsMejor = JUEGOS_DE_TIEMPO.includes(juego);
+      return scores.map(s=>{
+        const p = (perfiles||[]).find(x=>x.id===s.player_id);
+        return { id:s.player_id, best:s.best, cuando:s.updated_at,
+                 nombre:(p && p.username) || "jugador", avatar:(p && p.avatar) || null,
+                 soyYo: this.user && s.player_id===this.user.id };
+      }).sort((a,b)=> menorEsMejor ? a.best-b.best : b.best-a.best);
+    }catch(e){ return []; }
   },
 
   // Leer TODOS los récords del jugador (para la pantalla "Mis récords").
@@ -10797,6 +10856,34 @@ const Hub = {
     if(name==="chat") Chat.abrir(); else Chat.cerrar();   // el chat solo "late" mientras lo ves
   },
 
+  /* 🏆 LA TABLA DE UN JUEGO: todos los jugadores, del mejor al peor.
+     Se abre al tocar cualquier récord de "Mis récords". */
+  async verTabla(juego, nombreBonito){
+    const fs = $("tablaFs"), lista = $("tablaLista");
+    if(!fs || !lista) return;
+    $("tablaTitulo").textContent = "🏆 " + (nombreBonito || juego);
+    const esTiempo = JUEGOS_DE_TIEMPO.includes(juego);
+    $("tablaSub").textContent = esTiempo ? "Gana el tiempo más BAJO ⏱️" : "Gana el puntaje más ALTO 🔝";
+    lista.innerHTML = '<p class="hub-sub">Cargando…</p>';
+    fs.classList.add("show");
+
+    const filas = await Cuenta.tablaDe(juego);
+    if(!filas.length){ lista.innerHTML = '<p class="hub-sub" style="padding:20px;text-align:center">Nadie ha jugado todavía.</p>'; return; }
+    const unidad = esTiempo ? " ms" : "";
+    lista.innerHTML = filas.map((f,i)=>{
+      const n = i+1;
+      const med = n===1?"🥇":n===2?"🥈":n===3?"🥉":"#"+n;
+      const cl = (n<=3?" p"+n:"") + (f.soyYo?" yo":"");
+      const ava = f.avatar
+        ? '<span class="tabla-ava" style="background-image:url('+esc(f.avatar)+');color:transparent"></span>'
+        : '<span class="tabla-ava">'+esc((f.nombre[0]||"?").toUpperCase())+'</span>';
+      return '<div class="tabla-fila'+cl+'">'+
+        '<span class="tabla-pos">'+med+'</span>'+ava+
+        '<span class="tabla-nom">'+esc(f.nombre)+(f.soyYo?'<span class="tu">TÚ</span>':'')+'</span>'+
+        '<span class="tabla-val">'+f.best+unidad+'</span></div>';
+    }).join("");
+  },
+
   // 🏆 cargar y mostrar los récords de la cuenta
   async cargarRecords(){
     const cont = $("hubRecordsList"); if(!cont) return;
@@ -10823,10 +10910,14 @@ const Hub = {
         ? '<span class="hub-rec-pos'+clase+'">'+medalla+'<small> de '+r.total+'</small></span>'
         : '';
       const unidad = JUEGOS_DE_TIEMPO.includes(r.game) ? " ms" : "";
-      return '<div class="hub-rec'+clase+'">'+puesto+
+      return '<div class="hub-rec'+clase+'" data-game="'+esc(r.game)+'" data-nom="'+esc(nom)+'">'+puesto+
              '<span class="hub-rec-game">'+nom+'</span>'+
              '<span class="hub-rec-best">'+(r.best||0)+unidad+'</span></div>';
     }).join("");
+    // 👆 al tocar un récord, se abre la tabla de todos los jugadores
+    cont.querySelectorAll(".hub-rec").forEach(el=>{
+      el.onclick = ()=> this.verTabla(el.dataset.game, el.dataset.nom);
+    });
   },
 };
 
@@ -10959,8 +11050,8 @@ function edtuAtras(){
     const p = $(panel);
     if(p && p.classList.contains("open")){ try{ cierraMundo(marco,panel); }catch(e){} return true; }
   }
-  // 2) ¿algún panel abierto? (selector de juegos, cuentas, trofeos…)
-  for(const id of ["authFs","gamePick","trophiesFs","wallyFs"]){
+  // 2) ¿algún panel abierto? (tabla, selector de juegos, cuentas, trofeos…)
+  for(const id of ["tablaFs","authFs","gamePick","trophiesFs","wallyFs"]){
     const el = $(id);
     if(el && (el.classList.contains("open") || el.classList.contains("show"))){
       el.classList.remove("open"); el.classList.remove("show"); return true; }
@@ -11052,6 +11143,9 @@ if($("cfgPassSave")) $("cfgPassSave").onclick = async ()=>{
   }catch(e){ msg.style.color = "#ff5b6e"; msg.textContent = authErrorEs(e); }
 };
 if($("hubCardTrophies")) $("hubCardTrophies").onclick = ()=>{ Hub.sec("records"); Hub.cargarRecords(); };
+// cerrar la tabla de un juego
+if($("tablaClose")) $("tablaClose").onclick = ()=> $("tablaFs").classList.remove("show");
+if($("tablaFs")) $("tablaFs").onclick = e=>{ if(e.target.id==="tablaFs") $("tablaFs").classList.remove("show"); };
 
 // El botón grande: crear cuenta o entrar
 if($("authGo")) $("authGo").onclick = async ()=>{

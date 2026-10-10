@@ -13,7 +13,8 @@
 // v56: arreglado el récord de Reflejos (guardaba el PEOR tiempo).
 // v58: los botones laterales del mouse sirven para volver atrás.
 // v59: récords con límites de lo posible (fuera los 6 ms imposibles).
-const CACHE = "edtu-v59";
+// v60: tabla de jugadores al tocar un récord; sin mínimo de tiempo.
+const CACHE = "edtu-v60";
 const SHELL = ["./", "./index.html", "./starwars.html", "./wally-kb.js", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 // Estas SIEMPRE se piden a la red primero: son las que cambian con cada mejora.
 const FRESCOS = [".html", "/"];
