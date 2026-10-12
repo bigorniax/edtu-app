@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Cubo 4x4</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;
+    background:radial-gradient(ellipse at 50% 0%,#0e2038,#04080f 60%);color:#dff;touch-action:none}
+  #lienzo{position:absolute;inset:0}
+  .top{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;
+    padding:10px 14px;gap:8px;z-index:3;pointer-events:none}
+  .top h1{font-size:19px;color:#00e0ff;text-shadow:0 0 14px rgba(0,224,255,.5)}
+  .crono{font-size:28px;font-weight:900;color:#ffd12e;font-variant-numeric:tabular-nums;
+    text-shadow:0 0 14px rgba(255,209,46,.4)}
+  .top .der{display:flex;gap:8px;pointer-events:auto}
+  button{cursor:pointer;font-family:inherit;font-weight:800;border-radius:11px;border:1.5px solid rgba(0,224,255,.45);
+    background:rgba(8,24,42,.8);color:#9be3ff;padding:9px 14px;font-size:13px;transition:all .14s}
+  button:hover{border-color:#00e0ff;box-shadow:0 0 12px rgba(0,224,255,.35)}
+  button.pri{background:linear-gradient(90deg,#00e0ff,#39ff14);color:#021018;border-color:transparent}
+  button.rojo{border-color:rgba(255,91,110,.5);color:#ff8fa0;background:rgba(40,10,16,.6)}
+  /* controles de giro */
+  .caras{position:absolute;bottom:0;left:0;right:0;z-index:3;padding:10px 12px 14px;
+    background:linear-gradient(0deg,rgba(4,8,15,.92),transparent)}
+  .fila{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:6px}
+  .gir{min-width:52px;padding:11px 10px;font-size:15px;font-weight:900}
+  .gir.ext{border-color:rgba(255,209,46,.45);color:#ffd12e}
+  .gir.int{border-color:rgba(197,140,255,.45);color:#c58cff}
+  .leyenda{text-align:center;font-size:11px;color:#7fa8c8;margin-top:4px}
+  .msg{position:absolute;top:50%;left:0;right:0;text-align:center;font-size:30px;font-weight:900;
+    color:#39ff14;text-shadow:0 0 22px rgba(57,255,20,.6);z-index:4;pointer-events:none;opacity:0;transition:opacity .3s}
+  .msg.on{opacity:1}
+  .stats{position:absolute;top:52px;left:14px;font-size:12px;color:#7fa8c8;z-index:3;line-height:1.7}
+  .stats b{color:#ffd12e}
+  @media (max-width:640px){
+    .top h1{font-size:15px}.crono{font-size:22px}
+    .gir{min-width:44px;padding:9px 7px;font-size:13px}
+    button{padding:7px 10px;font-size:12px}
+  }
+</style>
+</head>
+<body>
+<canvas id="lienzo"></canvas>
+
+<div class="top">
+  <h1>🧩 Cubo 4x4</h1>
+  <span class="crono" id="crono">0.0s</span>
+  <span class="der">
+    <button class="pri" id="btnMezcla">🔀 Mezclar</button>
+    <button id="btnResolver">↩️ Resolver</button>
+    <button class="rojo" id="btnSalir">✕ Salir</button>
+  </span>
+</div>
+
+<div class="stats" id="stats"></div>
+<div class="msg" id="msg"></div>
+
+<div class="caras">
+  <div class="fila">
+    <button class="gir ext" data-g="U">U</button>
+    <button class="gir ext" data-g="D">D</button>
+    <button class="gir ext" data-g="L">L</button>
+    <button class="gir ext" data-g="R">R</button>
+    <button class="gir ext" data-g="F">F</button>
+    <button class="gir ext" data-g="B">B</button>
+  </div>
+  <div class="fila">
+    <button class="gir int" data-g="u">u</button>
+    <button class="gir int" data-g="d">d</button>
+    <button class="gir int" data-g="l">l</button>
+    <button class="gir int" data-g="r">r</button>
+    <button class="gir int" data-g="f">f</button>
+    <button class="gir int" data-g="b">b</button>
+  </div>
+  <div class="fila">
+    <button id="btnInv">↺ Al revés: <b id="invEstado">NO</b></button>
+    <button id="btnVista">🔄 Girar vista</button>
+  </div>
+  <div class="leyenda">
+    <b style="color:#ffd12e">Mayúsculas</b> = capa de afuera ·
+    <b style="color:#c58cff">minúsculas</b> = capa de adentro ·
+    arrastra para mirar el cubo
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+
+/* ============================================================
+   EL CUBO 4x4
+   Son 64 cubitos (4x4x4). Guardamos cada uno con su posición
+   (x,y,z de -1.5 a 1.5) y lo giramos por capas.
+   ============================================================ */
+const N = 4;                 // 4x4
+const PASO = 1;              // separación entre cubitos
+const COLORES = {
+  U:0xffffff,   // arriba  = blanco
+  D:0xffd500,   // abajo   = amarillo
+  F:0x009b48,   // frente  = verde
+  B:0x0045ad,   // atrás   = azul
+  R:0xb90000,   // derecha = rojo
+  L:0xff5900,   // izquierda = naranjo
+};
+const NEGRO = 0x12161c;
+
+let escena, camara, render, grupoCubo, cubitos=[];
+let girando=false, invertir=false;
+let mezclado=false, t0=0, tiempo=0, movs=0, corriendoReloj=false;
+
+function iniciar3D(){
+  const cv=$("lienzo");
+  render=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});
+  render.setPixelRatio(Math.min(devicePixelRatio,2));
+  escena=new THREE.Scene();
+  camara=new THREE.PerspectiveCamera(42,1,0.1,100);
+  camara.position.set(7,6.4,7.6);
+  camara.lookAt(0,0,0);
+  escena.add(new THREE.AmbientLight(0xffffff,0.78));
+  const luz=new THREE.DirectionalLight(0xffffff,0.55); luz.position.set(6,10,8); escena.add(luz);
+  const luz2=new THREE.DirectionalLight(0x88ccff,0.3); luz2.position.set(-7,-4,-6); escena.add(luz2);
+  grupoCubo=new THREE.Group(); escena.add(grupoCubo);
+  construir();
+  ajustar();
+  addEventListener("resize",ajustar);
+  bucle();
+}
+function ajustar(){
+  const w=innerWidth, h=innerHeight;
+  render.setSize(w,h,false);
+  camara.aspect=w/h; camara.updateProjectionMatrix();
+  // en pantallas chicas, alejar un poco para que quepa
+  const d = w<640 ? 13.5 : 11.6;
+  const v=new THREE.Vector3(1,0.92,1.1).normalize().multiplyScalar(d);
+  camara.position.copy(v); camara.lookAt(0,0,0);
+}
+
+// crea los 64 cubitos con sus caras de color
+function construir(){
+  cubitos.forEach(c=>grupoCubo.remove(c.malla)); cubitos=[];
+  const off=(N-1)/2;           // 1.5 para N=4
+  const geo=new THREE.BoxGeometry(0.94,0.94,0.94);
+  for(let x=0;x<N;x++) for(let y=0;y<N;y++) for(let z=0;z<N;z++){
+    // los de adentro no se ven: no los creamos (ahorra memoria)
+    const borde = x===0||x===N-1||y===0||y===N-1||z===0||z===N-1;
+    if(!borde) continue;
+    // un material por cara: +X, -X, +Y, -Y, +Z, -Z
+    const mats=[
+      new THREE.MeshLambertMaterial({color: x===N-1?COLORES.R:NEGRO}),
+      new THREE.MeshLambertMaterial({color: x===0  ?COLORES.L:NEGRO}),
+      new THREE.MeshLambertMaterial({color: y===N-1?COLORES.U:NEGRO}),
+      new THREE.MeshLambertMaterial({color: y===0  ?COLORES.D:NEGRO}),
+      new THREE.MeshLambertMaterial({color: z===N-1?COLORES.F:NEGRO}),
+      new THREE.MeshLambertMaterial({color: z===0  ?COLORES.B:NEGRO}),
+    ];
+    const m=new THREE.Mesh(geo,mats);
+    m.position.set((x-off)*PASO,(y-off)*PASO,(z-off)*PASO);
+    grupoCubo.add(m);
+    cubitos.push({malla:m});
+  }
+}
+
+/* ---------- GIRAR UNA CAPA ----------
+   eje: "x" | "y" | "z"
+   capa: qué rodaja (0 = la de más afuera en el lado negativo … N-1 la del positivo)
+   sentido: 1 o -1
+*/
+function capaDe(eje,capa){
+  const off=(N-1)/2;
+  const objetivo=(capa-off)*PASO;
+  return cubitos.filter(c=> Math.abs(c.malla.position[eje]-objetivo) < 0.25 );
+}
+
+function girar(eje, capa, sentido, rapido){
+  return new Promise(res=>{
+    if(girando){ res(); return; }
+    girando=true;
+    const piezas=capaDe(eje,capa);
+    const pivote=new THREE.Group(); grupoCubo.add(pivote);
+    piezas.forEach(c=>pivote.attach(c.malla));
+    const total=Math.PI/2*sentido;
+    const dur=rapido?70:220;
+    const ini=performance.now();
+    // ⏱️ con setInterval en vez de requestAnimationFrame: así el giro termina
+    // igual aunque el navegador frene los frames (pestaña de fondo, etc.)
+    let tid=null;
+    const anim=()=>{
+      const k=Math.min(1,(performance.now()-ini)/dur);
+      // suavizado
+      const s = k<0.5 ? 2*k*k : 1-Math.pow(-2*k+2,2)/2;
+      pivote.rotation[eje]=total*s;
+      if(k<1) return;   // seguimos; el intervalo nos vuelve a llamar
+      pivote.rotation[eje]=total;
+      pivote.updateMatrixWorld(true);
+      // devolver las piezas al grupo principal, ya giradas
+      [...pivote.children].forEach(m=>{
+        grupoCubo.attach(m);
+        // redondear para que no se acumulen errores de decimales
+        m.position.x=Math.round(m.position.x*2)/2;
+        m.position.y=Math.round(m.position.y*2)/2;
+        m.position.z=Math.round(m.position.z*2)/2;
+      });
+      grupoCubo.remove(pivote);
+      clearInterval(tid);
+      girando=false; res();
+    };
+    tid=setInterval(anim,16); anim();
+  });
+}
+
+/* ---------- LOS MOVIMIENTOS CON NOMBRE ----------
+   Mayúscula = capa de afuera · minúscula = la de adentro (la segunda)
+*/
+const MOVS = {
+  // cara, eje, capa, sentido base
+  U:["y",3, 1], u:["y",2, 1],
+  D:["y",0,-1], d:["y",1,-1],
+  R:["x",3, 1], r:["x",2, 1],
+  L:["x",0,-1], l:["x",1,-1],
+  F:["z",3, 1], f:["z",2, 1],
+  B:["z",0,-1], b:["z",1,-1],
+};
+async function mover(nombre, inv, rapido){
+  const m=MOVS[nombre]; if(!m) return;
+  await girar(m[0], m[1], m[2]*(inv?-1:1), rapido);
+  if(!rapido){ movs++; pintaStats(); revisarSiEstaResuelto(); }
+}
+
+/* ---------- MEZCLAR ---------- */
+async function mezclar(){
+  if(girando) return;
+  const nombres=Object.keys(MOVS);
+  pararReloj(); movs=0; tiempo=0;
+  mostrar("🔀 Mezclando…");
+  for(let i=0;i<40;i++){
+    const n=nombres[(Math.random()*nombres.length)|0];
+    await mover(n, Math.random()<0.5, true);
+  }
+  mezclado=true; movs=0;
+  esconder();
+  arrancarReloj();
+  pintaStats();
+}
+
+/* ---------- RESOLVER (volver al inicio) ---------- */
+function resolver(){
+  if(girando) return;
+  pararReloj();
+  construir();          // vuelve a crear el cubo ordenado
+  mezclado=false; movs=0; tiempo=0;
+  pintaStats();
+  mostrar("↩️ Cubo ordenado");
+  setTimeout(esconder,1100);
+}
+
+/* ---------- ¿ESTÁ RESUELTO? ----------
+   Cada cara exterior debe tener los 16 cuadritos del mismo color. */
+function revisarSiEstaResuelto(){
+  if(!mezclado) return;
+  const caras=[
+    {eje:"x",val: 1.5,mat:0},{eje:"x",val:-1.5,mat:1},
+    {eje:"y",val: 1.5,mat:2},{eje:"y",val:-1.5,mat:3},
+    {eje:"z",val: 1.5,mat:4},{eje:"z",val:-1.5,mat:5},
+  ];
+  for(const c of caras){
+    const piezas=cubitos.filter(p=>Math.abs(p.malla.position[c.eje]-c.val)<0.25);
+    if(piezas.length!==16) return;
+    // el color que mira hacia afuera depende de cómo quedó girada la pieza,
+    // así que miramos el color real de la cara que apunta a ese lado
+    const colores=piezas.map(p=>colorHacia(p.malla,c.eje,c.val>0?1:-1));
+    if(colores.some(x=>x===null || x===NEGRO)) return;
+    if(!colores.every(x=>x===colores[0])) return;
+  }
+  // ¡resuelto!
+  pararReloj(); mezclado=false;
+  mostrar("🏆 ¡RESUELTO!<br><span style='font-size:19px;color:#ffd12e'>"+tiempo.toFixed(1)+"s · "+movs+" movimientos</span>");
+  guardarRecord(tiempo);
+}
+// qué color tiene la cara de este cubito que apunta en cierta dirección
+function colorHacia(malla, eje, signo){
+  const dir=new THREE.Vector3(eje==="x"?signo:0, eje==="y"?signo:0, eje==="z"?signo:0);
+  // pasamos la dirección al sistema local de la pieza
+  const inv=new THREE.Matrix4().copy(malla.matrixWorld).invert();
+  const local=dir.clone().transformDirection(inv);
+  const ax=Math.abs(local.x), ay=Math.abs(local.y), az=Math.abs(local.z);
+  let idx;
+  if(ax>=ay&&ax>=az) idx = local.x>0?0:1;
+  else if(ay>=az)    idx = local.y>0?2:3;
+  else               idx = local.z>0?4:5;
+  const mat=malla.material[idx];
+  return mat? mat.color.getHex() : null;
+}
+
+/* ---------- RELOJ ---------- */
+function arrancarReloj(){ t0=performance.now(); corriendoReloj=true; }
+function pararReloj(){ corriendoReloj=false; }
+function pintaStats(){
+  $("stats").innerHTML = mezclado
+    ? "movimientos: <b>"+movs+"</b>"
+    : "Dale a <b>🔀 Mezclar</b> para empezar";
+}
+
+/* ---------- RÉCORD ---------- */
+const K_BEST="edtu_cubo4_best";
+function guardarRecord(seg){
+  try{
+    const s=Math.round(seg*10)/10;
+    const b=parseFloat(localStorage.getItem(K_BEST)||"0");
+    if(!b || s<b) localStorage.setItem(K_BEST,String(s));
+    if(window.parent&&window.parent.edtuPlayDay) window.parent.edtuPlayDay("Cubo 4x4",s+"s",s);
+    // a la cuenta (gana el MENOR, es tiempo)
+    const C=window.parent&&window.parent.Cuenta;
+    if(C&&C.logueado&&C.logueado()){
+      if(C.guardarRecordMenor) C.guardarRecordMenor("cubo4",Math.round(s*10));
+    }
+  }catch(e){}
+}
+function recordGuardado(){
+  try{ const b=parseFloat(localStorage.getItem(K_BEST)||"0"); return b||null; }catch(e){ return null; }
+}
+
+/* ---------- mensajes ---------- */
+function mostrar(t){ $("msg").innerHTML=t; $("msg").classList.add("on"); }
+function esconder(){ $("msg").classList.remove("on"); }
+
+/* ---------- bucle ---------- */
+function bucle(){
+  requestAnimationFrame(bucle);
+  if(corriendoReloj){ tiempo=(performance.now()-t0)/1000; $("crono").textContent=tiempo.toFixed(1)+"s"; }
+  render.render(escena,camara);
+}
+
+/* ---------- girar la vista arrastrando ---------- */
+let arrastra=false, ultX=0, ultY=0;
+const cv=$("lienzo");
+cv.addEventListener("pointerdown",e=>{ arrastra=true; ultX=e.clientX; ultY=e.clientY; });
+addEventListener("pointerup",()=>arrastra=false);
+addEventListener("pointermove",e=>{
+  if(!arrastra) return;
+  const dx=(e.clientX-ultX)*0.008, dy=(e.clientY-ultY)*0.008;
+  ultX=e.clientX; ultY=e.clientY;
+  grupoCubo.rotation.y+=dx;
+  grupoCubo.rotation.x=Math.max(-1.1,Math.min(1.1,grupoCubo.rotation.x+dy));
+});
+
+/* ---------- botones ---------- */
+document.querySelectorAll(".gir").forEach(b=>{
+  b.onclick=()=>{ if(!mezclado && !girando){ mostrar("Primero dale a 🔀 Mezclar"); setTimeout(esconder,1200); return; }
+    mover(b.dataset.g, invertir); };
+});
+$("btnInv").onclick=()=>{ invertir=!invertir; $("invEstado").textContent=invertir?"SÍ":"NO";
+  $("btnInv").style.borderColor=invertir?"#39ff14":""; };
+$("btnVista").onclick=()=>{ grupoCubo.rotation.y+=Math.PI/2; };
+$("btnMezcla").onclick=mezclar;
+$("btnResolver").onclick=resolver;
+$("btnSalir").onclick=()=>{ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(e){} };
+
+/* ---------- teclado ---------- */
+addEventListener("keydown",e=>{
+  const k=e.key;
+  if(MOVS[k]){ e.preventDefault(); mover(k, e.shiftKey); return; }
+  if(k==="Escape"){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} }
+});
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+
+// expuesto para poder probarlo desde fuera
+window.cubitos=()=>cubitos; window.mezclar=mezclar; window.estaMezclado=()=>mezclado;
+
+iniciar3D();
+pintaStats();
+const rec=recordGuardado();
+if(rec) $("stats").innerHTML += "<br>🏆 tu récord: <b>"+rec+"s</b>";
+</script>
+</body>
+</html>
