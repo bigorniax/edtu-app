@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Naturaleza</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;
+    background:radial-gradient(ellipse at 50% 0%,#1a3a14,#060e04 60%);color:#dfe}
+  #menu{position:absolute;inset:0;overflow-y:auto;padding:16px}
+  #menu h1{text-align:center;font-size:25px;color:#9be37d;text-shadow:0 0 16px rgba(155,227,125,.45)}
+  #menu .sub{text-align:center;color:#9b8;font-size:13px;margin:4px 0 16px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;max-width:1000px;margin:0 auto}
+  .gbtn{cursor:pointer;border:2px solid rgba(155,227,125,.3);border-radius:14px;padding:13px 9px;text-align:center;
+    background:linear-gradient(160deg,rgba(26,54,20,.9),rgba(8,16,6,.9));transition:all .14s}
+  .gbtn:hover{transform:translateY(-3px);border-color:#9be37d;box-shadow:0 7px 20px rgba(155,227,125,.22)}
+  .gbtn .ico{font-size:28px;display:block;margin-bottom:4px}
+  .gbtn .nm{font-weight:800;font-size:13px;color:#fff}
+  #play{position:absolute;inset:0;display:none;flex-direction:column}
+  #play.on{display:flex}
+  .bar{display:flex;align-items:center;justify-content:space-between;padding:9px 13px;background:rgba(6,14,4,.92);
+    border-bottom:1px solid rgba(155,227,125,.25);flex-shrink:0;gap:8px}
+  .bar h2{font-size:16px;color:#9be37d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bar .info{font-weight:800;font-size:15px;color:#ffd12e;white-space:nowrap}
+  .bar button{cursor:pointer;background:rgba(255,91,110,.15);border:1.5px solid rgba(255,91,110,.5);color:#ff8fa0;
+    border-radius:9px;padding:6px 11px;font-weight:700;font-size:12px;white-space:nowrap}
+  #stage{flex:1;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:8px}
+  canvas{display:block;max-width:100%;max-height:100%;touch-action:none;border-radius:10px}
+  .help{position:absolute;bottom:6px;left:0;right:0;text-align:center;color:#9b8;font-size:12px;pointer-events:none}
+  .win{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(4,10,3,.93);text-align:center;padding:20px;z-index:5}
+  .win.on{display:flex}
+  .win h2{font-size:28px;margin-bottom:8px;color:#9be37d}
+  .win button{margin-top:16px;cursor:pointer;font-size:17px;font-weight:900;border:none;border-radius:14px;padding:13px 30px;
+    color:#021018;background:linear-gradient(90deg,#9be37d,#5fe0a0)}
+</style>
+</head>
+<body>
+<div id="menu">
+  <h1>🌿 Animales y Naturaleza</h1>
+  <p class="sub">Bichos, plantas y aventuras al aire libre · <b>18 juegos</b></p>
+  <div class="grid" id="grid"></div>
+</div>
+<div id="play">
+  <div class="bar">
+    <h2 id="gname">Juego</h2>
+    <span class="info" id="info"></span>
+    <button id="back">✕ Menú</button>
+  </div>
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div class="help" id="help"></div>
+    <div class="win" id="win"><h2 id="winTxt">¡Bien!</h2><p id="winSub"></p><button id="again">▶ Otra vez</button></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+let W=700,H=560;
+function tam(w,h){ W=w;H=h;cv.width=w;cv.height=h;fit(); }
+function fit(){ const st=$("stage"); const m=Math.min((st.clientWidth-16)/W,(st.clientHeight-16)/H,1.6);
+  cv.style.width=(W*m)+"px"; cv.style.height=(H*m)+"px"; }
+addEventListener("resize",fit);
+function fondo(c){ ctx.fillStyle=c||"#0d2410"; ctx.fillRect(0,0,W,H); }
+function texto(t,x,y,s,c,a){ ctx.fillStyle=c||"#fff"; ctx.font="900 "+(s||20)+"px Segoe UI,sans-serif";
+  ctx.textAlign=a||"center"; ctx.textBaseline="middle"; ctx.fillText(t,x,y); }
+function caja(x,y,w,h,f,b,r){ r=r||8; ctx.beginPath(); ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+  if(f){ctx.fillStyle=f;ctx.fill();} if(b){ctx.strokeStyle=b;ctx.lineWidth=2;ctx.stroke();} }
+function info(t){ $("info").textContent=t||""; }
+function ganar(t,s){ $("winTxt").innerHTML=t; $("winSub").textContent=s||""; $("win").classList.add("on"); }
+function anota(n,p){ try{ const k="edtu_natura_best"; const v=Math.max(parseInt(localStorage.getItem(k)||"0",10)||0,p||1);
+  localStorage.setItem(k,String(v));
+  if(window.parent&&window.parent.edtuPlayDay) window.parent.edtuPlayDay("Natura: "+n,p,p); }catch(e){} }
+
+const teclas={}; let raton={x:W/2,y:H/2,abajo:false};
+function posEn(e){ const r=cv.getBoundingClientRect();
+  return { x:(e.clientX-r.left)*(W/r.width), y:(e.clientY-r.top)*(H/r.height) }; }
+cv.addEventListener("pointermove",e=>{ const p=posEn(e); raton.x=p.x; raton.y=p.y; });
+cv.addEventListener("pointerdown",e=>{ e.preventDefault(); const p=posEn(e); raton.x=p.x; raton.y=p.y; raton.abajo=true;
+  if(juego&&juego.clic) juego.clic(p.x,p.y); });
+cv.addEventListener("pointerup",()=>{ raton.abajo=false; });
+addEventListener("keydown",e=>{ const k=e.key.toLowerCase(); teclas[k]=true; if(juego&&juego.tecla) juego.tecla(k);
+  if(["arrowup","arrowdown","arrowleft","arrowright"," "].includes(k)) e.preventDefault(); });
+addEventListener("keyup",e=>{ teclas[e.key.toLowerCase()]=false; });
+
+let juego=null, raf=null;
+function abrir(j){ juego=j; $("gname").textContent=j.ico+" "+j.nom; $("help").innerHTML=j.ayuda||"";
+  $("menu").style.display="none"; $("play").classList.add("on"); $("win").classList.remove("on");
+  info(""); tam(j.w||700,j.h||560); j.init();
+  if(raf) cancelAnimationFrame(raf);
+  const b=()=>{ raf=requestAnimationFrame(b); if(!$("win").classList.contains("on")) j.paso(); }; b(); }
+function cerrar(){ if(raf) cancelAnimationFrame(raf); raf=null; juego=null;
+  $("play").classList.remove("on"); $("menu").style.display="block"; }
+$("back").onclick=cerrar;
+$("again").onclick=()=>{ $("win").classList.remove("on"); info(""); juego.init(); };
+
+const JUEGOS=[];
+const add=(o)=>JUEGOS.push(o);
+
+/* ===================== 18 DE NATURALEZA ===================== */
+
+// 1) ABEJA
+let ab;
+add({ico:"🐝",nom:"Abeja",ayuda:"Visita todas las flores y vuelve a la colmena",
+ init:()=>{ ab={x:60,y:H-60,f:[],polen:0,t:0};
+   for(let i=0;i<8;i++) ab.f.push({x:80+Math.random()*(W-160),y:60+Math.random()*(H-180),ok:false}); },
+ paso:()=>{ const g=ab; fondo("#9bd4ff"); g.t++;
+   ctx.fillStyle="#5aa02a"; ctx.fillRect(0,H-50,W,50);
+   texto("🏠",60,H-70,42);
+   g.x+=(raton.x-g.x)*0.2; g.y+=(raton.y-g.y)*0.2;
+   if(teclas["arrowleft"]||teclas["a"]) g.x-=5; if(teclas["arrowright"]||teclas["d"]) g.x+=5;
+   if(teclas["arrowup"]||teclas["w"]) g.y-=5; if(teclas["arrowdown"]||teclas["s"]) g.y+=5;
+   g.f.forEach(f=>{ texto(f.ok?"🌼":"🌺",f.x,f.y,32);
+     if(!f.ok && Math.hypot(f.x-g.x,f.y-g.y)<30){ f.ok=true; g.polen++; } });
+   texto("🐝",g.x,g.y,30);
+   info("🌺 "+g.polen+"/8");
+   if(g.polen>=8 && Math.hypot(60-g.x,(H-70)-g.y)<50){ anota("Abeja",Math.max(1,2000-g.t));
+     ganar("🏆 ¡MIEL LISTA!","en "+(g.t/60).toFixed(1)+"s"); }
+ }});
+
+// 2) PESCA EN EL RÍO
+let pr;
+add({ico:"🎣",nom:"Río",ayuda:"Toca cuando el pez esté en la zona verde",
+ init:()=>{ pr={x:0,dir:1,peces:0,fallos:0,zona:{a:W*0.4,b:W*0.6}}; },
+ paso:()=>{ const g=pr; fondo("#1a5a7a");
+   ctx.fillStyle="#2a7a9a"; ctx.fillRect(0,H*0.3,W,H*0.5);
+   caja(g.zona.a,H*0.3,g.zona.b-g.zona.a,H*0.5,"rgba(57,255,20,.25)","#39ff14",6);
+   g.x+=g.dir*(5+g.peces*0.4); if(g.x>W-30||g.x<30) g.dir*=-1;
+   texto("🐟",g.x,H/2,38);
+   texto("🎣",W/2,H*0.18,42);
+   info("🐟 "+g.peces+"  ❌"+g.fallos+"/3");
+ },
+ clic:()=>{ const g=pr;
+   if(g.x>g.zona.a && g.x<g.zona.b){ g.peces++;
+     const an=Math.max(60,(g.zona.b-g.zona.a)*0.85);
+     const c=100+Math.random()*(W-200); g.zona={a:c-an/2,b:c+an/2};
+     if(g.peces>=10){ anota("Río",g.peces); ganar("🏆 ¡10 PECES!",""); } }
+   else { g.fallos++; if(g.fallos>=3){ anota("Río",g.peces); ganar("🎣 Se escaparon",g.peces+" peces"); } } }});
+
+// 3) JARDÍN
+let ja;
+add({ico:"🌱",nom:"Jardín",ayuda:"Riega las plantas antes de que se marchiten",
+ init:()=>{ ja={p:[],t:0,pts:0,muertas:0};
+   for(let i=0;i<6;i++) ja.p.push({x:90+i*((W-180)/5),agua:100,etapa:0}); },
+ paso:()=>{ const g=ja; fondo("#8ac4e8"); g.t++;
+   ctx.fillStyle="#6b4423"; ctx.fillRect(0,H-110,W,110);
+   g.p.forEach(p=>{ p.agua-=0.14;
+     if(p.agua<=0){ p.agua=0; }
+     if(p.agua>60 && g.t%120===0 && p.etapa<3){ p.etapa++; g.pts+=10; }
+     texto(["🌱","🌿","🪴","🌻"][p.etapa],p.x,H-140,44);
+     caja(p.x-26,H-80,52,12, "#333",null,6);
+     caja(p.x-26,H-80,52*p.agua/100, 12, p.agua>40?"#2fd0ff":"#ff5b6e",null,6); });
+   const secas=g.p.filter(p=>p.agua<=0).length;
+   info("🌻 "+g.p.filter(p=>p.etapa===3).length+"/6  ⭐"+g.pts);
+   if(secas>=3){ anota("Jardín",g.pts); ganar("🥀 Se secaron",g.pts+" puntos"); }
+   if(g.p.every(p=>p.etapa===3)){ anota("Jardín",g.pts); ganar("🏆 ¡JARDÍN FLORECIDO!",""); }
+ },
+ clic:(x,y)=>{ const p=ja.p.find(p2=>Math.abs(p2.x-x)<40); if(p) p.agua=Math.min(100,p.agua+45); }});
+
+// 4) MIGRACIÓN
+let mi;
+add({ico:"🦅",nom:"Migración",ayuda:"Guía la bandada evitando tormentas",
+ init:()=>{ mi={y:H/2,ob:[],t:0,km:0}; },
+ paso:()=>{ const g=mi; fondo("#8ac4e8"); g.t++; g.km+=0.1;
+   for(let i=0;i<6;i++){ ctx.fillStyle="rgba(255,255,255,.5)";
+     const x=((i*180 - g.t*1.4)%(W+200)+W+200)%(W+200)-100;
+     ctx.beginPath(); ctx.ellipse(x,60+(i%3)*50,54,20,0,0,7); ctx.fill(); }
+   g.y+=(raton.y-g.y)*0.14;
+   if(teclas["arrowup"]||teclas["w"]) g.y-=6; if(teclas["arrowdown"]||teclas["s"]) g.y+=6;
+   g.y=Math.max(30,Math.min(H-30,g.y));
+   if(g.t%50===0) g.ob.push({x:W+40,y:40+Math.random()*(H-80)});
+   for(let i=g.ob.length-1;i>=0;i--){ const o=g.ob[i]; o.x-=5;
+     texto("⛈️",o.x,o.y,40);
+     if(o.x<-50){ g.ob.splice(i,1); continue; }
+     if(Math.abs(o.x-W*0.25)<32 && Math.abs(o.y-g.y)<32){ anota("Migración",Math.floor(g.km));
+       ganar("⛈️ ¡Te pilló la tormenta!",Math.floor(g.km)+" km"); return; } }
+   for(let i=0;i<5;i++) texto("🦅",W*0.25-i*18,g.y+(i%2?10:-10),26);
+   info(Math.floor(g.km)+" km");
+   if(g.km>=100){ anota("Migración",100); ganar("🏆 ¡LLEGARON!",""); }
+ }});
+
+// 5) HORMIGUERO
+let ho;
+add({ico:"🐜",nom:"Hormiguero",ayuda:"Lleva la comida al hormiguero",
+ init:()=>{ ho={x:W/2,y:H-60,carga:false,c:[],llevadas:0,t:0};
+   for(let i=0;i<8;i++) ho.c.push({x:50+Math.random()*(W-100),y:50+Math.random()*(H-200)}); },
+ paso:()=>{ const g=ho; fondo("#6b5433"); g.t++;
+   ctx.fillStyle="#3a2a18"; ctx.beginPath(); ctx.arc(W/2,H-30,46,Math.PI,0); ctx.fill();
+   texto("🕳️",W/2,H-42,30);
+   g.x+=(raton.x-g.x)*0.2; g.y+=(raton.y-g.y)*0.2;
+   if(teclas["arrowleft"]||teclas["a"]) g.x-=5; if(teclas["arrowright"]||teclas["d"]) g.x+=5;
+   if(teclas["arrowup"]||teclas["w"]) g.y-=5; if(teclas["arrowdown"]||teclas["s"]) g.y+=5;
+   for(let i=g.c.length-1;i>=0;i--){ const c=g.c[i]; texto("🍪",c.x,c.y,24);
+     if(!g.carga && Math.hypot(c.x-g.x,c.y-g.y)<26){ g.c.splice(i,1); g.carga=true; } }
+   if(g.carga && Math.hypot(W/2-g.x,(H-40)-g.y)<50){ g.carga=false; g.llevadas++; }
+   texto("🐜",g.x,g.y,28);
+   if(g.carga) texto("🍪",g.x,g.y-24,18);
+   info("🍪 "+g.llevadas+"/8");
+   if(g.llevadas>=8){ anota("Hormiguero",Math.max(1,2500-g.t)); ganar("🏆 ¡DESPENSA LLENA!",""); }
+ }});
+
+// 6) RANA SALTARINA
+let ra;
+add({ico:"🐸",nom:"Rana",ayuda:"Clic para saltar entre los nenúfares",
+ init:()=>{ ra={x:80,y:H-150,vy:0,saltando:false,hojas:[],t:0,pts:0};
+   for(let i=0;i<6;i++) ra.hojas.push({x:80+i*130,y:H-120+Math.sin(i)*30}); },
+ paso:()=>{ const g=ra; fondo("#2a6a8a"); g.t++;
+   g.hojas.forEach(h=>{ h.x-=1.4; texto("🍃",h.x,h.y,46);
+     if(h.x<-60){ h.x=W+60; h.y=H-200+Math.random()*150; } });
+   if(g.saltando){ g.vy+=0.6; g.y+=g.vy; g.x+=4;
+     const h=g.hojas.find(h2=>Math.abs(h2.x-g.x)<40 && Math.abs(h2.y-g.y)<26 && g.vy>0);
+     if(h){ g.saltando=false; g.y=h.y-20; g.vy=0; g.pts+=10; }
+     if(g.y>H+40){ anota("Rana",g.pts); ganar("💦 ¡Al agua!",g.pts+" puntos"); return; } }
+   else { const h=g.hojas.reduce((a,b)=>Math.abs(b.x-g.x)<Math.abs(a.x-g.x)?b:a,g.hojas[0]);
+     g.x=h.x; g.y=h.y-20; }
+   texto("🐸",g.x,g.y,36);
+   info("⭐"+g.pts);
+ },
+ clic:()=>{ if(!ra.saltando){ ra.saltando=true; ra.vy=-11; } },
+ tecla:(k)=>{ if(k===" "&&!ra.saltando){ ra.saltando=true; ra.vy=-11; } }});
+
+// 7) BOSQUE DE SETAS
+let bs;
+add({ico:"🍄",nom:"Setas",ayuda:"Junta solo las setas buenas · evita las venenosas",
+ init:()=>{ bs={s:[],t:0,pts:0,vida:3};
+   for(let i=0;i<10;i++) bs.s.push({x:60+Math.random()*(W-120),y:80+Math.random()*(H-180),
+     mala:Math.random()<0.3}); },
+ paso:()=>{ const g=bs; fondo("#1a3a12"); g.t++;
+   for(let i=0;i<9;i++) texto("🌲",((i*97)%W),80+((i*53)%(H-160)),60);
+   g.s.forEach(s=>{ if(s.ok) return; texto(s.mala?"🍄":"🍄‍🟫",s.x,s.y,30); });
+   texto("🧺",raton.x,raton.y,32);
+   info("🍄 "+g.pts+"  ❤️"+g.vida);
+   if(g.s.every(s=>s.ok||s.mala)){ anota("Setas",g.pts); ganar("🏆 ¡CESTA LLENA!",g.pts+" setas"); }
+ },
+ clic:(x,y)=>{ const g=bs;
+   const s=g.s.find(s2=>!s2.ok && Math.hypot(s2.x-x,s2.y-y)<28);
+   if(!s) return;
+   s.ok=true;
+   if(s.mala){ g.vida--; if(g.vida<=0){ anota("Setas",g.pts); ganar("☠️ ¡Venenosa!",g.pts+" setas"); } }
+   else g.pts++; }});
+
+// 8) ACUARIO
+let ac;
+add({ico:"🐠",nom:"Acuario",ayuda:"Da de comer a los peces hambrientos",
+ init:()=>{ ac={p:[],com:[],t:0,pts:0};
+   for(let i=0;i<5;i++) ac.p.push({x:Math.random()*W,y:100+Math.random()*(H-180),
+     vx:(Math.random()<0.5?1:-1)*(1+Math.random()*1.5), hambre:50+Math.random()*50}); },
+ paso:()=>{ const g=ac; fondo("#0a4a6a"); g.t++;
+   for(let i=0;i<8;i++){ ctx.fillStyle="rgba(255,255,255,.08)";
+     ctx.beginPath(); ctx.arc((i*97)%W,H-((i*61+g.t*2)%H),5,0,7); ctx.fill(); }
+   ctx.fillStyle="#c9a06a"; ctx.fillRect(0,H-40,W,40);
+   g.p.forEach(p=>{ p.hambre-=0.09; p.x+=p.vx;
+     if(p.x<20||p.x>W-20) p.vx*=-1;
+     ctx.save(); ctx.translate(p.x,p.y); if(p.vx<0) ctx.scale(-1,1);
+     texto(p.hambre>30?"🐠":"🐟",0,0,32); ctx.restore();
+     caja(p.x-22,p.y-28,44,6,"#333",null,3);
+     caja(p.x-22,p.y-28,44*Math.max(0,p.hambre)/100,6,p.hambre>30?"#39ff14":"#ff5b6e",null,3); });
+   for(let i=g.com.length-1;i>=0;i--){ const c=g.com[i]; c.y+=1.4;
+     texto("🟤",c.x,c.y,12);
+     if(c.y>H-40){ g.com.splice(i,1); continue; }
+     const p=g.p.find(p2=>Math.hypot(p2.x-c.x,p2.y-c.y)<30);
+     if(p){ p.hambre=Math.min(100,p.hambre+40); g.com.splice(i,1); g.pts+=5; } }
+   const muertos=g.p.filter(p=>p.hambre<=0).length;
+   info("⭐"+g.pts+"  ⏱"+Math.floor(g.t/60)+"s");
+   if(muertos>0){ anota("Acuario",Math.floor(g.t/60)); ganar("😢 Un pez murió","aguantaste "+Math.floor(g.t/60)+"s"); }
+   if(g.t>60*60){ anota("Acuario",60); ganar("🏆 ¡UN MINUTO PERFECTO!",""); }
+ },
+ clic:(x)=>{ if(ac.com.length<8) ac.com.push({x,y:60}); }});
+
+// 9) ESCALA LA MONTAÑA
+let em;
+add({ico:"⛰️",nom:"Montaña",ayuda:"Toca los salientes para subir",
+ init:()=>{ em={y:0,sal:[],t:0,alt:0};
+   for(let i=0;i<30;i++) em.sal.push({x:100+Math.random()*(W-200),y:H-100-i*80}); },
+ paso:()=>{ const g=em; fondo("#6a8ab0"); g.t++;
+   ctx.fillStyle="#5a6a7a";
+   ctx.beginPath(); ctx.moveTo(0,H); ctx.lineTo(W*0.3,0); ctx.lineTo(W*0.7,0); ctx.lineTo(W,H); ctx.fill();
+   g.sal.forEach(s=>{ const y=s.y+g.y; if(y<-40||y>H+40) return;
+     texto("🪨",s.x,y,32); });
+   texto("🧗",W/2,H*0.6,40);
+   info("altura: "+Math.floor(g.alt)+"m");
+   if(g.alt>=200){ anota("Montaña",Math.max(1,2500-g.t)); ganar("🏆 ¡CUMBRE!","en "+(g.t/60).toFixed(1)+"s"); }
+ },
+ clic:(x,y)=>{ const g=em;
+   const s=g.sal.find(s2=>Math.hypot(s2.x-x,(s2.y+g.y)-y)<40 && (s2.y+g.y)<H*0.6);
+   if(s){ const d=(H*0.6)-(s.y+g.y); g.y+=d; g.alt+=d/10; } }});
+
+// 10) HUEVOS
+let hu;
+add({ico:"🥚",nom:"Huevos",ayuda:"Atrapa los huevos que caen del nido",
+ init:()=>{ hu={x:W/2,h:[],t:0,pts:0,rotos:0}; },
+ paso:()=>{ const g=hu; fondo("#9bd4ff"); g.t++;
+   texto("🪺",W*0.25,60,42); texto("🪺",W*0.75,60,42);
+   if(g.t%40===0) g.h.push({x:Math.random()<0.5?W*0.25:W*0.75,y:90,v:2.4});
+   g.x+=(raton.x-g.x)*0.3;
+   for(let i=g.h.length-1;i>=0;i--){ const h=g.h[i]; h.y+=h.v; h.v+=0.06;
+     texto("🥚",h.x,h.y,26);
+     if(Math.abs(h.x-g.x)<46 && h.y>H-90){ g.h.splice(i,1); g.pts+=10; continue; }
+     if(h.y>H){ g.h.splice(i,1); g.rotos++;
+       if(g.rotos>=5){ anota("Huevos",g.pts); ganar("🍳 Se rompieron",g.pts+" puntos"); return; } } }
+   texto("🧺",g.x,H-60,46);
+   info("⭐"+g.pts+"  💔"+g.rotos+"/5");
+ }});
+
+// 11) CAMALEÓN
+let ca;
+add({ico:"🦎",nom:"Camaleón",ayuda:"Toca el color igual al del fondo para esconderte",
+ init:()=>{ const C=["#ff5b6e","#39ff14","#2fd0ff","#ffd12e","#c58cff"];
+   ca={C,fondo:(Math.random()*5)|0,aciertos:0,t:0,limite:3*60}; },
+ paso:()=>{ const g=ca; ctx.fillStyle=g.C[g.fondo]; ctx.fillRect(0,0,W,H); g.t++;
+   texto("🦎",W/2,H/2-40,80);
+   texto("¿De qué color te escondes?",W/2,80,24,"#000");
+   g.C.forEach((c,i)=>{ const x=W/2+(i-2)*120;
+     caja(x-48,H-150,96,96,c,"#fff",14); });
+   caja(W/2-110,34,220,12,"rgba(0,0,0,.3)",null,6);
+   caja(W/2-110,34,220*(1-g.t/g.limite),12,"#000",null,6);
+   info("⭐"+g.aciertos);
+   if(g.t>=g.limite){ anota("Camaleón",g.aciertos); ganar("⏱ ¡Te vieron!",g.aciertos+" aciertos"); }
+ },
+ clic:(x,y)=>{ const g=ca; if(Math.abs(y-(H-102))>48) return;
+   for(let i=0;i<5;i++){ const cx=W/2+(i-2)*120;
+     if(Math.abs(x-cx)<48){
+       if(i===g.fondo){ g.aciertos++; g.t=0; g.limite=Math.max(70,g.limite*0.93);
+         g.fondo=(Math.random()*5)|0;
+         if(g.aciertos>=12){ anota("Camaleón",g.aciertos); ganar("🏆 ¡INVISIBLE!",""); } }
+       else g.t+=40;
+       return; } } }});
+
+// 12) SEMILLAS
+let se;
+add({ico:"🌰",nom:"Semillas",ayuda:"Planta las semillas en la tierra húmeda (más oscura)",
+ init:()=>{ se={celdas:[],pts:0,t:0,fallos:0};
+   for(let i=0;i<24;i++) se.celdas.push({humeda:Math.random()<0.4, planta:false}); },
+ paso:()=>{ const g=se; fondo("#8ac4e8"); g.t++;
+   const C=6, S=100, ox=(W-C*S)/2, oy=120;
+   g.celdas.forEach((c,i)=>{ const x=ox+(i%C)*S, y=oy+((i/C)|0)*S;
+     caja(x+3,y+3,S-6,S-6, c.humeda?"#4a3420":"#9a7a50", "#6b4423",8);
+     if(c.planta) texto("🌱",x+S/2,y+S/2,34); });
+   texto("Planta en la tierra OSCURA (húmeda)",W/2,70,22,"#1a4a1a");
+   info("🌱 "+g.pts+"  ❌"+g.fallos+"/3");
+   if(g.celdas.filter(c=>c.humeda).every(c=>c.planta)){ anota("Semillas",g.pts); ganar("🏆 ¡TODO PLANTADO!",""); }
+ },
+ clic:(x,y)=>{ const g=se; const C=6,S=100, ox=(W-C*S)/2, oy=120;
+   const c2=Math.floor((x-ox)/S), r=Math.floor((y-oy)/S);
+   if(c2<0||c2>=C||r<0||r>=4) return;
+   const c=g.celdas[r*C+c2]; if(!c||c.planta) return;
+   if(c.humeda){ c.planta=true; g.pts++; }
+   else { g.fallos++; if(g.fallos>=3){ anota("Semillas",g.pts); ganar("🥀 Se secaron",g.pts+" plantas"); } } }});
+
+// 13) LOBO Y OVEJAS
+let lo;
+add({ico:"🐑",nom:"Ovejas",ayuda:"Lleva las ovejas al corral antes que llegue el lobo",
+ init:()=>{ lo={perro:{x:W/2,y:H/2},ov:[],lobo:{x:W-40,y:40},salvadas:0,t:0};
+   for(let i=0;i<6;i++) lo.ov.push({x:100+Math.random()*(W-200),y:100+Math.random()*(H-200),vx:0,vy:0}); },
+ paso:()=>{ const g=lo; fondo("#5aa02a"); g.t++;
+   caja(20,H-120,110,100,"#8a6a3a","#6b4423",10); texto("🏠",75,H-70,40);
+   const p=g.perro; p.x+=(raton.x-p.x)*0.2; p.y+=(raton.y-p.y)*0.2;
+   if(teclas["arrowleft"]||teclas["a"]) p.x-=5; if(teclas["arrowright"]||teclas["d"]) p.x+=5;
+   if(teclas["arrowup"]||teclas["w"]) p.y-=5; if(teclas["arrowdown"]||teclas["s"]) p.y+=5;
+   // el lobo persigue a la oveja más cercana
+   if(g.ov.length){ const o=g.ov[0];
+     const dx=o.x-g.lobo.x, dy=o.y-g.lobo.y, d=Math.hypot(dx,dy)||1;
+     g.lobo.x+=dx/d*1.3; g.lobo.y+=dy/d*1.3; }
+   for(let i=g.ov.length-1;i>=0;i--){ const o=g.ov[i];
+     // huye del perro
+     const dx=o.x-p.x, dy=o.y-p.y, d=Math.hypot(dx,dy)||1;
+     if(d<110){ o.vx+=dx/d*0.5; o.vy+=dy/d*0.5; }
+     o.vx*=0.94; o.vy*=0.94; o.x+=o.vx; o.y+=o.vy;
+     o.x=Math.max(20,Math.min(W-20,o.x)); o.y=Math.max(20,Math.min(H-20,o.y));
+     texto("🐑",o.x,o.y,28);
+     if(o.x<130 && o.y>H-120){ g.ov.splice(i,1); g.salvadas++; continue; }
+     if(Math.hypot(o.x-g.lobo.x,o.y-g.lobo.y)<26){ anota("Ovejas",g.salvadas);
+       ganar("🐺 ¡El lobo atacó!",g.salvadas+" salvadas"); return; } }
+   texto("🐕",p.x,p.y,30); texto("🐺",g.lobo.x,g.lobo.y,30);
+   info("🐑 "+g.salvadas+"/6");
+   if(g.salvadas>=6){ anota("Ovejas",Math.max(1,2500-g.t)); ganar("🏆 ¡TODAS A SALVO!",""); }
+ }});
+
+// 14) ESTACIONES
+let es;
+add({ico:"🍂",nom:"Estaciones",ayuda:"Toca el animal que corresponde a la estación",
+ init:()=>{ const E=[{n:"PRIMAVERA",c:"#c8f0a0",ok:"🌸",mal:["❄️","🍂","☀️"]},
+   {n:"VERANO",c:"#ffe08a",ok:"☀️",mal:["❄️","🌸","🍂"]},
+   {n:"OTOÑO",c:"#e8a860",ok:"🍂",mal:["❄️","🌸","☀️"]},
+   {n:"INVIERNO",c:"#c8e8ff",ok:"❄️",mal:["🍂","🌸","☀️"]}];
+   es={E,i:(Math.random()*4)|0,aciertos:0,ops:[]}; nuevasOpciones(); },
+ paso:()=>{ const g=es; const e=g.E[g.i];
+   ctx.fillStyle=e.c; ctx.fillRect(0,0,W,H);
+   texto(e.n,W/2,80,40,"#4a3a20");
+   g.ops.forEach((o,i)=>{ const x=W/2+(i-1.5)*140;
+     caja(x-58,H/2-30,116,116,"rgba(255,255,255,.7)","#fff",18);
+     texto(o,x,H/2+28,54); });
+   info("⭐"+g.aciertos);
+ },
+ clic:(x,y)=>{ const g=es; if(Math.abs(y-(H/2+28))>58) return;
+   for(let i=0;i<4;i++){ const cx=W/2+(i-1.5)*140;
+     if(Math.abs(x-cx)<58){
+       if(g.ops[i]===g.E[g.i].ok){ g.aciertos++;
+         if(g.aciertos>=8){ anota("Estaciones",g.aciertos); ganar("🏆 ¡LAS SABES TODAS!",""); return; }
+         g.i=(Math.random()*4)|0; nuevasOpciones(); }
+       return; } } }});
+function nuevasOpciones(){ const e=es.E[es.i];
+  es.ops=[e.ok,...e.mal].sort(()=>Math.random()-0.5); }
+
+// 15) CADENA ALIMENTICIA
+let cad;
+add({ico:"🔗",nom:"Cadena",ayuda:"Toca quién se come a quién, en orden",
+ init:()=>{ const c=[["🌿","🐛","🐦","🐱"],["🌾","🐭","🐍","🦅"],["🪴","🐌","🐸","🦆"]][(Math.random()*3)|0];
+   cad={c,orden:c.slice().sort(()=>Math.random()-0.5),sig:0,ok:[]}; },
+ paso:()=>{ const g=cad; fondo("#2a5a2a");
+   texto("¿Quién se come a quién?",W/2,60,24,"#d8ffb0");
+   texto("De la planta al más grande",W/2,96,18,"#9bd48a");
+   g.orden.forEach((e,i)=>{ const x=W/2+(i-1.5)*150;
+     const hecho=g.ok.includes(e);
+     caja(x-62,H/2-62,124,124, hecho?"rgba(57,255,20,.25)":"rgba(255,255,255,.1)", hecho?"#39ff14":"#9be37d",18);
+     texto(e,x,H/2,56); });
+   // cadena ya hecha
+   g.ok.forEach((e,i)=>texto(e+(i<g.ok.length-1?" →":""),120+i*90,H-80,30));
+   info("➡ "+g.sig+"/4");
+   if(g.sig>=4){ anota("Cadena",4); ganar("🏆 ¡CADENA COMPLETA!",""); }
+ },
+ clic:(x,y)=>{ const g=cad; if(Math.abs(y-H/2)>62) return;
+   for(let i=0;i<4;i++){ const cx=W/2+(i-1.5)*150;
+     if(Math.abs(x-cx)<62){ const e=g.orden[i];
+       if(e===g.c[g.sig]){ g.ok.push(e); g.sig++; }
+       else { g.ok=[]; g.sig=0; }
+       return; } } }});
+
+// 16) TORTUGA
+let to;
+add({ico:"🐢",nom:"Tortuga",ayuda:"Guía a la tortuguita al mar esquivando aves",
+ init:()=>{ to={x:W/2,y:H-60,aves:[],t:0}; },
+ paso:()=>{ const g=to; fondo("#e8d8a0"); g.t++;
+   ctx.fillStyle="#2a7a9a"; ctx.fillRect(0,0,W,110);
+   texto("🌊",W/2,55,50);
+   g.x+=(raton.x-g.x)*0.14;
+   if(teclas["arrowleft"]||teclas["a"]) g.x-=4; if(teclas["arrowright"]||teclas["d"]) g.x+=4;
+   if(teclas["arrowup"]||teclas["w"]) g.y-=3; if(teclas["arrowdown"]||teclas["s"]) g.y+=3;
+   g.y-=0.55;
+   if(g.t%45===0) g.aves.push({x:Math.random()<0.5?-30:W+30,y:140+Math.random()*(H-250),
+     v:(Math.random()<0.5?1:-1)*(2.4+Math.random()*2)});
+   for(let i=g.aves.length-1;i>=0;i--){ const a=g.aves[i]; a.x+=a.v;
+     ctx.save(); ctx.translate(a.x,a.y); if(a.v<0) ctx.scale(-1,1); texto("🦅",0,0,34); ctx.restore();
+     if(a.x<-60||a.x>W+60){ g.aves.splice(i,1); continue; }
+     if(Math.hypot(a.x-g.x,a.y-g.y)<30){ anota("Tortuga",Math.floor((H-g.y)/10)); ganar("🦅 ¡Te atraparon!",""); return; } }
+   texto("🐢",g.x,g.y,32);
+   info("faltan "+Math.max(0,Math.floor((g.y-110)/10))+"m");
+   if(g.y<110){ anota("Tortuga",Math.max(1,2000-g.t)); ganar("🏆 ¡AL MAR!","en "+(g.t/60).toFixed(1)+"s"); }
+ }});
+
+// 17) PANAL
+let pa;
+add({ico:"🍯",nom:"Panal",ayuda:"Llena el panal: toca celdas vecinas",
+ init:()=>{ pa={celdas:Array(19).fill(false),pos:9,movs:0}; },
+ paso:()=>{ const g=pa; fondo("#3a2a08");
+   // hexágonos en 3 filas: 6, 7, 6
+   const filas=[6,7,6], R=46; let k=0;
+   const pos=[];
+   filas.forEach((n,f)=>{ for(let i=0;i<n;i++){
+     const x=W/2+(i-(n-1)/2)*(R*1.78), y=H/2+(f-1)*(R*1.6);
+     pos.push({x,y,k}); k++; } });
+   pos.forEach(p=>{ ctx.beginPath();
+     for(let a=0;a<6;a++){ const an=a*Math.PI/3;
+       const px=p.x+Math.cos(an)*R, py=p.y+Math.sin(an)*R;
+       a?ctx.lineTo(px,py):ctx.moveTo(px,py); }
+     ctx.closePath();
+     ctx.fillStyle=g.celdas[p.k]?"#ffd12e":"#5a4418"; ctx.fill();
+     ctx.strokeStyle="#8a6a2a"; ctx.lineWidth=3; ctx.stroke();
+     if(p.k===g.pos) texto("🐝",p.x,p.y,30); });
+   g._pos=pos;
+   const llenas=g.celdas.filter(Boolean).length;
+   info("🍯 "+llenas+"/19  movs "+g.movs);
+   if(llenas>=19){ anota("Panal",Math.max(1,60-g.movs)); ganar("🏆 ¡PANAL LLENO!","en "+g.movs+" movimientos"); }
+ },
+ clic:(x,y)=>{ const g=pa; if(!g._pos) return;
+   const p=g._pos.find(p2=>Math.hypot(p2.x-x,p2.y-y)<46); if(!p) return;
+   const a=g._pos.find(p2=>p2.k===g.pos);
+   if(Math.hypot(a.x-p.x,a.y-p.y)<110){ g.pos=p.k; g.celdas[p.k]=true; g.movs++; } }});
+
+// 18) ARCOÍRIS
+let ai;
+add({ico:"🌈",nom:"Arcoíris",ayuda:"Pon los colores del arcoíris en orden",
+ init:()=>{ const C=[["rojo","#ff2b2b"],["naranjo","#ff8c00"],["amarillo","#ffd700"],
+   ["verde","#2ecc40"],["azul","#0074d9"],["morado","#8e44ad"]];
+   ai={C,orden:C.slice().sort(()=>Math.random()-0.5),sig:0}; },
+ paso:()=>{ const g=ai; fondo("#bfe8ff");
+   texto("Del rojo al morado",W/2,56,26,"#2a4a6a");
+   // arcoíris ya puesto
+   for(let i=0;i<g.sig;i++){ ctx.strokeStyle=g.C[i][1]; ctx.lineWidth=26;
+     ctx.beginPath(); ctx.arc(W/2,H+60,300-i*28,Math.PI,0); ctx.stroke(); }
+   g.orden.forEach((c,i)=>{ if(g.C.slice(0,g.sig).some(x=>x[0]===c[0])) return;
+     const x=W/2+(i-2.5)*110;
+     caja(x-46,H-120,92,92,c[1],"#fff",14); });
+   info("🌈 "+g.sig+"/6");
+   if(g.sig>=6){ anota("Arcoíris",6); ganar("🏆 ¡ARCOÍRIS COMPLETO!",""); }
+ },
+ clic:(x,y)=>{ const g=ai; if(Math.abs(y-(H-74))>46) return;
+   for(let i=0;i<6;i++){ const cx=W/2+(i-2.5)*110;
+     if(Math.abs(x-cx)<46){ const c=g.orden[i];
+       if(c && c[0]===g.C[g.sig][0]) g.sig++;
+       return; } } }});
+
+/* ---------- menú ---------- */
+$("grid").innerHTML = JUEGOS.map((j,i)=>
+  '<div class="gbtn" data-i="'+i+'"><span class="ico">'+j.ico+'</span><span class="nm">'+j.nom+'</span></div>').join("");
+document.querySelectorAll(".gbtn").forEach(b=> b.onclick=()=>abrir(JUEGOS[+b.dataset.i]));
+fit();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>
