@@ -26,7 +26,8 @@
 // v70: 18 de aventura y estrategia (128 juegos en EDTU).
 // v71: Cubo de Rubik 4x4 en 3D.
 // v72: 18 de deportes y carreras (147 juegos).
-const CACHE = "edtu-v72";
+// v73: 18 del espacio (165 juegos).
+const CACHE = "edtu-v73";
 const SHELL = ["./", "./index.html", "./starwars.html", "./wally-kb.js", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 // Estas SIEMPRE se piden a la red primero: son las que cambian con cada mejora.
 const FRESCOS = [".html", "/"];

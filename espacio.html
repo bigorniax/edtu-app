@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Espacio</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;
+    background:radial-gradient(ellipse at 50% 0%,#1a1040,#05030f 60%);color:#dcf}
+  #menu{position:absolute;inset:0;overflow-y:auto;padding:16px}
+  #menu h1{text-align:center;font-size:25px;color:#c58cff;text-shadow:0 0 16px rgba(197,140,255,.5)}
+  #menu .sub{text-align:center;color:#9a8;font-size:13px;margin:4px 0 16px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;max-width:1000px;margin:0 auto}
+  .gbtn{cursor:pointer;border:2px solid rgba(197,140,255,.3);border-radius:14px;padding:13px 9px;text-align:center;
+    background:linear-gradient(160deg,rgba(30,18,60,.9),rgba(8,5,18,.9));transition:all .14s}
+  .gbtn:hover{transform:translateY(-3px);border-color:#c58cff;box-shadow:0 7px 20px rgba(197,140,255,.25)}
+  .gbtn .ico{font-size:28px;display:block;margin-bottom:4px}
+  .gbtn .nm{font-weight:800;font-size:13px;color:#fff}
+  #play{position:absolute;inset:0;display:none;flex-direction:column}
+  #play.on{display:flex}
+  .bar{display:flex;align-items:center;justify-content:space-between;padding:9px 13px;background:rgba(5,3,12,.92);
+    border-bottom:1px solid rgba(197,140,255,.25);flex-shrink:0;gap:8px}
+  .bar h2{font-size:16px;color:#c58cff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bar .info{font-weight:800;font-size:15px;color:#ffd12e;white-space:nowrap}
+  .bar button{cursor:pointer;background:rgba(255,91,110,.15);border:1.5px solid rgba(255,91,110,.5);color:#ff8fa0;
+    border-radius:9px;padding:6px 11px;font-weight:700;font-size:12px;white-space:nowrap}
+  #stage{flex:1;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:8px}
+  canvas{display:block;max-width:100%;max-height:100%;touch-action:none;border-radius:10px}
+  .help{position:absolute;bottom:6px;left:0;right:0;text-align:center;color:#9a8;font-size:12px;pointer-events:none}
+  .win{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(4,2,10,.93);text-align:center;padding:20px;z-index:5}
+  .win.on{display:flex}
+  .win h2{font-size:28px;margin-bottom:8px;color:#c58cff}
+  .win button{margin-top:16px;cursor:pointer;font-size:17px;font-weight:900;border:none;border-radius:14px;padding:13px 30px;
+    color:#fff;background:linear-gradient(90deg,#c58cff,#6a3fa8)}
+</style>
+</head>
+<body>
+<div id="menu">
+  <h1>🚀 Espacio y Ciencia Ficción</h1>
+  <p class="sub">Naves, planetas y aliens · <b>18 juegos</b></p>
+  <div class="grid" id="grid"></div>
+</div>
+<div id="play">
+  <div class="bar">
+    <h2 id="gname">Juego</h2>
+    <span class="info" id="info"></span>
+    <button id="back">✕ Menú</button>
+  </div>
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div class="help" id="help"></div>
+    <div class="win" id="win"><h2 id="winTxt">¡Bien!</h2><p id="winSub"></p><button id="again">▶ Otra vez</button></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+let W=700,H=560;
+function tam(w,h){ W=w;H=h;cv.width=w;cv.height=h;fit(); }
+function fit(){ const st=$("stage"); const m=Math.min((st.clientWidth-16)/W,(st.clientHeight-16)/H,1.6);
+  cv.style.width=(W*m)+"px"; cv.style.height=(H*m)+"px"; }
+addEventListener("resize",fit);
+function fondo(c){ ctx.fillStyle=c||"#06030f"; ctx.fillRect(0,0,W,H); }
+function estrellas(t,n){ ctx.fillStyle="rgba(255,255,255,.45)";
+  for(let i=0;i<(n||40);i++){ const x=(i*127)%W, y=((i*83+t)%H); ctx.fillRect(x,y,2,2); } }
+function texto(t,x,y,s,c,a){ ctx.fillStyle=c||"#fff"; ctx.font="900 "+(s||20)+"px Segoe UI,sans-serif";
+  ctx.textAlign=a||"center"; ctx.textBaseline="middle"; ctx.fillText(t,x,y); }
+function caja(x,y,w,h,f,b,r){ r=r||8; ctx.beginPath(); ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+  if(f){ctx.fillStyle=f;ctx.fill();} if(b){ctx.strokeStyle=b;ctx.lineWidth=2;ctx.stroke();} }
+function info(t){ $("info").textContent=t||""; }
+function ganar(t,s){ $("winTxt").innerHTML=t; $("winSub").textContent=s||""; $("win").classList.add("on"); }
+function anota(n,p){ try{ const k="edtu_espacio_best"; const v=Math.max(parseInt(localStorage.getItem(k)||"0",10)||0,p||1);
+  localStorage.setItem(k,String(v));
+  if(window.parent&&window.parent.edtuPlayDay) window.parent.edtuPlayDay("Espacio: "+n,p,p); }catch(e){} }
+
+const teclas={}; let raton={x:W/2,y:H/2,abajo:false};
+function posEn(e){ const r=cv.getBoundingClientRect();
+  return { x:(e.clientX-r.left)*(W/r.width), y:(e.clientY-r.top)*(H/r.height) }; }
+cv.addEventListener("pointermove",e=>{ const p=posEn(e); raton.x=p.x; raton.y=p.y; });
+cv.addEventListener("pointerdown",e=>{ e.preventDefault(); const p=posEn(e); raton.x=p.x; raton.y=p.y; raton.abajo=true;
+  if(juego&&juego.clic) juego.clic(p.x,p.y); });
+cv.addEventListener("pointerup",()=>{ raton.abajo=false; });
+addEventListener("keydown",e=>{ const k=e.key.toLowerCase(); teclas[k]=true; if(juego&&juego.tecla) juego.tecla(k);
+  if(["arrowup","arrowdown","arrowleft","arrowright"," "].includes(k)) e.preventDefault(); });
+addEventListener("keyup",e=>{ teclas[e.key.toLowerCase()]=false; });
+
+let juego=null, raf=null;
+function abrir(j){ juego=j; $("gname").textContent=j.ico+" "+j.nom; $("help").innerHTML=j.ayuda||"";
+  $("menu").style.display="none"; $("play").classList.add("on"); $("win").classList.remove("on");
+  info(""); tam(j.w||700,j.h||560); j.init();
+  if(raf) cancelAnimationFrame(raf);
+  const b=()=>{ raf=requestAnimationFrame(b); if(!$("win").classList.contains("on")) j.paso(); }; b(); }
+function cerrar(){ if(raf) cancelAnimationFrame(raf); raf=null; juego=null;
+  $("play").classList.remove("on"); $("menu").style.display="block"; }
+$("back").onclick=cerrar;
+$("again").onclick=()=>{ $("win").classList.remove("on"); info(""); juego.init(); };
+
+const JUEGOS=[];
+const add=(o)=>JUEGOS.push(o);
+
+/* ===================== 18 DEL ESPACIO ===================== */
+
+// 1) INVASORES
+let iv;
+add({ico:"👾",nom:"Invasores",ayuda:"Mueve y dispara con clic o espacio",
+ init:()=>{ const e=[]; for(let r=0;r<4;r++) for(let c=0;c<9;c++) e.push({x:70+c*66,y:70+r*52,v:true});
+   iv={x:W/2,e,b:[],eb:[],t:0,pts:0,dir:1,vidas:3}; },
+ paso:()=>{ const g=iv; fondo(); estrellas(g.t); g.t++;
+   g.x+=(raton.x-g.x)*0.25;
+   if(teclas["arrowleft"]||teclas["a"]) g.x-=7; if(teclas["arrowright"]||teclas["d"]) g.x+=7;
+   g.x=Math.max(24,Math.min(W-24,g.x));
+   if(g.t%40===0){ let borde=false;
+     g.e.forEach(e=>{ if(!e.v) return; e.x+=g.dir*12; if(e.x>W-40||e.x<40) borde=true; });
+     if(borde){ g.dir*=-1; g.e.forEach(e=>e.y+=22); } }
+   if(g.t%70===0){ const vivos=g.e.filter(e=>e.v);
+     if(vivos.length){ const e=vivos[(Math.random()*vivos.length)|0]; g.eb.push({x:e.x,y:e.y}); } }
+   g.e.forEach(e=>{ if(e.v) texto("👾",e.x,e.y,28);
+     if(e.v&&e.y>H-80){ anota("Invasores",g.pts); ganar("👾 ¡Te invadieron!",g.pts+" puntos"); } });
+   for(let i=g.b.length-1;i>=0;i--){ const b=g.b[i]; b.y-=10;
+     ctx.fillStyle="#39ff14"; ctx.fillRect(b.x-2,b.y-10,4,14);
+     if(b.y<0){ g.b.splice(i,1); continue; }
+     const e=g.e.find(e2=>e2.v && Math.abs(e2.x-b.x)<22 && Math.abs(e2.y-b.y)<20);
+     if(e){ e.v=false; g.b.splice(i,1); g.pts+=10; } }
+   for(let i=g.eb.length-1;i>=0;i--){ const b=g.eb[i]; b.y+=5;
+     ctx.fillStyle="#ff5b6e"; ctx.fillRect(b.x-2,b.y,4,12);
+     if(b.y>H){ g.eb.splice(i,1); continue; }
+     if(Math.abs(b.x-g.x)<22 && b.y>H-70){ g.eb.splice(i,1); g.vidas--;
+       if(g.vidas<=0){ anota("Invasores",g.pts); ganar("💥 Game Over",g.pts+" puntos"); return; } } }
+   texto("🚀",g.x,H-50,36);
+   info("⭐"+g.pts+"  ❤️"+g.vidas);
+   if(g.e.every(e=>!e.v)){ anota("Invasores",g.pts); ganar("🏆 ¡LOS VENCISTE!",g.pts+" puntos"); }
+ },
+ clic:()=>{ if(iv.b.length<4) iv.b.push({x:iv.x,y:H-70}); },
+ tecla:(k)=>{ if(k===" "&&iv.b.length<4) iv.b.push({x:iv.x,y:H-70}); }});
+
+// 2) ATERRIZAJE LUNAR
+let al;
+add({ico:"🌙",nom:"Aterrizaje",ayuda:"Clic o espacio para frenar · aterriza suave",
+ init:()=>{ al={y:60,v:0,x:W/2,vx:(Math.random()-0.5)*3,fuel:100,t:0}; },
+ paso:()=>{ const g=al; fondo("#08060f"); estrellas(0,30); g.t++;
+   ctx.fillStyle="#555"; ctx.fillRect(0,H-50,W,50);
+   ctx.fillStyle="#39ff14"; ctx.fillRect(W/2-70,H-52,140,5);
+   g.v+=0.055; g.y+=g.v; g.x+=g.vx;
+   if(teclas[" "]||raton.abajo){ if(g.fuel>0){ g.v-=0.14; g.fuel-=0.5;
+     texto("🔥",g.x,g.y+26,22); } }
+   if(teclas["arrowleft"]||teclas["a"]){ if(g.fuel>0){ g.vx-=0.06; g.fuel-=0.2; } }
+   if(teclas["arrowright"]||teclas["d"]){ if(g.fuel>0){ g.vx+=0.06; g.fuel-=0.2; } }
+   texto("🚀",g.x,g.y,36);
+   caja(20,20,180,18,"#222",null,9);
+   caja(20,20,180*g.fuel/100,18,g.fuel>30?"#39ff14":"#ff5b6e",null,9);
+   texto("combustible",110,52,14,"#9a8");
+   info("velocidad: "+g.v.toFixed(1));
+   if(g.y>H-70){
+     const suave = g.v<1.6 && Math.abs(g.x-W/2)<70;
+     anota("Aterrizaje", suave?Math.round(g.fuel):1);
+     ganar(suave?"🏆 ¡ATERRIZAJE PERFECTO!":"💥 ¡Te estrellaste!",
+       suave?("te quedó "+Math.round(g.fuel)+"% de combustible"):"ibas a "+g.v.toFixed(1)); }
+ }});
+
+// 3) ASTEROIDES 360
+let a3;
+add({ico:"☄️",nom:"Asteroides","ayuda":"",
+ ayuda:"Flechas para girar y avanzar · espacio dispara",
+ init:()=>{ a3={x:W/2,y:H/2,vx:0,vy:0,an:0,b:[],as:[],t:0,pts:0};
+   for(let i=0;i<5;i++) a3.as.push({x:Math.random()*W,y:Math.random()*H,
+     vx:(Math.random()-0.5)*2.4,vy:(Math.random()-0.5)*2.4,r:28}); },
+ paso:()=>{ const g=a3; fondo(); estrellas(0,30); g.t++;
+   if(teclas["arrowleft"]||teclas["a"]) g.an-=0.07;
+   if(teclas["arrowright"]||teclas["d"]) g.an+=0.07;
+   if(teclas["arrowup"]||teclas["w"]){ g.vx+=Math.cos(g.an)*0.22; g.vy+=Math.sin(g.an)*0.22; }
+   g.vx*=0.99; g.vy*=0.99; g.x+=g.vx; g.y+=g.vy;
+   g.x=(g.x+W)%W; g.y=(g.y+H)%H;
+   ctx.save(); ctx.translate(g.x,g.y); ctx.rotate(g.an+Math.PI/2); texto("🚀",0,0,32); ctx.restore();
+   for(let i=g.b.length-1;i>=0;i--){ const b=g.b[i]; b.x+=b.vx; b.y+=b.vy; b.t++;
+     ctx.fillStyle="#39ff14"; ctx.beginPath(); ctx.arc(b.x,b.y,3,0,7); ctx.fill();
+     if(b.t>70){ g.b.splice(i,1); continue; }
+     for(let j=g.as.length-1;j>=0;j--){ const a=g.as[j];
+       if(Math.hypot(a.x-b.x,a.y-b.y)<a.r){ g.b.splice(i,1); g.pts+=10;
+         if(a.r>16){ for(let k=0;k<2;k++) g.as.push({x:a.x,y:a.y,
+           vx:(Math.random()-0.5)*3.4,vy:(Math.random()-0.5)*3.4,r:a.r/2}); }
+         g.as.splice(j,1); break; } } }
+   g.as.forEach(a=>{ a.x=(a.x+a.vx+W)%W; a.y=(a.y+a.vy+H)%H;
+     texto("☄️",a.x,a.y,a.r*1.5);
+     if(Math.hypot(a.x-g.x,a.y-g.y)<a.r){ anota("Asteroides",g.pts); ganar("💥 ¡Chocaste!",g.pts+" puntos"); } });
+   info("⭐"+g.pts+"  ☄️"+g.as.length);
+   if(!g.as.length){ anota("Asteroides",g.pts); ganar("🏆 ¡CAMPO LIMPIO!",g.pts+" puntos"); }
+ },
+ tecla:(k)=>{ if(k===" "&&a3.b.length<5) a3.b.push({x:a3.x,y:a3.y,
+   vx:Math.cos(a3.an)*9+a3.vx, vy:Math.sin(a3.an)*9+a3.vy, t:0}); },
+ clic:()=>{ if(a3.b.length<5) a3.b.push({x:a3.x,y:a3.y,
+   vx:Math.cos(a3.an)*9+a3.vx, vy:Math.sin(a3.an)*9+a3.vy, t:0}); }});
+
+// 4) ÓRBITA
+let or;
+add({ico:"🪐",nom:"Órbita",ayuda:"Clic para impulsar · no choques con el planeta",
+ init:()=>{ or={x:W/2+170,y:H/2,vx:0,vy:-2.5,t:0,vueltas:0,ultAng:0}; },
+ paso:()=>{ const g=or; fondo(); estrellas(0,25); g.t++;
+   const px=W/2, py=H/2;
+   const dx=px-g.x, dy=py-g.y, d=Math.hypot(dx,dy);
+   const f=900/(d*d);
+   g.vx+=dx/d*f; g.vy+=dy/d*f;
+   if(raton.abajo||teclas[" "]){ const vd=Math.hypot(g.vx,g.vy)||1;
+     g.vx+=g.vx/vd*0.09; g.vy+=g.vy/vd*0.09; }
+   g.x+=g.vx; g.y+=g.vy;
+   ctx.fillStyle="#c58cff"; ctx.beginPath(); ctx.arc(px,py,42,0,7); ctx.fill();
+   texto("🪐",px,py,54);
+   ctx.strokeStyle="rgba(197,140,255,.18)"; ctx.lineWidth=2;
+   ctx.beginPath(); ctx.arc(px,py,170,0,7); ctx.stroke();
+   texto("🛰️",g.x,g.y,26);
+   const ang=Math.atan2(g.y-py,g.x-px);
+   if(g.ultAng<0 && ang>=0) g.vueltas++;
+   g.ultAng=ang;
+   info("🔄 "+g.vueltas+" vueltas");
+   if(d<48){ anota("Órbita",g.vueltas); ganar("💥 ¡Caíste al planeta!",g.vueltas+" vueltas"); }
+   if(d>Math.max(W,H)){ anota("Órbita",g.vueltas); ganar("🌌 ¡Te perdiste!",g.vueltas+" vueltas"); }
+   if(g.vueltas>=10){ anota("Órbita",g.vueltas); ganar("🏆 ¡10 ÓRBITAS!",""); }
+ }});
+
+// 5) DEFIENDE LA TIERRA
+let dt;
+add({ico:"🌍",nom:"Defiende",ayuda:"Toca los meteoritos antes de que lleguen",
+ init:()=>{ dt={m:[],t:0,vida:5,pts:0}; },
+ paso:()=>{ const g=dt; fondo(); estrellas(g.t); g.t++;
+   ctx.fillStyle="#2a6fd0"; ctx.beginPath(); ctx.arc(W/2,H+120,180,0,7); ctx.fill();
+   texto("🌍",W/2,H-50,70);
+   if(g.t%36===0) g.m.push({x:Math.random()*W,y:-30,v:1.4+g.pts*0.008});
+   for(let i=g.m.length-1;i>=0;i--){ const m=g.m[i]; m.y+=m.v;
+     texto("☄️",m.x,m.y,32);
+     if(m.y>H-110){ g.m.splice(i,1); g.vida--;
+       if(g.vida<=0){ anota("Defiende",g.pts); ganar("🌍 La Tierra cayó",g.pts+" puntos"); return; } } }
+   info("❤️"+g.vida+"  ⭐"+g.pts);
+ },
+ clic:(x,y)=>{ for(let i=dt.m.length-1;i>=0;i--){ const m=dt.m[i];
+   if(Math.hypot(m.x-x,m.y-y)<30){ dt.m.splice(i,1); dt.pts+=10; return; } } }});
+
+// 6) TÚNEL ESPACIAL
+let tu;
+add({ico:"🌀",nom:"Túnel",ayuda:"Mueve para no chocar con las paredes",
+ init:()=>{ tu={y:H/2,tramos:[],t:0,pts:0,vel:4,centro:H/2,ancho:200};
+   for(let i=0;i<40;i++) tu.tramos.push({x:i*20,c:H/2,a:200}); },
+ paso:()=>{ const g=tu; fondo("#0a0418"); g.t++; g.vel+=0.0025;
+   g.centro+=Math.sin(g.t*0.03)*4;
+   g.ancho=Math.max(110,g.ancho-0.06);
+   g.tramos.forEach(t2=>t2.x-=g.vel);
+   while(g.tramos.length && g.tramos[0].x<-20) g.tramos.shift();
+   while(g.tramos[g.tramos.length-1].x<W+20){
+     const ult=g.tramos[g.tramos.length-1];
+     g.tramos.push({x:ult.x+20, c:Math.max(120,Math.min(H-120,g.centro)), a:g.ancho}); }
+   ctx.fillStyle="#3a1a6a";
+   g.tramos.forEach(t2=>{ ctx.fillRect(t2.x,0,21,t2.c-t2.a/2);
+     ctx.fillRect(t2.x,t2.c+t2.a/2,21,H); });
+   g.y+=(raton.y-g.y)*0.2;
+   if(teclas["arrowup"]||teclas["w"]) g.y-=6; if(teclas["arrowdown"]||teclas["s"]) g.y+=6;
+   const aqui=g.tramos.find(t2=>Math.abs(t2.x-W*0.25)<12);
+   if(aqui && Math.abs(g.y-aqui.c)>aqui.a/2-14){ anota("Túnel",g.pts); ganar("💥 ¡Chocaste!",g.pts+" puntos"); return; }
+   texto("🚀",W*0.25,g.y,32);
+   g.pts++;
+   info("⭐"+Math.floor(g.pts/10));
+ }});
+
+// 7) RECOGE CRISTALES
+let rc;
+add({ico:"💎",nom:"Cristales",ayuda:"Junta los cristales sin chocar con los drones",
+ init:()=>{ rc={x:W/2,y:H/2,c:[],d:[],t:0,pts:0};
+   for(let i=0;i<6;i++) rc.c.push({x:40+Math.random()*(W-80),y:40+Math.random()*(H-80)});
+   for(let i=0;i<3;i++) rc.d.push({x:Math.random()*W,y:Math.random()*H,
+     vx:(Math.random()-0.5)*3.4,vy:(Math.random()-0.5)*3.4}); },
+ paso:()=>{ const g=rc; fondo(); estrellas(g.t,25); g.t++;
+   g.x+=(raton.x-g.x)*0.2; g.y+=(raton.y-g.y)*0.2;
+   if(teclas["arrowleft"]||teclas["a"]) g.x-=5; if(teclas["arrowright"]||teclas["d"]) g.x+=5;
+   if(teclas["arrowup"]||teclas["w"]) g.y-=5; if(teclas["arrowdown"]||teclas["s"]) g.y+=5;
+   for(let i=g.c.length-1;i>=0;i--){ const c=g.c[i]; texto("💎",c.x,c.y,26);
+     if(Math.hypot(c.x-g.x,c.y-g.y)<28){ g.c.splice(i,1); g.pts+=10;
+       g.c.push({x:30+Math.random()*(W-60),y:30+Math.random()*(H-60)});
+       if(g.pts%50===0) g.d.push({x:Math.random()*W,y:Math.random()*H,
+         vx:(Math.random()-0.5)*3.4,vy:(Math.random()-0.5)*3.4}); } }
+   g.d.forEach(d=>{ d.x+=d.vx; d.y+=d.vy;
+     if(d.x<16||d.x>W-16) d.vx*=-1; if(d.y<16||d.y>H-16) d.vy*=-1;
+     texto("🛸",d.x,d.y,28);
+     if(Math.hypot(d.x-g.x,d.y-g.y)<28){ anota("Cristales",g.pts); ganar("💥 ¡Te atraparon!",g.pts+" puntos"); } });
+   texto("🚀",g.x,g.y,30);
+   info("💎 "+g.pts);
+ }});
+
+// 8) SALTO HIPERESPACIAL
+let sh;
+add({ico:"✨",nom:"Hiperespacio",ayuda:"Toca cuando las dos barras estén alineadas",
+ init:()=>{ sh={a:0,b:0,va:0.035,vb:0.052,saltos:0,fallos:0}; },
+ paso:()=>{ const g=sh; fondo("#050318"); estrellas(0,20);
+   g.a+=g.va; g.b+=g.vb;
+   const cx=W/2, cy=H/2, R=150;
+   ctx.strokeStyle="rgba(197,140,255,.25)"; ctx.lineWidth=3;
+   ctx.beginPath(); ctx.arc(cx,cy,R,0,7); ctx.stroke();
+   ctx.strokeStyle="#c58cff"; ctx.lineWidth=7;
+   ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+Math.cos(g.a)*R,cy+Math.sin(g.a)*R); ctx.stroke();
+   ctx.strokeStyle="#39ff14"; ctx.lineWidth=5;
+   ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+Math.cos(g.b)*R,cy+Math.sin(g.b)*R); ctx.stroke();
+   texto("🚀",cx,cy,38);
+   texto("Toca cuando se junten",cx,H-50,20,"#9a8");
+   info("✨"+g.saltos+"  ❌"+g.fallos+"/3");
+ },
+ clic:()=>{ const g=sh;
+   let dif=Math.abs(((g.a-g.b)%(Math.PI*2)+Math.PI*2)%(Math.PI*2));
+   if(dif>Math.PI) dif=Math.PI*2-dif;
+   if(dif<0.22){ g.saltos++; g.va*=1.14; g.vb*=1.14;
+     if(g.saltos>=10){ anota("Hiperespacio",g.saltos); ganar("🏆 ¡10 SALTOS!",""); } }
+   else { g.fallos++;
+     if(g.fallos>=3){ anota("Hiperespacio",g.saltos); ganar("💥 Motor dañado",g.saltos+" saltos"); } } }});
+
+// 9) BASE LUNAR
+let bl;
+add({ico:"🏗️",nom:"Base lunar",ayuda:"Toca para poner módulos · junta energía",
+ init:()=>{ bl={mod:[],e:60,t:0,pts:0}; },
+ paso:()=>{ const g=bl; fondo("#0a0a14"); estrellas(0,25); g.t++;
+   ctx.fillStyle="#4a4a5a"; ctx.fillRect(0,H-70,W,70);
+   if(g.t%60===0){ g.e += g.mod.length*2 - 1;
+     g.pts += g.mod.length;
+     if(g.e<=0){ anota("Base lunar",g.pts); ganar("🔋 Sin energía",g.pts+" puntos"); return; } }
+   g.mod.forEach(m=>{ texto("🏠",m.x,H-95,34);
+     ctx.strokeStyle="rgba(197,140,255,.2)"; ctx.beginPath(); ctx.arc(m.x,H-95,40,0,7); ctx.stroke(); });
+   caja(20,20,200,20,"#222",null,10);
+   caja(20,20,200*Math.min(1,g.e/100),20,g.e>30?"#39ff14":"#ff5b6e",null,10);
+   texto("energía",120,56,14,"#9a8");
+   texto("Toca abajo para construir (cuesta 25⚡)",W/2,H-30,16,"#9a8");
+   info("🏠"+g.mod.length+"  ⚡"+Math.round(g.e)+"  ⭐"+g.pts);
+   if(g.mod.length>=8){ anota("Base lunar",g.pts); ganar("🏆 ¡BASE COMPLETA!",g.pts+" puntos"); }
+ },
+ clic:(x,y)=>{ if(y<H-130) return; if(bl.e<25) return;
+   bl.e-=25; bl.mod.push({x}); }});
+
+// 10) CARRERA DE NAVES
+let cn;
+add({ico:"🏁",nom:"Carrera",ayuda:"Esquiva y adelanta · llega primero",
+ init:()=>{ cn={y:H/2,x:120,ia:100,ob:[],t:0,meta:3000,d:0}; },
+ paso:()=>{ const g=cn; fondo("#060318"); g.t++;
+   for(let i=0;i<30;i++){ ctx.fillStyle="rgba(255,255,255,.35)";
+     ctx.fillRect((W-((i*97+g.t*9)%(W+100))),((i*61)%H),14,2); }
+   g.d+=6;
+   g.ia+=0.1+Math.sin(g.t*0.02)*0.05;
+   g.y+=(raton.y-g.y)*0.2;
+   if(teclas["arrowup"]||teclas["w"]) g.y-=7; if(teclas["arrowdown"]||teclas["s"]) g.y+=7;
+   g.y=Math.max(30,Math.min(H-30,g.y));
+   if(g.t%34===0) g.ob.push({x:W+30,y:40+Math.random()*(H-80)});
+   for(let i=g.ob.length-1;i>=0;i--){ const o=g.ob[i]; o.x-=8;
+     texto("☄️",o.x,o.y,30);
+     if(o.x<-40){ g.ob.splice(i,1); continue; }
+     if(Math.abs(o.x-120)<26 && Math.abs(o.y-g.y)<26){ g.d-=200; g.ob.splice(i,1); } }
+   texto("🚀",120,g.y,34);
+   texto("🛸",90,H-40,26);
+   caja(W-230,20,210,18,"#222",null,9);
+   caja(W-230,20,210*Math.min(1,g.d/g.meta),18,"#39ff14",null,9);
+   caja(W-230,44,210,12,"#222",null,6);
+   caja(W-230,44,210*Math.min(1,(g.ia*30)/g.meta),12,"#ff5b6e",null,6);
+   info("TÚ "+Math.floor(g.d/g.meta*100)+"%  🛸 "+Math.floor(g.ia*30/g.meta*100)+"%");
+   if(g.d>=g.meta){ anota("Carrera naves",Math.max(1,2000-g.t)); ganar("🏆 ¡GANASTE!",""); }
+   else if(g.ia*30>=g.meta) ganar("😢 Te ganaron","");
+ }});
+
+// 11) SEÑAL ALIEN
+let sa;
+add({ico:"📡",nom:"Señal",ayuda:"Repite la secuencia de la señal alien",
+ init:()=>{ sa={sec:[],paso:0,mostrando:true,t:0,idx:0,brilla:-1};
+   sa.sec.push((Math.random()*4)|0); },
+ paso:()=>{ const g=sa; fondo("#060a18"); estrellas(0,20);
+   const cols=["#ff5b6e","#39ff14","#2fd0ff","#ffd12e"];
+   const emo=["🔴","🟢","🔵","🟡"];
+   for(let i=0;i<4;i++){ const x=W/2+((i%2)-0.5)*180, y=H/2+(((i/2)|0)-0.5)*180;
+     caja(x-72,y-62,144,124, g.brilla===i?"#fff":cols[i], "#fff",18);
+     texto(emo[i],x,y,44); }
+   if(g.mostrando){ g.t++;
+     if(g.t<26) g.brilla=g.sec[g.idx];
+     else if(g.t<42) g.brilla=-1;
+     else { g.t=0; g.idx++; if(g.idx>=g.sec.length){ g.mostrando=false; g.idx=0; g.paso=0; g.brilla=-1; } }
+     texto("📡 Escuchando...",W/2,70,22,"#c58cff"); }
+   else texto("¡Repite la señal!",W/2,70,22,"#39ff14");
+   info("📡 "+g.sec.length);
+ },
+ clic:(x,y)=>{ const g=sa; if(g.mostrando) return;
+   for(let i=0;i<4;i++){ const cx=W/2+((i%2)-0.5)*180, cy=H/2+(((i/2)|0)-0.5)*180;
+     if(Math.abs(x-cx)<72 && Math.abs(y-cy)<62){
+       g.brilla=i; setTimeout(()=>{ if(sa) sa.brilla=-1; },150);
+       if(i===g.sec[g.paso]){ g.paso++;
+         if(g.paso>=g.sec.length){ anota("Señal",g.sec.length);
+           g.sec.push((Math.random()*4)|0); g.mostrando=true; g.t=0; g.idx=0; } }
+       else ganar("📡 Señal perdida","llegaste a "+g.sec.length);
+       return; } } }});
+
+// 12) GRAVEDAD
+let gr;
+add({ico:"🌑",nom:"Gravedad",ayuda:"Clic para cambiar la gravedad · junta ⭐",
+ init:()=>{ gr={y:H/2,v:0,g:0.4,e:[],t:0,pts:0}; },
+ paso:()=>{ const g=gr; fondo("#080516"); estrellas(g.t,25); g.t++;
+   g.v+=g.g; g.y+=g.v;
+   if(g.y<20||g.y>H-20){ anota("Gravedad",g.pts); ganar("💥 ¡Chocaste!",g.pts+" puntos"); return; }
+   if(g.t%40===0) g.e.push({x:W+20,y:60+Math.random()*(H-120)});
+   for(let i=g.e.length-1;i>=0;i--){ const e=g.e[i]; e.x-=5;
+     texto("⭐",e.x,e.y,26);
+     if(e.x<-30){ g.e.splice(i,1); continue; }
+     if(Math.abs(e.x-W*0.25)<26 && Math.abs(e.y-g.y)<26){ g.e.splice(i,1); g.pts+=10; } }
+   ctx.save(); ctx.translate(W*0.25,g.y); if(g.g<0) ctx.scale(1,-1); texto("🚀",0,0,32); ctx.restore();
+   info("⭐"+g.pts);
+ },
+ clic:()=>{ gr.g*=-1; },
+ tecla:(k)=>{ if(k===" ") gr.g*=-1; }});
+
+// 13) PLANETAS
+let pl;
+add({ico:"🪐",nom:"Planetas",ayuda:"Ordena los planetas del más chico al más grande",
+ init:()=>{ const p=[["☄️",16],["🌑",24],["🌍",34],["🪐",46],["☀️",58]].sort(()=>Math.random()-0.5);
+   pl={p:p.map((x,i)=>({e:x[0],r:x[1],x:W/2+(i-2)*130,ok:false})),sig:0}; },
+ paso:()=>{ fondo(); estrellas(0,30);
+   texto("Del más CHICO al más grande",W/2,60,24,"#c58cff");
+   pl.p.forEach(o=>{ if(o.ok) return; texto(o.e,o.x,H/2,o.r*2); });
+   info("➡ "+pl.sig+"/5");
+   if(pl.sig>=5){ anota("Planetas",5); ganar("🏆 ¡ORDENADOS!",""); }
+ },
+ clic:(x,y)=>{ const vivos=pl.p.filter(o=>!o.ok); if(!vivos.length) return;
+   const menor=vivos.reduce((a,b)=>a.r<b.r?a:b);
+   const toco=vivos.find(o=>Math.abs(o.x-x)<o.r+14 && Math.abs(H/2-y)<o.r+14);
+   if(!toco) return;
+   if(toco===menor){ toco.ok=true; pl.sig++; }
+   else { pl.p.forEach(o=>o.ok=false); pl.sig=0; } }});
+
+// 14) RESCATE ESPACIAL
+let re;
+add({ico:"🧑‍🚀",nom:"Rescate",ayuda:"Recoge a los astronautas y llévalos a la nave",
+ init:()=>{ re={x:W/2,y:H-80,llevo:0,a:[],t:0,salvados:0};
+   for(let i=0;i<5;i++) re.a.push({x:50+Math.random()*(W-100),y:60+Math.random()*(H-240)}); },
+ paso:()=>{ const g=re; fondo(); estrellas(g.t,25); g.t++;
+   ctx.fillStyle="#3a3a5a"; ctx.fillRect(W/2-60,H-40,120,40);
+   texto("🛸",W/2,H-22,34);
+   g.x+=(raton.x-g.x)*0.18; g.y+=(raton.y-g.y)*0.18;
+   if(teclas["arrowleft"]||teclas["a"]) g.x-=5; if(teclas["arrowright"]||teclas["d"]) g.x+=5;
+   if(teclas["arrowup"]||teclas["w"]) g.y-=5; if(teclas["arrowdown"]||teclas["s"]) g.y+=5;
+   for(let i=g.a.length-1;i>=0;i--){ const a=g.a[i]; texto("🧑‍🚀",a.x,a.y,26);
+     if(g.llevo<2 && Math.hypot(a.x-g.x,a.y-g.y)<28){ g.a.splice(i,1); g.llevo++; } }
+   if(g.llevo && Math.abs(g.x-W/2)<70 && g.y>H-90){ g.salvados+=g.llevo; g.llevo=0; }
+   texto("🚀",g.x,g.y,32);
+   for(let i=0;i<g.llevo;i++) texto("🧑‍🚀",g.x-14+i*28,g.y-30,18);
+   info("🧑‍🚀 "+g.salvados+"/5  llevas "+g.llevo);
+   if(g.salvados>=5){ anota("Rescate",Math.max(1,2000-g.t)); ganar("🏆 ¡TODOS A SALVO!",""); }
+ }});
+
+// 15) LÁSER
+let la;
+add({ico:"🔦",nom:"Láser",ayuda:"Toca para girar los espejos y llegar al objetivo",
+ init:()=>{ la={esp:[],obj:{x:W-80,y:H/2},nivel:1};
+   for(let i=0;i<3;i++) la.esp.push({x:180+i*160,y:120+Math.random()*(H-240),a:(Math.random()*4|0)*Math.PI/4}); },
+ paso:()=>{ const g=la; fondo("#06040e");
+   // trazar el rayo
+   let x=40, y=H/2, dx=1, dy=0, llego=false;
+   ctx.strokeStyle="#ff2b3a"; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(x,y);
+   for(let p=0;p<400;p++){
+     x+=dx*5; y+=dy*5;
+     const e=g.esp.find(e2=>Math.hypot(e2.x-x,e2.y-y)<16);
+     if(e){ const c=Math.cos(e.a*2), s=Math.sin(e.a*2);
+       const ndx=dx*c+dy*s, ndy=dx*s-dy*c; dx=ndx; dy=ndy;
+       ctx.lineTo(x,y); }
+     if(Math.hypot(g.obj.x-x,g.obj.y-y)<24){ llego=true; ctx.lineTo(x,y); break; }
+     if(x<0||x>W||y<0||y>H) break; }
+   ctx.lineTo(x,y); ctx.stroke();
+   texto("🔦",30,H/2,30);
+   g.esp.forEach(e=>{ ctx.save(); ctx.translate(e.x,e.y); ctx.rotate(e.a);
+     ctx.fillStyle="#9be3ff"; ctx.fillRect(-18,-3,36,6); ctx.restore(); });
+   texto(llego?"💥":"🎯",g.obj.x,g.obj.y,36);
+   info("nivel "+g.nivel);
+   if(llego){ anota("Láser",g.nivel);
+     if(g.nivel>=5){ ganar("🏆 ¡5 NIVELES!",""); }
+     else { g.nivel++; g.esp.forEach(e=>{ e.y=120+Math.random()*(H-240); e.a=(Math.random()*4|0)*Math.PI/4; });
+       g.obj.y=80+Math.random()*(H-160); } }
+ },
+ clic:(x,y)=>{ const e=la.esp.find(e2=>Math.hypot(e2.x-x,e2.y-y)<30);
+   if(e) e.a+=Math.PI/8; }});
+
+// 16) COMETA
+let co;
+add({ico:"☄️",nom:"Cometa",ayuda:"Guía al cometa por los anillos",
+ init:()=>{ co={x:W*0.2,y:H/2,vy:0,an:[],t:0,pts:0}; },
+ paso:()=>{ const g=co; fondo("#050314"); estrellas(g.t,30); g.t++;
+   g.y+=(raton.y-g.y)*0.14;
+   if(teclas["arrowup"]||teclas["w"]) g.y-=6; if(teclas["arrowdown"]||teclas["s"]) g.y+=6;
+   g.y=Math.max(30,Math.min(H-30,g.y));
+   if(g.t%50===0) g.an.push({x:W+40,y:70+Math.random()*(H-140),pasado:false});
+   for(let i=g.an.length-1;i>=0;i--){ const a=g.an[i]; a.x-=5;
+     ctx.strokeStyle=a.pasado?"#2a8f4a":"#ffd12e"; ctx.lineWidth=6;
+     ctx.beginPath(); ctx.ellipse(a.x,a.y,16,52,0,0,7); ctx.stroke();
+     if(!a.pasado && a.x<W*0.2){ a.pasado=true;
+       if(Math.abs(a.y-g.y)<52) g.pts+=10;
+       else { anota("Cometa",g.pts); ganar("💥 ¡Fallaste el anillo!",g.pts+" puntos"); return; } }
+     if(a.x<-50) g.an.splice(i,1); }
+   // cola del cometa
+   ctx.fillStyle="rgba(255,180,80,.3)";
+   for(let i=1;i<9;i++){ ctx.beginPath(); ctx.arc(g.x-i*9,g.y,10-i,0,7); ctx.fill(); }
+   texto("☄️",g.x,g.y,32);
+   info("⭐"+g.pts);
+ }});
+
+// 17) ROBOT MINERO
+let rm;
+add({ico:"🤖",nom:"Robot",ayuda:"Programa los pasos: toca flechas y luego ▶️",
+ init:()=>{ rm={prog:[],p:{x:0,y:0},meta:{x:5,y:3},corriendo:false,paso:0,t:0}; },
+ paso:()=>{ const g=rm; fondo("#0a0818");
+   const N=6,M=4,S=70, ox=(W-N*S)/2, oy=90;
+   for(let r=0;r<M;r++) for(let c=0;c<N;c++){
+     caja(ox+c*S+2,oy+r*S+2,S-4,S-4,"#15122a","#3a2a5a",6); }
+   texto("🎯",ox+g.meta.x*S+S/2,oy+g.meta.y*S+S/2,34);
+   texto("🤖",ox+g.p.x*S+S/2,oy+g.p.y*S+S/2,34);
+   // programa
+   g.prog.forEach((d,i)=>{ const x=70+i*44;
+     caja(x-18,H-120,36,36, i===g.paso&&g.corriendo?"#39ff14":"#2a2050","#c58cff",8);
+     texto(["⬆️","⬇️","⬅️","➡️"][d],x,H-102,20); });
+   ["⬆️","⬇️","⬅️","➡️"].forEach((e,i)=>{ const x=W/2+(i-1.5)*90;
+     caja(x-36,H-66,72,52,"#2a2050","#c58cff",10); texto(e,x,H-40,26); });
+   caja(W-110,H-66,90,52,"#1a5a2a","#39ff14",10); texto("▶️",W-65,H-40,26);
+   if(g.corriendo){ g.t++;
+     if(g.t%30===0){ const d=g.prog[g.paso];
+       if(d===0) g.p.y--; if(d===1) g.p.y++; if(d===2) g.p.x--; if(d===3) g.p.x++;
+       g.p.x=Math.max(0,Math.min(N-1,g.p.x)); g.p.y=Math.max(0,Math.min(M-1,g.p.y));
+       g.paso++;
+       if(g.p.x===g.meta.x && g.p.y===g.meta.y){ anota("Robot",10-g.prog.length);
+         ganar("🏆 ¡LLEGÓ!","con "+g.prog.length+" pasos"); return; }
+       if(g.paso>=g.prog.length){ g.corriendo=false; g.paso=0; g.p={x:0,y:0}; } } }
+   info("pasos: "+g.prog.length);
+ },
+ clic:(x,y)=>{ const g=rm;
+   if(y<H-70) return;
+   if(x>W-120){ if(g.prog.length){ g.corriendo=true; g.paso=0; g.t=0; g.p={x:0,y:0}; } return; }
+   for(let i=0;i<4;i++){ const cx=W/2+(i-1.5)*90;
+     if(Math.abs(x-cx)<36 && g.prog.length<9){ g.prog.push(i); return; } } }});
+
+// 18) AGUJERO NEGRO
+let an;
+add({ico:"🕳️",nom:"Agujero negro",ayuda:"Huye del agujero negro el mayor tiempo posible",
+ init:()=>{ an={x:W*0.8,y:H/2,hx:60,hy:H/2,r:40,t:0}; },
+ paso:()=>{ const g=an; fondo("#030208"); g.t++;
+   // el agujero crece y persigue
+   g.r=40+g.t*0.012;
+   const dx=g.x-g.hx, dy=g.y-g.hy, d=Math.hypot(dx,dy)||1;
+   g.hx+=dx/d*0.9; g.hy+=dy/d*0.9;
+   // disco de acreción
+   for(let i=5;i>0;i--){ ctx.fillStyle="rgba(197,140,255,"+(0.06*i)+")";
+     ctx.beginPath(); ctx.arc(g.hx,g.hy,g.r+i*14,0,7); ctx.fill(); }
+   ctx.fillStyle="#000"; ctx.beginPath(); ctx.arc(g.hx,g.hy,g.r,0,7); ctx.fill();
+   ctx.strokeStyle="#c58cff"; ctx.lineWidth=3; ctx.stroke();
+   // la nave es arrastrada
+   g.x -= dx/d*(0.6+g.t*0.0006)*-1 * -1;
+   g.x += (raton.x-g.x)*0.12; g.y += (raton.y-g.y)*0.12;
+   if(teclas["arrowleft"]||teclas["a"]) g.x-=6; if(teclas["arrowright"]||teclas["d"]) g.x+=6;
+   if(teclas["arrowup"]||teclas["w"]) g.y-=6; if(teclas["arrowdown"]||teclas["s"]) g.y+=6;
+   // atracción
+   g.x -= dx/d*0.8; g.y -= dy/d*0.8;
+   g.x=Math.max(16,Math.min(W-16,g.x)); g.y=Math.max(16,Math.min(H-16,g.y));
+   texto("🚀",g.x,g.y,32);
+   const seg=Math.floor(g.t/60);
+   info("⏱ "+seg+"s");
+   if(d<g.r+14){ anota("Agujero negro",seg); ganar("🕳️ ¡Te tragó!","aguantaste "+seg+"s"); }
+ }});
+
+/* ---------- menú ---------- */
+$("grid").innerHTML = JUEGOS.map((j,i)=>
+  '<div class="gbtn" data-i="'+i+'"><span class="ico">'+j.ico+'</span><span class="nm">'+j.nom+'</span></div>').join("");
+document.querySelectorAll(".gbtn").forEach(b=> b.onclick=()=>abrir(JUEGOS[+b.dataset.i]));
+fit();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>

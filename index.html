@@ -658,11 +658,11 @@
   #scrCloseBtn{position:fixed;top:8px;right:12px;z-index:201;background:rgba(0,0,0,.6);color:#fff;border:1px solid #ff2b3a;
     border-radius:8px;padding:7px 13px;font-family:"Consolas",monospace;font-weight:700;cursor:pointer}
   /* juegos nuevos (estilo, héroe, piano) — mismos paneles de iframe */
-  #estFs,#herFs,#piaFs,#duoFs,#refFs,#burFs,#claFs,#accFs,#peqFs,#aveFs,#c4xFs,#depFs{position:fixed;inset:0;z-index:200;display:none}
-  #estFs.open,#herFs.open,#piaFs.open,#duoFs.open,#refFs.open,#burFs.open,#claFs.open,#accFs.open,#peqFs.open,#aveFs.open,#c4xFs.open,#depFs.open{display:block}
-  #estFs{background:#e89bd0}#herFs{background:#0a0a1e}#piaFs{background:#0a0a1e}#duoFs{background:#070c18}#refFs{background:#141428}#burFs{background:#8fd8ff}#claFs{background:#080c18}#accFs{background:#0c0614}#peqFs{background:#ffe9a8}#aveFs{background:#050f0c}#c4xFs{background:#04080f}#depFs{background:#04141e}
-  #estFrame,#herFrame,#piaFrame,#duoFrame,#refFrame,#burFrame,#claFrame,#accFrame,#peqFrame,#aveFrame,#c4xFrame,#depFrame{width:100%;height:100%;border:none;display:block}
-  #estCloseBtn,#herCloseBtn,#piaCloseBtn,#duoCloseBtn,#refCloseBtn,#burCloseBtn,#claCloseBtn,#accCloseBtn,#peqCloseBtn,#aveCloseBtn,#c4xCloseBtn,#depCloseBtn{position:fixed;top:8px;right:12px;z-index:201;background:rgba(0,0,0,.55);color:#fff;
+  #estFs,#herFs,#piaFs,#duoFs,#refFs,#burFs,#claFs,#accFs,#peqFs,#aveFs,#c4xFs,#depFs,#espFs{position:fixed;inset:0;z-index:200;display:none}
+  #estFs.open,#herFs.open,#piaFs.open,#duoFs.open,#refFs.open,#burFs.open,#claFs.open,#accFs.open,#peqFs.open,#aveFs.open,#c4xFs.open,#depFs.open,#espFs.open{display:block}
+  #estFs{background:#e89bd0}#herFs{background:#0a0a1e}#piaFs{background:#0a0a1e}#duoFs{background:#070c18}#refFs{background:#141428}#burFs{background:#8fd8ff}#claFs{background:#080c18}#accFs{background:#0c0614}#peqFs{background:#ffe9a8}#aveFs{background:#050f0c}#c4xFs{background:#04080f}#depFs{background:#04141e}#espFs{background:#05030f}
+  #estFrame,#herFrame,#piaFrame,#duoFrame,#refFrame,#burFrame,#claFrame,#accFrame,#peqFrame,#aveFrame,#c4xFrame,#depFrame,#espFrame{width:100%;height:100%;border:none;display:block}
+  #estCloseBtn,#herCloseBtn,#piaCloseBtn,#duoCloseBtn,#refCloseBtn,#burCloseBtn,#claCloseBtn,#accCloseBtn,#peqCloseBtn,#aveCloseBtn,#c4xCloseBtn,#depCloseBtn,#espCloseBtn{position:fixed;top:8px;right:12px;z-index:201;background:rgba(0,0,0,.55);color:#fff;
     border:1px solid #fff;border-radius:8px;padding:7px 13px;font-family:"Consolas",monospace;font-weight:700;cursor:pointer}
   /* ---------- JUEGO: F1 RB RUSH ---------- */
   /* 🤖 WALLY presentador de la Sala de Trofeos */
@@ -1307,7 +1307,7 @@
         <button class="hub-card" data-go="juegos">
           <div class="hub-card-ico">🎮</div>
           <div class="hub-card-t">Jugar</div>
-          <div class="hub-card-d">147 juegos gratis</div>
+          <div class="hub-card-d">165 juegos gratis</div>
         </button>
         <button class="hub-card" data-go="chat">
           <div class="hub-card-ico">💬</div>
@@ -2072,6 +2072,7 @@
     <button class="btn pickgame" id="pickTrophies" style="background:linear-gradient(90deg,#1a1406,#3a2c08);border-color:#ffd12e;color:#ffd12e">🏆 SALA DE TROFEOS</button>
     <button class="btn pickgame" id="pickWally" style="background:linear-gradient(90deg,#061a1e,#083a44);border-color:#38b6ff;color:#8fd0ff">🤖 HABLAR CON WALLY 🎤</button>
     <button class="btn pickgame" id="pickDuo" style="background:linear-gradient(90deg,#1a3a6e,#2fd0ff);border-color:#9be3ff;color:#eafaff">👥 20 JUEGOS DE 2 JUGADORES</button>
+    <button class="btn pickgame" id="pickEsp" style="background:linear-gradient(90deg,#1a1040,#6a3fa8);border-color:#c58cff;color:#e8d6ff">🚀 18 DEL ESPACIO</button>
     <button class="btn pickgame" id="pickDep" style="background:linear-gradient(90deg,#0d3a52,#2a8fc0);border-color:#5fd1ff;color:#d8f4ff">🏅 18 DE DEPORTES Y CARRERAS</button>
     <button class="btn pickgame" id="pickC4x" style="background:linear-gradient(90deg,#06121a,#0a4a6a);border-color:#00e0ff;color:#9be3ff">🧩 CUBO 4x4</button>
     <button class="btn pickgame" id="pickAve" style="background:linear-gradient(90deg,#10302a,#2a8f6a);border-color:#5fe0a0;color:#d8fff0">🗺️ 18 DE AVENTURA Y ESTRATEGIA</button>
@@ -2275,6 +2276,7 @@
 <div id="scrFs"><iframe id="scrFrame" allow="fullscreen; pointer-lock; autoplay" title="SCREAM"></iframe><button id="scrCloseBtn">✕ Salir</button></div>
 <!-- juegos nuevos para todas las edades -->
 <div id="duoFs"><iframe id="duoFrame" allow="fullscreen; autoplay" title="2 JUGADORES"></iframe><button id="duoCloseBtn">✕ Salir</button></div>
+<div id="espFs"><iframe id="espFrame" allow="fullscreen; autoplay" title="ESPACIO"></iframe><button id="espCloseBtn">✕ Salir</button></div>
 <div id="depFs"><iframe id="depFrame" allow="fullscreen; autoplay" title="DEPORTES"></iframe><button id="depCloseBtn">✕ Salir</button></div>
 <div id="c4xFs"><iframe id="c4xFrame" allow="fullscreen; autoplay" title="CUBO 4x4"></iframe><button id="c4xCloseBtn">✕ Salir</button></div>
 <div id="aveFs"><iframe id="aveFrame" allow="fullscreen; autoplay" title="AVENTURA"></iframe><button id="aveCloseBtn">✕ Salir</button></div>
@@ -2751,7 +2753,7 @@ const NOMBRES_JUEGOS = {
   nag:"🧟 Not a Game", notagame:"🧟 Not a Game", rk:"🧩 Cubo 3x3", rubik:"🧩 Cubo 3x3",
   jp:"🦖 Jurassic", jurassic:"🦖 Jurassic", sw:"⭐ Star Wars", scr:"🕷️ Scream", scream:"🕷️ Scream",
   // los juegos nuevos
-  duo:"👥 2 Jugadores", reflejos:"⚡ Test de Reflejos", burbujas:"🫧 Burbujas", clasicos:"🎲 Juegos Clásicos", accion:"⚡ Juegos de Acción", peques:"🧸 Para los peques", aventura:"🗺️ Aventura y Estrategia", cubo4:"🧩 Cubo 4x4", deportes:"🏅 Deportes y Carreras",
+  duo:"👥 2 Jugadores", reflejos:"⚡ Test de Reflejos", burbujas:"🫧 Burbujas", clasicos:"🎲 Juegos Clásicos", accion:"⚡ Juegos de Acción", peques:"🧸 Para los peques", aventura:"🗺️ Aventura y Estrategia", cubo4:"🧩 Cubo 4x4", deportes:"🏅 Deportes y Carreras", espacio:"🚀 Espacio",
   estilista:"💇‍♀️ Salón de Estilo", heroe:"🕷️ Héroe Araña", piano:"🎹 Piano Mágico",
 };
 // Devuelve el nombre bonito; si no lo conoce, deja la clave con la primera en mayúscula.
@@ -10531,6 +10533,8 @@ $("pickC4x").onclick=()=>abreMundo("c4xFrame","c4xFs","cubo4.html","CUBO 4x4",["
 $("c4xCloseBtn").onclick=()=>cierraMundo("c4xFrame","c4xFs");
 $("pickDep").onclick=()=>abreMundo("depFrame","depFs","deportes.html","DEPORTES",["calentando…","pisando la cancha…"]);
 $("depCloseBtn").onclick=()=>cierraMundo("depFrame","depFs");
+$("pickEsp").onclick=()=>abreMundo("espFrame","espFs","espacio.html","ESPACIO",["encendiendo motores…","calculando el salto…"]);
+$("espCloseBtn").onclick=()=>cierraMundo("espFrame","espFs");
 $("pickEst").onclick=()=>abreMundo("estFrame","estFs","estilista.html","SALÓN DE ESTILO",["calentando las planchas…","sacando el maquillaje…","eligiendo los peinados…"]);
 $("pickHer").onclick=()=>abreMundo("herFrame","herFs","heroe.html","HÉROE ARAÑA",["tejiendo las telarañas…","subiendo a los edificios…","cargando la ciudad…"]);
 $("pickPia").onclick=()=>abreMundo("piaFrame","piaFs","piano.html","PIANO MÁGICO",["afinando el piano…","buscando las canciones…"]);
@@ -11249,7 +11253,7 @@ function edtuAtras(){
   // 1) ¿hay un juego a pantalla completa abierto? ciérralo
   const mundos = [["swFrame","swFs"],["jpFrame","jpFs"],["scrFrame","scrFs"],["nagFrame","nagFs"],
     ["rkFrame","rkFs"],["tenFrame","tenFs"],["turboFrame","turboFs"],["canelaFrame","canelaFs"],
-    ["duoFrame","duoFs"],["refFrame","refFs"],["burFrame","burFs"],["claFrame","claFs"],["accFrame","accFs"],["peqFrame","peqFs"],["aveFrame","aveFs"],["c4xFrame","c4xFs"],["depFrame","depFs"],["estFrame","estFs"],["herFrame","herFs"],["piaFrame","piaFs"]];
+    ["duoFrame","duoFs"],["refFrame","refFs"],["burFrame","burFs"],["claFrame","claFs"],["accFrame","accFs"],["peqFrame","peqFs"],["aveFrame","aveFs"],["c4xFrame","c4xFs"],["depFrame","depFs"],["espFrame","espFs"],["estFrame","estFs"],["herFrame","herFs"],["piaFrame","piaFs"]];
   for(const [marco,panel] of mundos){
     const p = $(panel);
     if(p && p.classList.contains("open")){ try{ cierraMundo(marco,panel); }catch(e){} return true; }
