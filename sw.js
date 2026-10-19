@@ -30,7 +30,9 @@
 // v74: 18 de animales y naturaleza (183 juegos).
 // v75: 18 de musica y ritmo, con sonido de verdad (201 juegos).
 // v76: 18 de ciencia e inventos (219 juegos).
-const CACHE = "edtu-v76";
+// v77: 18 de cocina y oficios (237 juegos) + UN SOLO boton de salir:
+//      ahora vuelve al menu del paquete en vez de cerrar todo de golpe.
+const CACHE = "edtu-v77";
 const SHELL = ["./", "./index.html", "./starwars.html", "./wally-kb.js", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 // Estas SIEMPRE se piden a la red primero: son las que cambian con cada mejora.
 const FRESCOS = [".html", "/"];

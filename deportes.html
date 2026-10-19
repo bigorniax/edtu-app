@@ -46,7 +46,7 @@
   <div class="bar">
     <h2 id="gname">Juego</h2>
     <span class="info" id="info"></span>
-    <button id="back">✕ Menú</button>
+    <button id="back" style="display:none">✕ Menú</button>
   </div>
   <div id="stage">
     <canvas id="cv"></canvas>
@@ -501,6 +501,20 @@ fit();
       if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
   }, true);
 });
+
+/* 🔙 UN SOLO BOTÓN DE SALIR: EDTU nos avisa y decidimos aquí.
+   Si hay un juego abierto, volvemos al menú del paquete; si ya estamos
+   en el menú, le decimos a EDTU que cierre el marco. */
+addEventListener("message",function(e){
+  var d=e.data||{};
+  if(d.edtuSalir){
+    if($("play").classList.contains("on")){ cerrar(); }
+    else { try{ parent.postMessage({edtuCerrarMundo:1},"*"); }catch(x){} }
+  }
+});
+/* le avisamos a EDTU que este paquete sabe manejar el botón */
+try{ parent.postMessage({edtuPackListo:1},"*"); }catch(x){}
+
 </script>
 </body>
 </html>
