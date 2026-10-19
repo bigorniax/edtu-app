@@ -28,7 +28,8 @@
 // v72: 18 de deportes y carreras (147 juegos).
 // v73: 18 del espacio (165 juegos).
 // v74: 18 de animales y naturaleza (183 juegos).
-const CACHE = "edtu-v74";
+// v75: 18 de musica y ritmo, con sonido de verdad (201 juegos).
+const CACHE = "edtu-v75";
 const SHELL = ["./", "./index.html", "./starwars.html", "./wally-kb.js", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 // Estas SIEMPRE se piden a la red primero: son las que cambian con cada mejora.
 const FRESCOS = [".html", "/"];

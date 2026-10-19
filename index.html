@@ -658,11 +658,11 @@
   #scrCloseBtn{position:fixed;top:8px;right:12px;z-index:201;background:rgba(0,0,0,.6);color:#fff;border:1px solid #ff2b3a;
     border-radius:8px;padding:7px 13px;font-family:"Consolas",monospace;font-weight:700;cursor:pointer}
   /* juegos nuevos (estilo, héroe, piano) — mismos paneles de iframe */
-  #estFs,#herFs,#piaFs,#duoFs,#refFs,#burFs,#claFs,#accFs,#peqFs,#aveFs,#c4xFs,#depFs,#espFs,#natFs{position:fixed;inset:0;z-index:200;display:none}
-  #estFs.open,#herFs.open,#piaFs.open,#duoFs.open,#refFs.open,#burFs.open,#claFs.open,#accFs.open,#peqFs.open,#aveFs.open,#c4xFs.open,#depFs.open,#espFs.open,#natFs.open{display:block}
-  #estFs{background:#e89bd0}#herFs{background:#0a0a1e}#piaFs{background:#0a0a1e}#duoFs{background:#070c18}#refFs{background:#141428}#burFs{background:#8fd8ff}#claFs{background:#080c18}#accFs{background:#0c0614}#peqFs{background:#ffe9a8}#aveFs{background:#050f0c}#c4xFs{background:#04080f}#depFs{background:#04141e}#espFs{background:#05030f}#natFs{background:#060e04}
-  #estFrame,#herFrame,#piaFrame,#duoFrame,#refFrame,#burFrame,#claFrame,#accFrame,#peqFrame,#aveFrame,#c4xFrame,#depFrame,#espFrame,#natFrame{width:100%;height:100%;border:none;display:block}
-  #estCloseBtn,#herCloseBtn,#piaCloseBtn,#duoCloseBtn,#refCloseBtn,#burCloseBtn,#claCloseBtn,#accCloseBtn,#peqCloseBtn,#aveCloseBtn,#c4xCloseBtn,#depCloseBtn,#espCloseBtn,#natCloseBtn{position:fixed;top:8px;right:12px;z-index:201;background:rgba(0,0,0,.55);color:#fff;
+  #estFs,#herFs,#piaFs,#duoFs,#refFs,#burFs,#claFs,#accFs,#peqFs,#aveFs,#c4xFs,#depFs,#espFs,#natFs,#musFs{position:fixed;inset:0;z-index:200;display:none}
+  #estFs.open,#herFs.open,#piaFs.open,#duoFs.open,#refFs.open,#burFs.open,#claFs.open,#accFs.open,#peqFs.open,#aveFs.open,#c4xFs.open,#depFs.open,#espFs.open,#natFs.open,#musFs.open{display:block}
+  #estFs{background:#e89bd0}#herFs{background:#0a0a1e}#piaFs{background:#0a0a1e}#duoFs{background:#070c18}#refFs{background:#141428}#burFs{background:#8fd8ff}#claFs{background:#080c18}#accFs{background:#0c0614}#peqFs{background:#ffe9a8}#aveFs{background:#050f0c}#c4xFs{background:#04080f}#depFs{background:#04141e}#espFs{background:#05030f}#natFs{background:#060e04}#musFs{background:#0a0418}
+  #estFrame,#herFrame,#piaFrame,#duoFrame,#refFrame,#burFrame,#claFrame,#accFrame,#peqFrame,#aveFrame,#c4xFrame,#depFrame,#espFrame,#natFrame,#musFrame{width:100%;height:100%;border:none;display:block}
+  #estCloseBtn,#herCloseBtn,#piaCloseBtn,#duoCloseBtn,#refCloseBtn,#burCloseBtn,#claCloseBtn,#accCloseBtn,#peqCloseBtn,#aveCloseBtn,#c4xCloseBtn,#depCloseBtn,#espCloseBtn,#natCloseBtn,#musCloseBtn{position:fixed;top:8px;right:12px;z-index:201;background:rgba(0,0,0,.55);color:#fff;
     border:1px solid #fff;border-radius:8px;padding:7px 13px;font-family:"Consolas",monospace;font-weight:700;cursor:pointer}
   /* ---------- JUEGO: F1 RB RUSH ---------- */
   /* 🤖 WALLY presentador de la Sala de Trofeos */
@@ -1307,7 +1307,7 @@
         <button class="hub-card" data-go="juegos">
           <div class="hub-card-ico">🎮</div>
           <div class="hub-card-t">Jugar</div>
-          <div class="hub-card-d">183 juegos gratis</div>
+          <div class="hub-card-d">201 juegos gratis</div>
         </button>
         <button class="hub-card" data-go="chat">
           <div class="hub-card-ico">💬</div>
@@ -2074,6 +2074,7 @@
     <button class="btn pickgame" id="pickDuo" style="background:linear-gradient(90deg,#1a3a6e,#2fd0ff);border-color:#9be3ff;color:#eafaff">👥 20 JUEGOS DE 2 JUGADORES</button>
     <button class="btn pickgame" id="pickEsp" style="background:linear-gradient(90deg,#1a1040,#6a3fa8);border-color:#c58cff;color:#e8d6ff">🚀 18 DEL ESPACIO</button>
     <button class="btn pickgame" id="pickNat" style="background:linear-gradient(90deg,#0f2a0c,#3f8a2a);border-color:#9be37d;color:#dfffd0">🌿 18 DE NATURALEZA</button>
+    <button class="btn pickgame" id="pickMus" style="background:linear-gradient(90deg,#2a1040,#8a3fa8);border-color:#c58cff;color:#efe0ff">🎵 18 DE MÚSICA</button>
     <button class="btn pickgame" id="pickDep" style="background:linear-gradient(90deg,#0d3a52,#2a8fc0);border-color:#5fd1ff;color:#d8f4ff">🏅 18 DE DEPORTES Y CARRERAS</button>
     <button class="btn pickgame" id="pickC4x" style="background:linear-gradient(90deg,#06121a,#0a4a6a);border-color:#00e0ff;color:#9be3ff">🧩 CUBO 4x4</button>
     <button class="btn pickgame" id="pickAve" style="background:linear-gradient(90deg,#10302a,#2a8f6a);border-color:#5fe0a0;color:#d8fff0">🗺️ 18 DE AVENTURA Y ESTRATEGIA</button>
@@ -2279,6 +2280,7 @@
 <div id="duoFs"><iframe id="duoFrame" allow="fullscreen; autoplay" title="2 JUGADORES"></iframe><button id="duoCloseBtn">✕ Salir</button></div>
 <div id="espFs"><iframe id="espFrame" allow="fullscreen; autoplay" title="ESPACIO"></iframe><button id="espCloseBtn">✕ Salir</button></div>
 <div id="natFs"><iframe id="natFrame" allow="fullscreen; autoplay" title="NATURALEZA"></iframe><button id="natCloseBtn">✕ Salir</button></div>
+<div id="musFs"><iframe id="musFrame" allow="fullscreen; autoplay" title="MUSICA"></iframe><button id="musCloseBtn">✕ Salir</button></div>
 <div id="depFs"><iframe id="depFrame" allow="fullscreen; autoplay" title="DEPORTES"></iframe><button id="depCloseBtn">✕ Salir</button></div>
 <div id="c4xFs"><iframe id="c4xFrame" allow="fullscreen; autoplay" title="CUBO 4x4"></iframe><button id="c4xCloseBtn">✕ Salir</button></div>
 <div id="aveFs"><iframe id="aveFrame" allow="fullscreen; autoplay" title="AVENTURA"></iframe><button id="aveCloseBtn">✕ Salir</button></div>
@@ -2755,7 +2757,7 @@ const NOMBRES_JUEGOS = {
   nag:"🧟 Not a Game", notagame:"🧟 Not a Game", rk:"🧩 Cubo 3x3", rubik:"🧩 Cubo 3x3",
   jp:"🦖 Jurassic", jurassic:"🦖 Jurassic", sw:"⭐ Star Wars", scr:"🕷️ Scream", scream:"🕷️ Scream",
   // los juegos nuevos
-  duo:"👥 2 Jugadores", reflejos:"⚡ Test de Reflejos", burbujas:"🫧 Burbujas", clasicos:"🎲 Juegos Clásicos", accion:"⚡ Juegos de Acción", peques:"🧸 Para los peques", aventura:"🗺️ Aventura y Estrategia", cubo4:"🧩 Cubo 4x4", deportes:"🏅 Deportes y Carreras", espacio:"🚀 Espacio", naturaleza:"🌿 Naturaleza", natura:"🌿 Naturaleza",
+  duo:"👥 2 Jugadores", reflejos:"⚡ Test de Reflejos", burbujas:"🫧 Burbujas", clasicos:"🎲 Juegos Clásicos", accion:"⚡ Juegos de Acción", peques:"🧸 Para los peques", aventura:"🗺️ Aventura y Estrategia", cubo4:"🧩 Cubo 4x4", deportes:"🏅 Deportes y Carreras", espacio:"🚀 Espacio", naturaleza:"🌿 Naturaleza", musica:"🎵 Música y Ritmo", natura:"🌿 Naturaleza",
   estilista:"💇‍♀️ Salón de Estilo", heroe:"🕷️ Héroe Araña", piano:"🎹 Piano Mágico",
 };
 // Devuelve el nombre bonito; si no lo conoce, deja la clave con la primera en mayúscula.
@@ -10539,6 +10541,8 @@ $("pickEsp").onclick=()=>abreMundo("espFrame","espFs","espacio.html","ESPACIO",[
 $("espCloseBtn").onclick=()=>cierraMundo("espFrame","espFs");
 $("pickNat").onclick=()=>abreMundo("natFrame","natFs","naturaleza.html","NATURALEZA",["despertando a los bichos…","regando las plantas…"]);
 $("natCloseBtn").onclick=()=>cierraMundo("natFrame","natFs");
+$("pickMus").onclick=()=>abreMundo("musFrame","musFs","musica.html","MUSICA",["afinando los instrumentos…","contando el compás…"]);
+$("musCloseBtn").onclick=()=>cierraMundo("musFrame","musFs");
 $("pickEst").onclick=()=>abreMundo("estFrame","estFs","estilista.html","SALÓN DE ESTILO",["calentando las planchas…","sacando el maquillaje…","eligiendo los peinados…"]);
 $("pickHer").onclick=()=>abreMundo("herFrame","herFs","heroe.html","HÉROE ARAÑA",["tejiendo las telarañas…","subiendo a los edificios…","cargando la ciudad…"]);
 $("pickPia").onclick=()=>abreMundo("piaFrame","piaFs","piano.html","PIANO MÁGICO",["afinando el piano…","buscando las canciones…"]);
@@ -11257,7 +11261,7 @@ function edtuAtras(){
   // 1) ¿hay un juego a pantalla completa abierto? ciérralo
   const mundos = [["swFrame","swFs"],["jpFrame","jpFs"],["scrFrame","scrFs"],["nagFrame","nagFs"],
     ["rkFrame","rkFs"],["tenFrame","tenFs"],["turboFrame","turboFs"],["canelaFrame","canelaFs"],
-    ["duoFrame","duoFs"],["refFrame","refFs"],["burFrame","burFs"],["claFrame","claFs"],["accFrame","accFs"],["peqFrame","peqFs"],["aveFrame","aveFs"],["c4xFrame","c4xFs"],["depFrame","depFs"],["espFrame","espFs"],["natFrame","natFs"],["estFrame","estFs"],["herFrame","herFs"],["piaFrame","piaFs"]];
+    ["duoFrame","duoFs"],["refFrame","refFs"],["burFrame","burFs"],["claFrame","claFs"],["accFrame","accFs"],["peqFrame","peqFs"],["aveFrame","aveFs"],["c4xFrame","c4xFs"],["depFrame","depFs"],["espFrame","espFs"],["natFrame","natFs"],["musFrame","musFs"],["estFrame","estFs"],["herFrame","herFs"],["piaFrame","piaFs"]];
   for(const [marco,panel] of mundos){
     const p = $(panel);
     if(p && p.classList.contains("open")){ try{ cierraMundo(marco,panel); }catch(e){} return true; }

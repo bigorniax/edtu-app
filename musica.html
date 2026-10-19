@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Música</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;
+    background:radial-gradient(ellipse at 50% 0%,#2a1040,#0a0418 60%);color:#efe8ff}
+  #menu{position:absolute;inset:0;overflow-y:auto;padding:16px}
+  #menu h1{text-align:center;font-size:25px;color:#c58cff;text-shadow:0 0 16px rgba(197,140,255,.5)}
+  #menu .sub{text-align:center;color:#a894c4;font-size:13px;margin:4px 0 16px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;max-width:1000px;margin:0 auto}
+  .gbtn{cursor:pointer;border:2px solid rgba(197,140,255,.3);border-radius:14px;padding:13px 9px;text-align:center;
+    background:linear-gradient(160deg,rgba(48,20,74,.9),rgba(14,6,26,.9));transition:all .14s}
+  .gbtn:hover{transform:translateY(-3px);border-color:#c58cff;box-shadow:0 7px 20px rgba(197,140,255,.25)}
+  .gbtn .ico{font-size:28px;display:block;margin-bottom:4px}
+  .gbtn .nm{font-weight:800;font-size:13px;color:#fff}
+  #play{position:absolute;inset:0;display:none;flex-direction:column}
+  #play.on{display:flex}
+  .bar{display:flex;align-items:center;justify-content:space-between;padding:9px 13px;background:rgba(10,4,24,.92);
+    border-bottom:1px solid rgba(197,140,255,.25);flex-shrink:0;gap:8px}
+  .bar h2{font-size:16px;color:#c58cff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bar .info{font-weight:800;font-size:15px;color:#ffd12e;white-space:nowrap}
+  .bar button{cursor:pointer;background:rgba(255,91,110,.15);border:1.5px solid rgba(255,91,110,.5);color:#ff8fa0;
+    border-radius:9px;padding:6px 11px;font-weight:700;font-size:12px;white-space:nowrap}
+  #stage{flex:1;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:8px}
+  canvas{display:block;max-width:100%;max-height:100%;touch-action:none;border-radius:10px}
+  .help{position:absolute;bottom:6px;left:0;right:0;text-align:center;color:#a894c4;font-size:12px;pointer-events:none}
+  .win{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(8,3,18,.93);text-align:center;padding:20px;z-index:5}
+  .win.on{display:flex}
+  .win h2{font-size:28px;margin-bottom:8px;color:#c58cff}
+  .win button{margin-top:16px;cursor:pointer;font-size:17px;font-weight:900;border:none;border-radius:14px;padding:13px 30px;
+    color:#1a0828;background:linear-gradient(90deg,#c58cff,#ff8fd0)}
+</style>
+</head>
+<body>
+<div id="menu">
+  <h1>🎵 Música y Ritmo</h1>
+  <p class="sub">Toca, canta y sigue el compás · <b>18 juegos</b></p>
+  <div class="grid" id="grid"></div>
+</div>
+<div id="play">
+  <div class="bar">
+    <h2 id="gname">Juego</h2>
+    <span class="info" id="info"></span>
+    <button id="back">✕ Menú</button>
+  </div>
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div class="help" id="help"></div>
+    <div class="win" id="win"><h2 id="winTxt">¡Bien!</h2><p id="winSub"></p><button id="again">▶ Otra vez</button></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+let W=700,H=560;
+function tam(w,h){ W=w;H=h;cv.width=w;cv.height=h;fit(); }
+function fit(){ const st=$("stage"); const m=Math.min((st.clientWidth-16)/W,(st.clientHeight-16)/H,1.6);
+  cv.style.width=(W*m)+"px"; cv.style.height=(H*m)+"px"; }
+addEventListener("resize",fit);
+function fondo(c){ ctx.fillStyle=c||"#12061f"; ctx.fillRect(0,0,W,H); }
+function texto(t,x,y,s,c,a){ ctx.fillStyle=c||"#fff"; ctx.font="900 "+(s||20)+"px Segoe UI,sans-serif";
+  ctx.textAlign=a||"center"; ctx.textBaseline="middle"; ctx.fillText(t,x,y); }
+function caja(x,y,w,h,f,b,r){ r=r||8; ctx.beginPath(); ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+  if(f){ctx.fillStyle=f;ctx.fill();} if(b){ctx.strokeStyle=b;ctx.lineWidth=2;ctx.stroke();} }
+function info(t){ $("info").textContent=t||""; }
+function ganar(t,s){ $("winTxt").innerHTML=t; $("winSub").textContent=s||""; $("win").classList.add("on"); }
+function anota(n,p){ try{ const k="edtu_musica_best"; const v=Math.max(parseInt(localStorage.getItem(k)||"0",10)||0,p||1);
+  localStorage.setItem(k,String(v));
+  if(window.parent&&window.parent.edtuPlayDay) window.parent.edtuPlayDay("Música: "+n,p,p); }catch(e){} }
+
+/* 🔊 sonido de verdad: notas con Web Audio (sin archivos de fuera) */
+let AC=null;
+function ac(){ try{ if(!AC) AC=new (window.AudioContext||window.webkitAudioContext)();
+  if(AC.state==="suspended") AC.resume(); return AC; }catch(e){ return null; } }
+// nota por número MIDI: 60 = do central
+function nota(midi,dur,tipo,vol){ const a=ac(); if(!a) return;
+  try{ const o=a.createOscillator(), g=a.createGain();
+    o.type=tipo||"triangle"; o.frequency.value=440*Math.pow(2,(midi-69)/12);
+    g.gain.setValueAtTime(0,a.currentTime);
+    g.gain.linearRampToValueAtTime(vol||0.22,a.currentTime+0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001,a.currentTime+(dur||0.3));
+    o.connect(g); g.connect(a.destination); o.start(); o.stop(a.currentTime+(dur||0.3)+0.05);
+  }catch(e){} }
+function ruido(dur,vol){ const a=ac(); if(!a) return;
+  try{ const n=Math.floor(a.sampleRate*(dur||0.12));
+    const b=a.createBuffer(1,n,a.sampleRate), d=b.getChannelData(0);
+    for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*(1-i/n);
+    const s=a.createBufferSource(), g=a.createGain();
+    s.buffer=b; g.gain.value=vol||0.2; s.connect(g); g.connect(a.destination); s.start();
+  }catch(e){} }
+const ESCALA=[60,62,64,65,67,69,71,72];          // do re mi fa sol la si do
+const NOMBRES=["DO","RE","MI","FA","SOL","LA","SI","DO"];
+const COLORES=["#ff5b6e","#ff9a3c","#ffd12e","#39ff14","#2fd0ff","#5b7bff","#c58cff","#ff6ad5"];
+
+const teclas={}; let raton={x:W/2,y:H/2,abajo:false};
+function posEn(e){ const r=cv.getBoundingClientRect();
+  return { x:(e.clientX-r.left)*(W/r.width), y:(e.clientY-r.top)*(H/r.height) }; }
+cv.addEventListener("pointermove",e=>{ const p=posEn(e); raton.x=p.x; raton.y=p.y;
+  if(raton.abajo && juego && juego.arrastra) juego.arrastra(p.x,p.y); });
+cv.addEventListener("pointerdown",e=>{ e.preventDefault(); ac(); const p=posEn(e);
+  raton.x=p.x; raton.y=p.y; raton.abajo=true; if(juego&&juego.clic) juego.clic(p.x,p.y); });
+cv.addEventListener("pointerup",()=>{ raton.abajo=false; if(juego&&juego.suelta) juego.suelta(); });
+addEventListener("keydown",e=>{ const k=e.key.toLowerCase(); if(teclas[k]) return; teclas[k]=true; ac();
+  if(juego&&juego.tecla) juego.tecla(k);
+  if(["arrowup","arrowdown","arrowleft","arrowright"," "].includes(k)) e.preventDefault(); });
+addEventListener("keyup",e=>{ teclas[e.key.toLowerCase()]=false; });
+
+let juego=null, raf=null;
+function abrir(j){ juego=j; $("gname").textContent=j.ico+" "+j.nom; $("help").innerHTML=j.ayuda||"";
+  $("menu").style.display="none"; $("play").classList.add("on"); $("win").classList.remove("on");
+  info(""); tam(j.w||700,j.h||560); j.init();
+  if(raf) cancelAnimationFrame(raf);
+  const b=()=>{ raf=requestAnimationFrame(b); if(!$("win").classList.contains("on")) j.paso(); }; b(); }
+function cerrar(){ if(raf) cancelAnimationFrame(raf); raf=null; juego=null;
+  $("play").classList.remove("on"); $("menu").style.display="block"; }
+$("back").onclick=cerrar;
+$("again").onclick=()=>{ $("win").classList.remove("on"); info(""); juego.init(); };
+
+const JUEGOS=[];
+const add=(o)=>JUEGOS.push(o);
+
+/* ===================== 18 DE MÚSICA ===================== */
+
+// 1) PIANO LIBRE
+let pi;
+add({ico:"🎹",nom:"Piano",ayuda:"Toca las teclas · filas A S D F G H J K",
+ init:()=>{ pi={brillo:Array(8).fill(0),notas:0}; },
+ paso:()=>{ const g=pi; fondo("#1a0a28");
+   const an=W/8;
+   for(let i=0;i<8;i++){ const x=i*an;
+     const b=g.brillo[i]; if(g.brillo[i]>0) g.brillo[i]-=0.05;
+     caja(x+4,100,an-8,H-140, b>0?COLORES[i]:"#f4f0ff", "#7a5a9a", 10);
+     texto(NOMBRES[i],x+an/2,H-90,20,"#4a2a6a");
+     texto("ASDFGHJK"[i],x+an/2,H-60,16,"#9a7aba"); }
+   texto("🎹 toca con el mouse o el teclado",W/2,50,22,"#c58cff");
+   info("♪ "+g.notas);
+ },
+ clic:(x,y)=>{ if(y<100) return; const i=Math.floor(x/(W/8));
+   if(i>=0&&i<8){ nota(ESCALA[i],0.6,"triangle"); pi.brillo[i]=1; pi.notas++; } },
+ tecla:(k)=>{ const i="asdfghjk".indexOf(k);
+   if(i>=0){ nota(ESCALA[i],0.6,"triangle"); pi.brillo[i]=1; pi.notas++; } }});
+
+// 2) REPITE LA MELODÍA (Simón)
+let si;
+add({ico:"🧠",nom:"Repite",ayuda:"Escucha la melodía y repítela",
+ init:()=>{ si={sec:[],tu:0,mostrando:true,i:0,t:0,brillo:-1,ronda:0};
+   si.sec.push((Math.random()*4)|0); },
+ paso:()=>{ const g=si; fondo("#140a22"); g.t++;
+   const R=110;
+   for(let i=0;i<4;i++){ const a=i*Math.PI/2+Math.PI/4;
+     const x=W/2+Math.cos(a)*150, y=H/2+Math.sin(a)*150;
+     ctx.globalAlpha=g.brillo===i?1:0.45;
+     ctx.fillStyle=COLORES[i*2]; ctx.beginPath(); ctx.arc(x,y,R,0,7); ctx.fill();
+     ctx.globalAlpha=1; }
+   if(g.mostrando){ texto("ESCUCHA…",W/2,46,26,"#c58cff");
+     if(g.t%48===0){ const k=g.t/48-1;
+       if(k<g.sec.length){ g.brillo=g.sec[k]; nota(ESCALA[g.sec[k]*2],0.45,"sine"); }
+       else if(k===g.sec.length){ g.brillo=-1; }
+       else { g.mostrando=false; g.tu=0; g.t=0; } }
+     if(g.t%48===30) g.brillo=-1; }
+   else texto("¡TU TURNO! "+g.tu+"/"+g.sec.length,W/2,46,26,"#39ff14");
+   info("ronda "+(g.ronda+1));
+ },
+ clic:(x,y)=>{ const g=si; if(g.mostrando) return;
+   for(let i=0;i<4;i++){ const a=i*Math.PI/2+Math.PI/4;
+     const cx=W/2+Math.cos(a)*150, cy=H/2+Math.sin(a)*150;
+     if(Math.hypot(cx-x,cy-y)<110){ nota(ESCALA[i*2],0.4,"sine"); g.brillo=i;
+       setTimeout(()=>{ if(si===g) g.brillo=-1; },180);
+       if(i===g.sec[g.tu]){ g.tu++;
+         if(g.tu>=g.sec.length){ g.ronda++;
+           if(g.ronda>=10){ anota("Repite",g.ronda); ganar("🏆 ¡MEMORIA DE ORO!",g.ronda+" rondas"); return; }
+           g.sec.push((Math.random()*4)|0); g.mostrando=true; g.t=0; } }
+       else { ruido(0.3,0.3); anota("Repite",g.ronda); ganar("❌ Esa no era",g.ronda+" rondas"); }
+       return; } } }});
+
+// 3) GUITARRA HÉROE
+let gh;
+add({ico:"🎸",nom:"Guitarra",ayuda:"Toca cuando la nota llegue a la línea · D F J K",
+ init:()=>{ gh={n:[],t:0,pts:0,fallos:0,brillo:[0,0,0,0]}; },
+ paso:()=>{ const g=gh; fondo("#0a0612"); g.t++;
+   const an=W/4, LIN=H-110;
+   for(let i=0;i<4;i++){ ctx.strokeStyle="rgba(255,255,255,.12)"; ctx.lineWidth=2;
+     ctx.beginPath(); ctx.moveTo(an*i+an/2,0); ctx.lineTo(an*i+an/2,H); ctx.stroke();
+     const b=g.brillo[i]; if(g.brillo[i]>0) g.brillo[i]-=0.08;
+     caja(an*i+12,LIN-26,an-24,52, b>0?COLORES[i*2]:"rgba(255,255,255,.08)", COLORES[i*2], 12);
+     texto("DFJK"[i],an*i+an/2,LIN,22,b>0?"#000":"#fff"); }
+   if(g.t%34===0) g.n.push({c:(Math.random()*4)|0,y:-30});
+   for(let i=g.n.length-1;i>=0;i--){ const n=g.n[i]; n.y+=5.2;
+     ctx.fillStyle=COLORES[n.c*2]; ctx.beginPath();
+     ctx.arc(an*n.c+an/2,n.y,22,0,7); ctx.fill();
+     if(n.y>LIN+50){ g.n.splice(i,1); g.fallos++;
+       if(g.fallos>=8){ anota("Guitarra",g.pts); ganar("🎸 Se te fue el ritmo",g.pts+" puntos"); return; } } }
+   info("⭐"+g.pts+"  ❌"+g.fallos+"/8");
+   if(g.pts>=600){ anota("Guitarra",g.pts); ganar("🏆 ¡ROCKSTAR!",g.pts+" puntos"); }
+ },
+ clic:(x,y)=>{ const i=Math.floor(x/(W/4)); if(i>=0&&i<4) rasga(i); },
+ tecla:(k)=>{ const i="dfjk".indexOf(k); if(i>=0) rasga(i); }});
+function rasga(i){ const g=gh, LIN=H-110; g.brillo[i]=1;
+  const j=g.n.findIndex(n=>n.c===i && Math.abs(n.y-LIN)<42);
+  if(j>=0){ const d=Math.abs(g.n[j].y-LIN);
+    g.pts+= d<14?20:d<28?10:5; nota(ESCALA[i*2],0.25,"sawtooth",0.16); g.n.splice(j,1); }
+  else { ruido(0.08,0.1); g.pts=Math.max(0,g.pts-5); } }
+
+// 4) BATERÍA
+let ba;
+add({ico:"🥁",nom:"Batería",ayuda:"Golpea los platos y tambores",
+ init:()=>{ ba={p:[{x:W*0.2,y:H*0.35,r:70,n:"CHARLES",t:"hat"},
+   {x:W*0.5,y:H*0.3,r:85,n:"CRASH",t:"crash"},{x:W*0.8,y:H*0.35,r:70,n:"RIDE",t:"hat"},
+   {x:W*0.3,y:H*0.68,r:80,n:"CAJA",t:"caja"},{x:W*0.7,y:H*0.68,r:80,n:"TOM",t:"tom"},
+   {x:W*0.5,y:H*0.82,r:95,n:"BOMBO",t:"bombo"}], golpes:0, b:[0,0,0,0,0,0]}; },
+ paso:()=>{ const g=ba; fondo("#1a0c08");
+   g.p.forEach((p,i)=>{ const b=g.b[i]; if(g.b[i]>0) g.b[i]-=0.08;
+     ctx.fillStyle=b>0?"#ffd12e":(p.t==="bombo"?"#8a4a2a":p.t==="caja"?"#c8c8d8":"#c8a040");
+     ctx.beginPath(); ctx.arc(p.x,p.y,p.r*(1+b*0.07),0,7); ctx.fill();
+     ctx.strokeStyle="#5a3018"; ctx.lineWidth=4; ctx.stroke();
+     texto(p.n,p.x,p.y,15,"#3a1a08"); });
+   info("🥁 "+g.golpes);
+ },
+ clic:(x,y)=>{ const g=ba;
+   g.p.forEach((p,i)=>{ if(Math.hypot(p.x-x,p.y-y)<p.r){ g.b[i]=1; g.golpes++;
+     if(p.t==="bombo") nota(45,0.22,"sine",0.4);
+     else if(p.t==="tom") nota(55,0.2,"sine",0.3);
+     else if(p.t==="caja"){ ruido(0.14,0.25); nota(62,0.08,"square",0.08); }
+     else if(p.t==="crash") ruido(0.5,0.18);
+     else ruido(0.07,0.14); } }); }});
+
+// 5) ADIVINA LA NOTA
+let an;
+add({ico:"👂",nom:"Oído",ayuda:"Escucha y di qué nota es",
+ init:()=>{ an={nota:(Math.random()*8)|0,aciertos:0,fallos:0,sono:false}; },
+ paso:()=>{ const g=an; fondo("#140a22");
+   if(!g.sono){ nota(ESCALA[g.nota],0.8,"sine"); g.sono=true; }
+   texto("🔊 ¿Qué nota sonó?",W/2,70,26,"#c58cff");
+   caja(W/2-80,110,160,56,"rgba(197,140,255,.2)","#c58cff",12);
+   texto("▶ oír otra vez",W/2,138,18);
+   for(let i=0;i<8;i++){ const x=W/2+((i%4)-1.5)*150, y=H/2+(i<4?0:110);
+     caja(x-66,y-40,132,80,"rgba(255,255,255,.08)",COLORES[i],12);
+     texto(NOMBRES[i],x,y,24,COLORES[i]); }
+   info("✅"+g.aciertos+"  ❌"+g.fallos+"/5");
+ },
+ clic:(x,y)=>{ const g=an;
+   if(y>110&&y<166&&Math.abs(x-W/2)<80){ nota(ESCALA[g.nota],0.8,"sine"); return; }
+   for(let i=0;i<8;i++){ const cx=W/2+((i%4)-1.5)*150, cy=H/2+(i<4?0:110);
+     if(Math.abs(x-cx)<66&&Math.abs(y-cy)<40){
+       if(i===g.nota){ g.aciertos++; nota(ESCALA[i],0.3,"triangle");
+         if(g.aciertos>=10){ anota("Oído",g.aciertos); ganar("🏆 ¡OÍDO ABSOLUTO!",""); return; }
+         g.nota=(Math.random()*8)|0; g.sono=false; }
+       else { g.fallos++; ruido(0.2,0.2);
+         if(g.fallos>=5){ anota("Oído",g.aciertos); ganar("👂 A entrenar el oído",g.aciertos+" aciertos"); } }
+       return; } } }});
+
+// 6) METRÓNOMO
+let me;
+add({ico:"⏱️",nom:"Metrónomo",ayuda:"Toca justo en cada pulso",
+ init:()=>{ me={t:0,per:60,pts:0,fallos:0,ult:-99,ang:0}; },
+ paso:()=>{ const g=me; fondo("#0e0818"); g.t++;
+   if(g.t%g.per===0){ nota(84,0.08,"square",0.14);
+     if(g.t-g.ult>g.per*0.9 && g.t>g.per){ g.fallos++;
+       if(g.fallos>=5){ anota("Metrónomo",g.pts); ganar("⏱️ Perdiste el pulso",g.pts+" puntos"); return; } } }
+   const f=(g.t%g.per)/g.per;
+   g.ang=Math.sin(f*Math.PI*2)*0.5;
+   ctx.save(); ctx.translate(W/2,H-110); ctx.rotate(g.ang);
+   ctx.strokeStyle="#c58cff"; ctx.lineWidth=10; ctx.lineCap="round";
+   ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,-230); ctx.stroke();
+   ctx.fillStyle="#ffd12e"; ctx.beginPath(); ctx.arc(0,-190,20,0,7); ctx.fill(); ctx.restore();
+   const cerca=Math.min(f,1-f);
+   ctx.globalAlpha=1-cerca*5; ctx.fillStyle="#39ff14";
+   ctx.beginPath(); ctx.arc(W/2,80,46,0,7); ctx.fill(); ctx.globalAlpha=1;
+   texto("TOCA EN EL PULSO",W/2,H-40,20,"#a894c4");
+   info("⭐"+g.pts+"  ❌"+g.fallos+"/5  "+Math.round(3600/g.per)+" bpm");
+   if(g.pts>=400){ anota("Metrónomo",g.pts); ganar("🏆 ¡RELOJ HUMANO!",""); }
+ },
+ clic:()=>{ const g=me; const f=(g.t%g.per)/g.per, d=Math.min(f,1-f)*g.per;
+   g.ult=g.t;
+   if(d<4){ g.pts+=20; nota(72,0.12,"triangle",0.18); if(g.pts%100===0) g.per=Math.max(26,g.per-6); }
+   else if(d<8){ g.pts+=8; nota(67,0.1,"triangle",0.14); }
+   else { g.fallos++; ruido(0.1,0.15);
+     if(g.fallos>=5){ anota("Metrónomo",g.pts); ganar("⏱️ Perdiste el pulso",g.pts+" puntos"); } } }});
+
+// 7) KARAOKE (sigue la línea con el mouse)
+let ka;
+add({ico:"🎤",nom:"Karaoke",ayuda:"Mueve el mouse para seguir la melodía",
+ init:()=>{ ka={t:0,pts:0,y:H/2,linea:[],ult:0};
+   for(let i=0;i<600;i++) ka.linea.push(H/2+Math.sin(i*0.045)*130+Math.sin(i*0.012)*70); },
+ paso:()=>{ const g=ka; fondo("#140a22"); g.t++;
+   ctx.strokeStyle="#c58cff"; ctx.lineWidth=7; ctx.lineCap="round"; ctx.beginPath();
+   for(let i=0;i<W;i+=4){ const k=g.t+i; const y=g.linea[k%g.linea.length];
+     i?ctx.lineTo(i,y):ctx.moveTo(i,y); } ctx.stroke();
+   const objetivo=g.linea[(g.t+W*0.25)%g.linea.length];
+   g.y+=(raton.y-g.y)*0.3;
+   const d=Math.abs(g.y-objetivo);
+   ctx.fillStyle=d<34?"#39ff14":"#ff5b6e";
+   ctx.beginPath(); ctx.arc(W*0.25,g.y,20,0,7); ctx.fill();
+   texto("🎤",W*0.25,g.y,24);
+   if(d<34){ g.pts++;
+     if(g.t-g.ult>9){ g.ult=g.t; nota(60+Math.round((H/2-objetivo)/22),0.14,"sine",0.1); } }
+   info("⭐"+g.pts+"  "+Math.floor(g.t/60)+"s");
+   if(g.t>=60*35){ anota("Karaoke",g.pts);
+     ganar(g.pts>1200?"🏆 ¡AFINADÍSIMO!":"🎤 ¡Buena!",g.pts+" puntos"); }
+ }});
+
+// 8) DJ MEZCLADOR
+let dj;
+add({ico:"🎧",nom:"DJ",ayuda:"Enciende las pistas y arma tu canción",
+ init:()=>{ dj={p:[{n:"BOMBO",on:false,c:"#ff5b6e"},{n:"CAJA",on:false,c:"#ffd12e"},
+   {n:"CHARLES",on:false,c:"#39ff14"},{n:"BAJO",on:false,c:"#2fd0ff"},
+   {n:"MELODÍA",on:false,c:"#c58cff"},{n:"ACORDES",on:false,c:"#ff6ad5"}], t:0,paso:0,ok:0}; },
+ paso:()=>{ const g=dj; fondo("#0a0612"); g.t++;
+   if(g.t%15===0){ g.paso=(g.paso+1)%16; suenaDJ(g.paso); }
+   g.p.forEach((p,i)=>{ const x=W/2+((i%3)-1)*215, y=H/2+(i<3?-90:80);
+     caja(x-96,y-56,192,112, p.on?p.c:"rgba(255,255,255,.07)", p.c, 16);
+     texto(p.n,x,y,22, p.on?"#1a0828":p.c);
+     if(p.on){ for(let k=0;k<4;k++){ ctx.globalAlpha=(g.paso%4)===k?0.9:0.25;
+       ctx.fillStyle="#1a0828"; ctx.fillRect(x-70+k*36,y+32,26,8); ctx.globalAlpha=1; } } });
+   // barras de pasos
+   for(let k=0;k<16;k++){ ctx.fillStyle=k===g.paso?"#ffd12e":"rgba(255,255,255,.15)";
+     ctx.fillRect(W/2-240+k*30,H-44,24,14); }
+   const n=g.p.filter(p=>p.on).length; g.ok=Math.max(g.ok,n);
+   info("🎚️ "+n+"/6 pistas");
+   if(n===6 && g.t>60*8){ anota("DJ",6); ganar("🏆 ¡CANCIÓN COMPLETA!","las 6 pistas sonando"); }
+ },
+ clic:(x,y)=>{ const g=dj;
+   g.p.forEach((p,i)=>{ const cx=W/2+((i%3)-1)*215, cy=H/2+(i<3?-90:80);
+     if(Math.abs(x-cx)<96&&Math.abs(y-cy)<56) p.on=!p.on; }); }});
+function suenaDJ(s){ const g=dj, P=g.p;
+  if(P[0].on && s%4===0) nota(45,0.2,"sine",0.35);
+  if(P[1].on && s%8===4) ruido(0.13,0.22);
+  if(P[2].on && s%2===1) ruido(0.05,0.08);
+  if(P[3].on && s%4===0) nota([36,36,43,41][(s/4)|0],0.35,"sawtooth",0.14);
+  if(P[4].on && s%2===0) nota(ESCALA[[0,2,4,2,5,4,2,0][(s/2)%8]]+12,0.18,"square",0.07);
+  if(P[5].on && s%8===0) nota([60,65,67,64][((s/8)|0)%4],0.7,"triangle",0.1); }
+
+// 9) ESCALERA DE NOTAS
+let en;
+add({ico:"🪜",nom:"Escalera",ayuda:"Toca las notas de grave a aguda",
+ init:()=>{ en={orden:[0,1,2,3,4,5,6,7].sort(()=>Math.random()-0.5),sig:0,errores:0,t:0}; },
+ paso:()=>{ const g=en; fondo("#120820"); g.t++;
+   texto("Toca de la MÁS GRAVE a la MÁS AGUDA",W/2,56,22,"#c58cff");
+   g.orden.forEach((n,i)=>{ const x=W/2+(i-3.5)*86;
+     const hecha=n<g.sig;
+     caja(x-38,H/2-80,76,160, hecha?"rgba(57,255,20,.3)":"rgba(255,255,255,.08)",
+       hecha?"#39ff14":COLORES[i],12);
+     texto("♪",x,H/2,36,hecha?"#39ff14":COLORES[i]);
+     texto("oír",x,H/2+62,14,"#a894c4"); });
+   info("➡ "+g.sig+"/8  ❌"+g.errores);
+   if(g.sig>=8){ anota("Escalera",Math.max(1,900-g.t)); ganar("🏆 ¡ESCALA PERFECTA!",""); }
+ },
+ clic:(x,y)=>{ const g=en; if(Math.abs(y-H/2)>80) return;
+   for(let i=0;i<8;i++){ const cx=W/2+(i-3.5)*86;
+     if(Math.abs(x-cx)<38){ const n=g.orden[i]; nota(ESCALA[n],0.5,"triangle");
+       if(n===g.sig) g.sig++; else { g.errores++; ruido(0.15,0.15); }
+       return; } } }});
+
+// 10) BAILE
+let bl;
+add({ico:"💃",nom:"Baile",ayuda:"Pisa las flechas en el momento justo",
+ init:()=>{ bl={f:[],t:0,pts:0,fallos:0,b:[0,0,0,0]}; },
+ paso:()=>{ const g=bl; fondo("#160a26"); g.t++;
+   const an=W/4, LIN=120, FL=["⬅️","⬇️","⬆️","➡️"];
+   for(let i=0;i<4;i++){ const b=g.b[i]; if(g.b[i]>0) g.b[i]-=0.08;
+     caja(an*i+16,LIN-34,an-32,68, b>0?"rgba(197,140,255,.5)":"rgba(255,255,255,.06)","#c58cff",14);
+     texto(FL[i],an*i+an/2,LIN,32); }
+   if(g.t%32===0) g.f.push({c:(Math.random()*4)|0,y:H+30});
+   for(let i=g.f.length-1;i>=0;i--){ const f=g.f[i]; f.y-=5.4;
+     texto(FL[f.c],an*f.c+an/2,f.y,34);
+     if(f.y<LIN-60){ g.f.splice(i,1); g.fallos++;
+       if(g.fallos>=8){ anota("Baile",g.pts); ganar("💃 Se acabó el baile",g.pts+" puntos"); return; } } }
+   info("⭐"+g.pts+"  ❌"+g.fallos+"/8");
+   if(g.pts>=500){ anota("Baile",g.pts); ganar("🏆 ¡REY DE LA PISTA!",""); }
+ },
+ clic:(x,y)=>{ const i=Math.floor(x/(W/4)); if(i>=0&&i<4) pisa(i); },
+ tecla:(k)=>{ const m={arrowleft:0,arrowdown:1,arrowup:2,arrowright:3,a:0,s:1,w:2,d:3};
+   if(m[k]!==undefined) pisa(m[k]); }});
+function pisa(i){ const g=bl, LIN=120; g.b[i]=1;
+  const j=g.f.findIndex(f=>f.c===i && Math.abs(f.y-LIN)<44);
+  if(j>=0){ const d=Math.abs(g.f[j].y-LIN); g.pts+= d<15?20:10;
+    nota(ESCALA[i*2]+12,0.14,"square",0.1); g.f.splice(j,1); }
+  else { ruido(0.07,0.1); g.pts=Math.max(0,g.pts-5); } }
+
+// 11) ORQUESTA
+let or;
+add({ico:"🎻",nom:"Orquesta",ayuda:"Dirige: toca el instrumento que se ilumina",
+ init:()=>{ or={ins:["🎻","🎺","🥁","🎷","🎹","🪕"],cual:0,aciertos:0,t:0,limite:150}; },
+ paso:()=>{ const g=or; fondo("#1a1030"); g.t++;
+   texto("🎼 ¡Tu turno, director!",W/2,54,24,"#c58cff");
+   g.ins.forEach((s,i)=>{ const x=W/2+((i%3)-1)*200, y=H/2+(i<3?-70:90);
+     const act=i===g.cual;
+     caja(x-82,y-72,164,144, act?"rgba(255,209,46,.3)":"rgba(255,255,255,.06)",
+       act?"#ffd12e":"rgba(197,140,255,.4)",18);
+     texto(s,x,y,62); });
+   caja(W/2-130,H-54,260,14,"rgba(255,255,255,.1)",null,7);
+   caja(W/2-130,H-54,260*(1-g.t/g.limite),14,"#ffd12e",null,7);
+   info("⭐"+g.aciertos);
+   if(g.t>=g.limite){ anota("Orquesta",g.aciertos); ganar("🎻 Se desafinó",g.aciertos+" aciertos"); }
+ },
+ clic:(x,y)=>{ const g=or;
+   for(let i=0;i<6;i++){ const cx=W/2+((i%3)-1)*200, cy=H/2+(i<3?-70:90);
+     if(Math.abs(x-cx)<82&&Math.abs(y-cy)<72){
+       if(i===g.cual){ g.aciertos++; nota(ESCALA[i],0.3,"triangle");
+         if(g.aciertos>=15){ anota("Orquesta",g.aciertos); ganar("🏆 ¡GRAN DIRECTOR!",""); return; }
+         g.t=0; g.limite=Math.max(42,g.limite*0.93);
+         let n; do{ n=(Math.random()*6)|0; }while(n===g.cual); g.cual=n; }
+       else { ruido(0.2,0.2); g.t+=35; }
+       return; } } }});
+
+// 12) COMPÁS
+let co;
+add({ico:"👏",nom:"Compás",ayuda:"Aplaude el ritmo que escuchaste",
+ init:()=>{ co={pat:[],tu:[],mostrando:true,t:0,i:0,ronda:0}; nuevoPatron(); },
+ paso:()=>{ const g=co; fondo("#120a1e"); g.t++;
+   if(g.mostrando){ texto("ESCUCHA EL RITMO",W/2,70,26,"#c58cff");
+     const k=Math.floor(g.t/18);
+     if(k<g.pat.length && g.i<=k){ g.i=k+1; if(g.pat[k]) nota(76,0.1,"square",0.2); }
+     if(k>g.pat.length+1){ g.mostrando=false; g.t=0; g.tu=[]; } }
+   else texto("¡APLAUDE IGUAL!",W/2,70,26,"#39ff14");
+   // dibuja el patrón
+   g.pat.forEach((p,i)=>{ const x=W/2+(i-(g.pat.length-1)/2)*62;
+     const son=g.mostrando&&Math.floor(g.t/18)===i;
+     caja(x-25,H/2-25,50,50, p?(son?"#ffd12e":"#c58cff"):"rgba(255,255,255,.07)","#7a5a9a",10);
+     if(p) texto("♪",x,H/2,26,"#1a0828"); });
+   if(!g.mostrando) g.tu.forEach((p,i)=>{ const x=W/2+(i-(g.pat.length-1)/2)*62;
+     caja(x-25,H/2+70,50,50, p?"#39ff14":"rgba(255,255,255,.07)","#39ff14",10); });
+   texto(g.mostrando?"":"toca ♪ para sonar · ␣ para silencio",W/2,H-50,16,"#a894c4");
+   info("ronda "+(g.ronda+1));
+ },
+ clic:()=>{ aplaude(true); },
+ tecla:(k)=>{ if(k===" ") aplaude(false); }});
+function nuevoPatron(){ const g=co, n=4+Math.min(4,g.ronda);
+  g.pat=[]; for(let i=0;i<n;i++) g.pat.push(i===0?1:(Math.random()<0.55?1:0));
+  g.i=0; g.t=0; g.mostrando=true; }
+function aplaude(son){ const g=co; if(g.mostrando) return;
+  if(son) nota(76,0.1,"square",0.2); else ruido(0.03,0.04);
+  g.tu.push(son?1:0);
+  const i=g.tu.length-1;
+  if(g.tu[i]!==g.pat[i]){ ruido(0.3,0.25); anota("Compás",g.ronda);
+    ganar("👏 Ese no era el ritmo",g.ronda+" rondas"); return; }
+  if(g.tu.length===g.pat.length){ g.ronda++;
+    if(g.ronda>=8){ anota("Compás",g.ronda); ganar("🏆 ¡RITMO PERFECTO!",""); return; }
+    nuevoPatron(); } }
+
+// 13) NOTAS QUE CAEN (atrapa)
+let nc;
+add({ico:"🎶",nom:"Atrapa notas",ayuda:"Mueve la cesta y atrapa las notas",
+ init:()=>{ nc={x:W/2,n:[],t:0,pts:0,perdidas:0}; },
+ paso:()=>{ const g=nc; fondo("#0e0820"); g.t++;
+   if(g.t%26===0) g.n.push({x:50+Math.random()*(W-100),y:-20,c:(Math.random()*8)|0,
+     mala:Math.random()<0.18});
+   g.x+=(raton.x-g.x)*0.3;
+   if(teclas["arrowleft"]||teclas["a"]) g.x-=8; if(teclas["arrowright"]||teclas["d"]) g.x+=8;
+   g.x=Math.max(50,Math.min(W-50,g.x));
+   for(let i=g.n.length-1;i>=0;i--){ const n=g.n[i]; n.y+=3.6;
+     texto(n.mala?"💣":"♪",n.x,n.y,n.mala?26:34, n.mala?"#fff":COLORES[n.c]);
+     if(Math.abs(n.x-g.x)<52 && n.y>H-92 && n.y<H-38){
+       g.n.splice(i,1);
+       if(n.mala){ ruido(0.3,0.3); anota("Atrapa notas",g.pts);
+         ganar("💣 ¡Bomba!",g.pts+" puntos"); return; }
+       g.pts+=10; nota(ESCALA[n.c],0.22,"triangle",0.15); continue; }
+     if(n.y>H+20){ g.n.splice(i,1);
+       if(!n.mala){ g.perdidas++;
+         if(g.perdidas>=10){ anota("Atrapa notas",g.pts); ganar("🎶 Se escaparon",g.pts+" puntos"); return; } } } }
+   texto("🧺",g.x,H-60,52);
+   info("⭐"+g.pts+"  💔"+g.perdidas+"/10");
+   if(g.pts>=500){ anota("Atrapa notas",g.pts); ganar("🏆 ¡CESTA LLENA DE MÚSICA!",""); }
+ }});
+
+// 14) AFINADOR
+let af;
+add({ico:"🎚️",nom:"Afinador",ayuda:"Arrastra hasta que la cuerda quede afinada",
+ init:()=>{ af={obj:0,act:0,afinadas:0,t:0}; nuevaCuerda(); },
+ paso:()=>{ const g=af; fondo("#140a22"); g.t++;
+   const d=Math.abs(g.act-g.obj);
+   texto("Afina la cuerda",W/2,56,26,"#c58cff");
+   texto(d<2?"✅ ¡AFINADA!":d<10?"casi…":g.act<g.obj?"más AGUDA ⬆":"más GRAVE ⬇",
+     W/2,106,24, d<2?"#39ff14":d<10?"#ffd12e":"#ff5b6e");
+   // cuerda vibrando
+   ctx.strokeStyle=d<2?"#39ff14":"#c58cff"; ctx.lineWidth=5; ctx.beginPath();
+   for(let x=60;x<W-60;x+=4){ const amp=Math.min(40,d*0.9+6);
+     ctx.lineTo(x,H/2+Math.sin((x/40)+g.t*0.3)*amp*Math.sin((x-60)/(W-120)*Math.PI)); }
+   ctx.stroke();
+   // perilla
+   caja(80,H-120,W-160,22,"rgba(255,255,255,.1)",null,11);
+   const px=80+(g.act+50)/100*(W-160);
+   ctx.fillStyle="#ffd12e"; ctx.beginPath(); ctx.arc(px,H-109,24,0,7); ctx.fill();
+   texto("arrastra la perilla",W/2,H-62,16,"#a894c4");
+   info("🎻 "+g.afinadas+"/6");
+   if(d<2 && g.t>30){ g.afinadas++; nota(60+g.afinadas*2,0.4,"sine");
+     if(g.afinadas>=6){ anota("Afinador",g.afinadas); ganar("🏆 ¡GUITARRA AFINADA!",""); }
+     else nuevaCuerda(); }
+ },
+ arrastra:(x,y)=>{ if(y>H-170){ af.act=Math.max(-50,Math.min(50,(x-80)/(W-160)*100-50));
+   nota(60+af.act*0.2,0.1,"sawtooth",0.07); } },
+ clic:(x,y)=>{ if(y>H-170) af.act=Math.max(-50,Math.min(50,(x-80)/(W-160)*100-50)); }});
+function nuevaCuerda(){ af.obj=-35+Math.random()*70; af.act=-35+Math.random()*70; af.t=0; }
+
+// 15) CANCIÓN CONOCIDA
+let ck;
+add({ico:"🎼",nom:"¿Qué canción?",ayuda:"Escucha y adivina la canción",
+ init:()=>{ const B=[
+   {n:"Cumpleaños feliz",m:[60,60,62,60,65,64]},
+   {n:"Estrellita",m:[60,60,67,67,69,69,67]},
+   {n:"Arroz con leche",m:[67,67,65,64,62,60]},
+   {n:"Himno a la alegría",m:[64,64,65,67,67,65,64,62]},
+   {n:"Los pollitos",m:[64,64,62,62,60,62,64]},
+   {n:"Caballito blanco",m:[67,65,64,65,67,69,67]}];
+   ck={B,cual:(Math.random()*6)|0,ops:[],aciertos:0,fallos:0,son:false,t:0,i:0};
+   opcionesCancion(); },
+ paso:()=>{ const g=ck; fondo("#160c24"); g.t++;
+   const m=g.B[g.cual].m;
+   if(g.son){ if(g.t%26===0){ if(g.i<m.length){ nota(m[g.i],0.4,"triangle"); g.i++; } else g.son=false; } }
+   texto("🔊 ¿Qué canción es?",W/2,64,26,"#c58cff");
+   caja(W/2-90,104,180,54,"rgba(197,140,255,.2)","#c58cff",12);
+   texto("▶ escuchar",W/2,131,19);
+   // notas animadas
+   for(let k=0;k<m.length;k++){ const x=W/2+(k-(m.length-1)/2)*52;
+     ctx.globalAlpha=g.son&&g.i>k?1:0.3; texto("♪",x,200,28,"#ffd12e"); ctx.globalAlpha=1; }
+   g.ops.forEach((o,i)=>{ const y=H/2+30+i*78;
+     caja(W/2-230,y-30,460,60,"rgba(255,255,255,.07)","#c58cff",14);
+     texto(o,W/2,y,21); });
+   info("✅"+g.aciertos+"  ❌"+g.fallos+"/3");
+ },
+ clic:(x,y)=>{ const g=ck;
+   if(y>104&&y<158&&Math.abs(x-W/2)<90){ g.son=true; g.i=0; g.t=0; return; }
+   for(let i=0;i<3;i++){ const cy=H/2+30+i*78;
+     if(Math.abs(y-cy)<30&&Math.abs(x-W/2)<230){
+       if(g.ops[i]===g.B[g.cual].n){ g.aciertos++; nota(72,0.3,"triangle");
+         if(g.aciertos>=5){ anota("Qué canción",g.aciertos); ganar("🏆 ¡TE LAS SABES TODAS!",""); return; }
+         g.cual=(Math.random()*6)|0; opcionesCancion(); g.son=false; g.i=0; }
+       else { g.fallos++; ruido(0.25,0.2);
+         if(g.fallos>=3){ anota("Qué canción",g.aciertos); ganar("🎼 Casi",g.aciertos+" aciertos"); } }
+       return; } } }});
+function opcionesCancion(){ const g=ck, buena=g.B[g.cual].n;
+  const otras=g.B.filter(b=>b.n!==buena).sort(()=>Math.random()-0.5).slice(0,2).map(b=>b.n);
+  g.ops=[buena,...otras].sort(()=>Math.random()-0.5); }
+
+// 16) VOLUMEN
+let vo;
+add({ico:"🔊",nom:"Volumen",ayuda:"¿Cuál sonó más fuerte?",
+ init:()=>{ vo={a:0,b:0,aciertos:0,fallos:0,fase:0,t:0}; nuevoPar(); },
+ paso:()=>{ const g=vo; fondo("#120820"); g.t++;
+   if(g.fase===0 && g.t>20){ nota(67,0.6,"sine",g.a); g.fase=1; g.t=0; }
+   else if(g.fase===1 && g.t>55){ nota(67,0.6,"sine",g.b); g.fase=2; g.t=0; }
+   texto(g.fase<2?"escuchando…":"¿Cuál sonó MÁS FUERTE?",W/2,80,26,"#c58cff");
+   ["PRIMERO","SEGUNDO"].forEach((s,i)=>{ const x=W/2+(i-0.5)*300;
+     const act=g.fase===i;
+     caja(x-130,H/2-70,260,140, act?"rgba(255,209,46,.35)":"rgba(255,255,255,.07)",
+       act?"#ffd12e":"#c58cff",18);
+     texto(s,x,H/2-16,26); texto(i===0?"🔈":"🔉",x,H/2+40,42); });
+   info("✅"+g.aciertos+"  ❌"+g.fallos+"/3");
+ },
+ clic:(x,y)=>{ const g=vo; if(g.fase<2) return; if(Math.abs(y-H/2)>70) return;
+   for(let i=0;i<2;i++){ const cx=W/2+(i-0.5)*300;
+     if(Math.abs(x-cx)<130){
+       const mayor=g.a>g.b?0:1;
+       if(i===mayor){ g.aciertos++; nota(72,0.3,"triangle");
+         if(g.aciertos>=8){ anota("Volumen",g.aciertos); ganar("🏆 ¡OÍDO FINO!",""); return; }
+         nuevoPar(); }
+       else { g.fallos++; ruido(0.2,0.2);
+         if(g.fallos>=3){ anota("Volumen",g.aciertos); ganar("🔊 A escuchar mejor",g.aciertos+" aciertos"); } }
+       return; } } }});
+function nuevoPar(){ const g=vo, dif=Math.max(0.04,0.22-g.aciertos*0.022);
+  const base=0.1+Math.random()*0.12;
+  if(Math.random()<0.5){ g.a=base+dif; g.b=base; } else { g.a=base; g.b=base+dif; }
+  g.fase=0; g.t=0; }
+
+// 17) COMPOSITOR
+let cm;
+add({ico:"✏️",nom:"Compositor",ayuda:"Pinta tu melodía y escúchala",
+ init:()=>{ cm={rej:Array(8).fill(0).map(()=>Array(16).fill(false)),paso:-1,t:0,son:false,puestas:0}; },
+ paso:()=>{ const g=cm; fondo("#0e0820"); g.t++;
+   if(g.son && g.t%14===0){ g.paso=(g.paso+1)%16;
+     for(let f=0;f<8;f++) if(g.rej[f][g.paso]) nota(ESCALA[7-f],0.26,"triangle",0.14); }
+   const cw=(W-120)/16, chh=(H-200)/8;
+   for(let f=0;f<8;f++) for(let c=0;c<16;c++){
+     const x=60+c*cw, y=110+f*chh;
+     caja(x+2,y+2,cw-4,chh-4,
+       g.rej[f][c]?COLORES[7-f]:(c===g.paso&&g.son?"rgba(255,255,255,.18)":"rgba(255,255,255,.05)"),
+       "rgba(197,140,255,.2)",5); }
+   for(let f=0;f<8;f++) texto(NOMBRES[7-f],36,110+f*chh+chh/2,13,"#a894c4");
+   caja(W/2-120,H-70,110,46, g.son?"#ff5b6e":"#39ff14",null,12);
+   texto(g.son?"⏸ PARAR":"▶ TOCAR",W/2-65,H-47,17,"#0a0418");
+   caja(W/2+14,H-70,110,46,"rgba(255,255,255,.1)","#c58cff",12);
+   texto("🗑 BORRAR",W/2+69,H-47,17);
+   info("♪ "+g.puestas+" notas");
+   if(g.puestas>=16 && g.son){ anota("Compositor",g.puestas); ganar("🏆 ¡COMPUSISTE UNA CANCIÓN!",g.puestas+" notas"); }
+ },
+ clic:(x,y)=>{ const g=cm;
+   if(y>H-70){ if(x>W/2-120&&x<W/2-10){ g.son=!g.son; g.paso=-1; }
+     else if(x>W/2+14&&x<W/2+124){ g.rej=Array(8).fill(0).map(()=>Array(16).fill(false)); g.puestas=0; }
+     return; }
+   const cw=(W-120)/16, chh=(H-200)/8;
+   const c=Math.floor((x-60)/cw), f=Math.floor((y-110)/chh);
+   if(c<0||c>=16||f<0||f>=8) return;
+   g.rej[f][c]=!g.rej[f][c];
+   if(g.rej[f][c]){ nota(ESCALA[7-f],0.3,"triangle"); g.puestas++; } else g.puestas--; }});
+
+// 18) BATALLA DE BANDAS
+let bb;
+add({ico:"🏟️",nom:"Batalla",ayuda:"2 jugadores: A gana la izquierda, L la derecha",
+ init:()=>{ bb={a:0,b:0,t:0,obj:30,ba:0,bb2:0}; },
+ paso:()=>{ const g=bb; fondo("#0a0618"); g.t++;
+   if(g.ba>0) g.ba-=0.08; if(g.bb2>0) g.bb2-=0.08;
+   caja(0,0,W/2,H, "rgba(255,91,110,"+(0.08+g.ba*0.25)+")",null,0);
+   caja(W/2,0,W/2,H, "rgba(47,208,255,"+(0.08+g.bb2*0.25)+")",null,0);
+   ctx.strokeStyle="#fff"; ctx.lineWidth=3;
+   ctx.beginPath(); ctx.moveTo(W/2,0); ctx.lineTo(W/2,H); ctx.stroke();
+   texto("🎸 BANDA A",W*0.25,56,26,"#ff5b6e");
+   texto("🎹 BANDA B",W*0.75,56,26,"#2fd0ff");
+   texto("tecla A",W*0.25,H-40,18,"#ff8fa0");
+   texto("tecla L",W*0.75,H-40,18,"#8fd4ff");
+   // barras
+   const bh=H-220;
+   caja(W*0.25-50,140,100,bh,"rgba(0,0,0,.35)",null,12);
+   caja(W*0.25-50,140+bh*(1-g.a/g.obj),100,bh*g.a/g.obj,"#ff5b6e",null,12);
+   caja(W*0.75-50,140,100,bh,"rgba(0,0,0,.35)",null,12);
+   caja(W*0.75-50,140+bh*(1-g.b/g.obj),100,bh*g.b/g.obj,"#2fd0ff",null,12);
+   texto(g.a+"",W*0.25,110,30,"#ff5b6e"); texto(g.b+"",W*0.75,110,30,"#2fd0ff");
+   info("primero en "+g.obj);
+   if(g.a>=g.obj){ anota("Batalla",g.a); ganar("🎸 ¡GANA LA BANDA A!",""); }
+   if(g.b>=g.obj){ anota("Batalla",g.b); ganar("🎹 ¡GANA LA BANDA B!",""); }
+ },
+ clic:(x)=>{ if(x<W/2){ bb.a++; bb.ba=1; nota(ESCALA[bb.a%8],0.14,"sawtooth",0.12); }
+   else { bb.b++; bb.bb2=1; nota(ESCALA[bb.b%8]+12,0.14,"square",0.1); } },
+ tecla:(k)=>{ if(k==="a"){ bb.a++; bb.ba=1; nota(ESCALA[bb.a%8],0.14,"sawtooth",0.12); }
+   if(k==="l"){ bb.b++; bb.bb2=1; nota(ESCALA[bb.b%8]+12,0.14,"square",0.1); } }});
+
+/* ---------- menú ---------- */
+$("grid").innerHTML = JUEGOS.map((j,i)=>
+  '<div class="gbtn" data-i="'+i+'"><span class="ico">'+j.ico+'</span><span class="nm">'+j.nom+'</span></div>').join("");
+document.querySelectorAll(".gbtn").forEach(b=> b.onclick=()=>abrir(JUEGOS[+b.dataset.i]));
+fit();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>
