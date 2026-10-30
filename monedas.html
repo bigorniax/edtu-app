@@ -36,7 +36,7 @@
   <div id="ayuda">← → o toca los lados · ↑ o toca el centro para saltar · P pausa</div>
   <div id="menu">
     <h1>MONEDAS RUSH</h1>
-    <p>Corre sin parar por cuatro mundos. Esquiva vallas (salta) y muros (cambia de carril). Junta monedas en cadena para subir el multiplicador.</p>
+    <p>Corre por siete mundos: ciudad, bosque, nieve, desierto, volcán, océano y espacio. Esquiva vallas (salta) y muros (cambia de carril). Junta monedas en cadena para subir el multiplicador.</p>
     <div class="leyenda">
       <b style="color:#ff3b5c">■</b><span>Valla: hay que saltarla</span>
       <b style="color:#ff8a3c">▮</b><span>Muro: hay que cambiar de carril</span>
@@ -71,11 +71,16 @@ function tono(freq,dur,tipo,vol,subida){ try{ if(!audio) audio=new (window.Audio
 
 /* ---------- mundos: cambian según la distancia ---------- */
 const MUNDOS=[
-  {nombre:"CIUDAD",    desde:0,    cielo:["#0a1224","#16294a"], linea:"#2fd0ff"},
-  {nombre:"BOSQUE",    desde:700,  cielo:["#071a12","#123a26"], linea:"#7dff9a"},
-  {nombre:"NIEVE",     desde:1500, cielo:["#0c1622","#24405e"], linea:"#c8f0ff"},
-  {nombre:"DESIERTO",  desde:2400, cielo:["#2a1406","#5a2e10"], linea:"#ffb347"},
+  {nombre:"CIUDAD",    desde:0,    cielo:["#0a1224","#16294a"], linea:"#2fd0ff", decor:"ninguno"},
+  {nombre:"BOSQUE",    desde:700,  cielo:["#071a12","#123a26"], linea:"#7dff9a", decor:"ninguno"},
+  {nombre:"NIEVE",     desde:1500, cielo:["#0c1622","#24405e"], linea:"#c8f0ff", decor:"copos"},
+  {nombre:"DESIERTO",  desde:2400, cielo:["#2a1406","#5a2e10"], linea:"#ffb347", decor:"ninguno"},
+  {nombre:"VOLCÁN",    desde:3400, cielo:["#1a0404","#4a0e06"], linea:"#ff5a1f", decor:"lava"},
+  {nombre:"OCÉANO",    desde:4500, cielo:["#03141f","#063a52"], linea:"#3ee6ff", decor:"olas"},
+  {nombre:"ESPACIO",   desde:5800, cielo:["#02010a","#0d0628"], linea:"#c58cff", decor:"estrellas"},
 ];
+// el mapa tiene 7 mundos: cada uno empieza a una distancia fija; despues de ESPACIO el juego sigue sin fin
+const DIST_MAPA=7000;
 function mundoDe(d){ let m=MUNDOS[0]; for(const x of MUNDOS) if(d>=x.desde) m=x; return m; }
 
 /* ---------- estado ---------- */
@@ -136,7 +141,7 @@ function paso(){
   tiempo++;
 
   distancia+=velocidad/10;
-  velocidad=Math.min(15,5+distancia/350);
+  velocidad=Math.min(18,5+distancia/420);
   if(imanT>0) imanT--;
 
   // salto: sube y cae
@@ -241,6 +246,21 @@ function dibujar(){
   ctx.fillStyle="rgba(255,255,255,.04)";
   const off=(distancia*6)%80;
   for(let y=-80+off;y<H;y+=80) ctx.fillRect(0,y,W,40);
+
+  // decoración de cada mundo
+  if(m.decor==="copos"){ ctx.fillStyle="rgba(255,255,255,.7)";
+    for(let i=0;i<40;i++){ const x=(i*97+tiempo*0.8*(i%3+1))%W, y=(i*53+tiempo*2*(i%2+1))%H; ctx.fillRect(x,y,3,3); } }
+  if(m.decor==="estrellas"){ ctx.fillStyle="rgba(255,255,255,.8)";
+    for(let i=0;i<60;i++){ const x=(i*71)%W, y=(i*131+tiempo*(1+i%4))%H; ctx.fillRect(x,y,2,2); } }
+  if(m.decor==="olas"){ ctx.strokeStyle="rgba(62,230,255,.18)"; ctx.lineWidth=3;
+    for(let k=0;k<6;k++){ ctx.beginPath(); for(let x=0;x<=W;x+=12){ const y=H*0.15+k*110+Math.sin((x+tiempo*2+k*40)/30)*8; x?ctx.lineTo(x,y):ctx.moveTo(x,y); } ctx.stroke(); } }
+  if(m.decor==="lava"){ const gl=ctx.createLinearGradient(0,H*0.7,0,H); gl.addColorStop(0,"rgba(255,90,31,0)"); gl.addColorStop(1,"rgba(255,90,31,.35)");
+    ctx.fillStyle=gl; ctx.fillRect(0,H*0.7,W,H*0.3); }
+
+  // barra de progreso del mapa
+  const prog=Math.min(1,distancia/DIST_MAPA);
+  ctx.fillStyle="rgba(255,255,255,.12)"; ctx.fillRect(W/2-120,H-22,240,6);
+  ctx.fillStyle=m.linea; ctx.fillRect(W/2-120,H-22,240*prog,6);
 
   // líneas de carril
   ctx.strokeStyle=m.linea; ctx.globalAlpha=0.35; ctx.lineWidth=3; ctx.setLineDash([24,22]);
