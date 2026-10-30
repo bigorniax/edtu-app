@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Apila Neón</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;background:#03040a;color:#eaf6ff}
+  #wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{display:block;max-width:100%;max-height:100%;border-radius:12px;touch-action:none;
+    box-shadow:0 0 28px rgba(255,0,200,.3),inset 0 0 40px rgba(0,190,255,.1)}
+  #hud{position:absolute;top:10px;left:0;right:0;display:flex;justify-content:space-between;padding:0 16px;
+    font-weight:900;font-size:17px;pointer-events:none;text-shadow:0 0 8px #0cf}
+  #hud span:last-child{color:#ffd12e;text-shadow:0 0 8px #ffd12e}
+  #ayuda{position:absolute;bottom:10px;left:0;right:0;text-align:center;color:#6fb8d8;font-size:13px;pointer-events:none}
+  #menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(3,4,10,.92);text-align:center;padding:20px}
+  #menu h1{font-size:40px;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #fff,0 0 18px #0cf,0 0 40px #0cf}
+  #menu p{margin:14px 0 22px;color:#7fc8e8;line-height:1.6;font-size:16px;max-width:460px}
+  #menu button{cursor:pointer;padding:16px 42px;border-radius:14px;border:2px solid #0cf;background:rgba(0,0,0,.6);
+    color:#fff;font-size:20px;font-weight:900;letter-spacing:2px;box-shadow:0 0 14px #0cf;text-shadow:0 0 8px #0cf}
+  #menu button:hover{transform:scale(1.05)}
+  #menu .stats{margin-top:18px;color:#ffd12e;font-weight:800;text-shadow:0 0 8px #ffd12e;line-height:1.7}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="420" height="640"></canvas>
+  <div id="hud"><span id="altura">0</span><span id="mejor">0</span></div>
+  <div id="ayuda">toca o pulsa ESPACIO para soltar el bloque</div>
+  <div id="menu">
+    <h1>APILA NEÓN</h1>
+    <p>Suelta el bloque justo encima del anterior. Lo que sobre se cae. Si el bloque queda muy chico, pierdes. Cada vez se mueve más rápido.</p>
+    <button id="empezar">JUGAR</button>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+const W=cv.width, H=cv.height;
+const ANCHO_INICIAL=170, ALTO_BLOQUE=26, MINIMO=14;
+const CLAVE="edtu_apila_mejor";
+const COLORES=["#ff3b5c","#ff8a3c","#ffd12e","#b6ff00","#3ee6a0","#2fd0ff","#3a8cff","#c58cff"];
+
+function leer(){ try{ return parseInt(localStorage.getItem(CLAVE)||"0",10)||0; }catch(e){ return 0; } }
+function guardar(v){ try{ localStorage.setItem(CLAVE,String(v)); }catch(e){} }
+
+let audio=null;
+function tono(f,d,tipo,vol){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
+  const o=audio.createOscillator(), g=audio.createGain(); o.type=tipo||"square"; const t=audio.currentTime;
+  o.frequency.setValueAtTime(f,t); g.gain.setValueAtTime(vol||0.08,t); g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t+d); }catch(e){} }
+
+let pilas=[], actual={x:0,w:ANCHO_INICIAL,color:COLORES[0],y:H-120}, cayendo=null, dir=1, vel=2.2, raf=null, partes=[], sacudida=0, vivo=false;
+function empezar(){
+  $("menu").style.display="none";
+  pilas=[];                       // bloques ya puestos: {x,w,color}
+  const base=(W-ANCHO_INICIAL)/2;
+  pilas.push({x:base,w:ANCHO_INICIAL,color:"#3a8cff"});  // base fija
+  actual={x:0,w:ANCHO_INICIAL,color:COLORES[0]};
+  dir=1; vel=2.2; cayendo=null; partes=[]; sacudida=0; vivo=true;
+  nuevoBloque();
+  cancelAnimationFrame(raf);
+  raf=requestAnimationFrame(paso);
+}
+
+function nuevoBloque(){
+  const top=pilas[pilas.length-1];
+  actual={x: dir>0?-actual.w:W, w:top.w, color:COLORES[pilas.length%COLORES.length]};
+  actual.y=H-120-(pilas.length)*ALTO_BLOQUE;
+  actual.x=(dir>0)?0:W-actual.w;
+  actual.dir=dir;
+}
+
+function altura(){ return pilas.length-1; }
+
+function soltar(){
+  if(!vivo||cayendo) return;
+  const top=pilas[pilas.length-1];
+  const izq=Math.max(actual.x,top.x), der=Math.min(actual.x+actual.w,top.x+top.w);
+  const solapa=der-izq;
+  if(solapa<=0){ perder(); return; }
+  // la parte que sobra se cae
+  if(actual.x<top.x) cayendo={x:actual.x,w:top.x-actual.x,y:actual.y,color:actual.color,vy:0};
+  if(actual.x+actual.w>top.x+top.w) cayendo={x:top.x+top.w,w:(actual.x+actual.w)-(top.x+top.w),y:actual.y,color:actual.color,vy:0};
+  // si cayó bien encima, es una "perfecta"
+  const perfecta=Math.abs(solapa-top.w)<3 || solapa>=actual.w-0.5;
+  if(perfecta) { tono(880,0.08,"sine",0.09); sacudida=0; }
+  else tono(440,0.08,"triangle",0.07);
+  pilas.push({x:izq,w:solapa,color:actual.color});
+  if(solapa<top.w) sacudida=0;
+  // el bloque nuevo se va a la altura que toca
+  vel=Math.min(7,2.2+altura()*0.09);
+  if(pilas.length>=1 && solapa<MINIMO){ /* el siguiente sigue igual */ }
+  dir=-dir;
+  if(solapa<MINIMO){ perder(); return; }
+  actual.y=H-120-(pilas.length)*ALTO_BLOQUE;
+  actual={x:0,w:solapa,color:COLORES[pilas.length%COLORES.length],y:H-120-pilas.length*ALTO_BLOQUE,dir:dir};
+  actual.x = dir>0 ? 0 : W-actual.w;
+  if(perfecta) partes.push(...chispas(izq+solapa/2, H-120-(pilas.length-1)*ALTO_BLOQUE));
+}
+
+function chispas(x,y){
+  const r=[];
+  for(let i=0;i<14;i++) r.push({x,y,vx:(Math.random()-0.5)*6,vy:-Math.random()*5-1,vida:34,color:"#ffd12e"});
+  return r;
+}
+
+function perder(){
+  vivo=false; cayendo=null; sacudida=16; tono(150,0.5,"sawtooth",0.12);
+  const alt=altura(), mejor=leer();
+  if(alt>mejor) guardar(alt);
+  cancelAnimationFrame(raf);
+  dibujar();
+  pintarFin(alt, alt>mejor);
+  setTimeout(()=>{ cv.onclick=()=>{ cv.onclick=null; empezar(); }; },500);
+}
+
+function paso(){
+  raf=requestAnimationFrame(paso);
+  if(!vivo) return;
+  // el bloque va de lado a lado
+  actual.x+=vel*dir*1.2;
+  if(actual.x<=0){ actual.x=0; dir=1; }
+  if(actual.x+actual.w>=W){ actual.x=W-actual.w; dir=-1; }
+  actual.dir=dir;
+  // lo que se cae
+  if(cayendo){ cayendo.vy+=0.6; cayendo.y+=cayendo.vy; if(cayendo.y>H){ cayendo=null; } }
+  partes.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=0.25; p.vida--; });
+  partes=partes.filter(p=>p.vida>0);
+  if(sacudida>0) sacudida--;
+  dibujar();
+  $("altura").textContent="altura "+altura();
+  $("mejor").textContent="récord "+Math.max(leer(),altura());
+}
+
+function dibujar(){
+  const ox=sacudida>0?(Math.random()-0.5)*sacudida:0, oy=sacudida>0?(Math.random()-0.5)*sacudida:0;
+  ctx.save(); ctx.translate(ox,oy);
+  const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,"#05040f"); g.addColorStop(1,"#0a1430");
+  ctx.fillStyle=g; ctx.fillRect(-20,-20,W+40,H+40);
+  // cuadrícula de fondo
+  ctx.strokeStyle="rgba(0,190,255,.08)"; ctx.lineWidth=1;
+  for(let x=0;x<W;x+=40){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for(let y=0;y<H;y+=40){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+  // la torre que ya se puso
+  // el bloque i ocupa la fila i (la base es la fila 0)
+  pilas.forEach((b,i)=>bloque(b.x,H-120-i*ALTO_BLOQUE,b.w,ALTO_BLOQUE,b.color));
+  // el bloque que se mueve
+  if(vivo && actual) bloque(actual.x,actual.y,actual.w,ALTO_BLOQUE,actual.color,true);
+  // lo que se cae
+  if(cayendo) bloque(cayendo.x,cayendo.y,cayendo.w,ALTO_BLOQUE,cayendo.color);
+  // chispas
+  partes.forEach(p=>{ ctx.globalAlpha=Math.max(0,p.vida/34); ctx.fillStyle=p.color; ctx.fillRect(p.x-3,p.y-3,6,6); });
+  ctx.globalAlpha=1;
+  ctx.restore();
+}
+
+function bloque(x,y,w,h,color,brillo){
+  ctx.fillStyle=color;
+  ctx.shadowColor=color; ctx.shadowBlur=brillo?18:10;
+  ctx.fillRect(x,y,w,h);
+  ctx.shadowBlur=0;
+  ctx.fillStyle="rgba(255,255,255,.35)"; ctx.fillRect(x+2,y+2,w-4,4);
+  ctx.strokeStyle="rgba(0,0,0,.35)"; ctx.lineWidth=2; ctx.strokeRect(x,y,w,h);
+}
+
+function pintarFin(alt,record){
+  ctx.fillStyle="rgba(0,0,0,.62)"; ctx.fillRect(0,0,W,H);
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  ctx.fillStyle="#fff"; ctx.font="900 40px Segoe UI,sans-serif";
+  ctx.shadowColor="#f05"; ctx.shadowBlur=18; ctx.fillText("SE CAYÓ",W/2,H/2-60); ctx.shadowBlur=0;
+  ctx.fillStyle="#ffd12e"; ctx.font="800 24px Segoe UI,sans-serif";
+  ctx.fillText("altura "+alt,W/2,H/2-10);
+  ctx.fillStyle=record?"#b6ff00":"#7fc8e8"; ctx.font="700 16px Segoe UI,sans-serif";
+  ctx.fillText(record?"¡NUEVO RÉCORD!":"Récord: "+leer(),W/2,H/2+26);
+  ctx.fillStyle="#7fc8e8"; ctx.font="600 15px Segoe UI,sans-serif";
+  ctx.fillText("toca para volver a jugar",W/2,H/2+64);
+}
+
+function accion(){
+  if(!vivo){ return; }
+  soltar();
+}
+addEventListener("keydown",e=>{
+  if(e.key===" "||e.key==="ArrowDown"){ e.preventDefault(); accion(); }
+});
+cv.addEventListener("pointerdown",e=>{ e.preventDefault(); accion(); });
+$("empezar").onclick=empezar;
+
+function pintarMenu(){ $("stats").innerHTML="Récord de altura: "+leer(); }
+pilas=[]; actual={x:0,w:ANCHO_INICIAL,color:COLORES[0],y:H-120}; vivo=false;
+dibujar(); pintarMenu();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>
