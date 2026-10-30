@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Monedas Rush</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;background:#04060c;color:#eaf6ff}
+  #wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{display:block;max-width:100%;max-height:100%;border-radius:12px;touch-action:none;
+    box-shadow:0 0 28px rgba(0,190,255,.35),inset 0 0 40px rgba(0,190,255,.12)}
+  #hud{position:absolute;top:10px;left:0;right:0;display:flex;justify-content:space-between;padding:0 16px;
+    font-weight:900;font-size:18px;pointer-events:none;text-shadow:0 0 8px #0cf}
+  #hud span:last-child{color:#ffd12e;text-shadow:0 0 8px #ffd12e}
+  #ayuda{position:absolute;bottom:12px;left:0;right:0;text-align:center;color:#6fb8d8;font-size:13px;pointer-events:none}
+  #menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(4,6,12,.9);text-align:center;padding:20px}
+  #menu h1{font-size:42px;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #fff,0 0 18px #0cf,0 0 40px #0cf}
+  #menu p{margin:14px 0 26px;color:#7fc8e8;line-height:1.6;font-size:16px;max-width:460px}
+  #menu button{cursor:pointer;padding:16px 42px;border-radius:14px;border:2px solid #0cf;background:rgba(0,0,0,.6);
+    color:#fff;font-size:20px;font-weight:900;letter-spacing:2px;box-shadow:0 0 14px #0cf;text-shadow:0 0 8px #0cf}
+  #menu button:hover{transform:scale(1.05)}
+  #menu .mejor{margin-top:20px;color:#ffd12e;font-weight:800;text-shadow:0 0 8px #ffd12e}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="420" height="640"></canvas>
+  <div id="hud"><span id="dist">0 m</span><span id="mon">0 monedas</span></div>
+  <div id="ayuda">← → o toca los lados de la pantalla para cambiar de carril</div>
+  <div id="menu">
+    <h1>MONEDAS RUSH</h1>
+    <p>Corre sin parar. Cambia de carril para juntar monedas y esquivar las barreras. Cada vez corres más rápido.</p>
+    <button id="empezar">JUGAR</button>
+    <div class="mejor" id="mejor"></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+const W=cv.width, H=cv.height;
+const CARRILES=[W*0.2, W*0.5, W*0.8];
+const CLAVE="edtu_monedas_mejor";
+
+let audio=null;
+function sonido(freq,dur,tipo){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
+  const o=audio.createOscillator(), g=audio.createGain(); o.type=tipo||"square"; o.frequency.value=freq;
+  g.gain.setValueAtTime(0.08,audio.currentTime); g.gain.exponentialRampToValueAtTime(0.0001,audio.currentTime+dur);
+  o.connect(g); g.connect(audio.destination); o.start(); o.stop(audio.currentTime+dur); }catch(e){} }
+
+let carril=1, objetos=[], distancia=0, monedas=0, velocidad=5, tiempo=0, vivo=false, raf=null, ultimoGeneraA=0;
+let saltoY=0, saltoV=0;
+
+function mejorGuardado(){ try{ return parseInt(localStorage.getItem(CLAVE)||"0",10)||0; }catch(e){ return 0; } }
+function guardarMejor(p){ try{ if(p>mejorGuardado()) localStorage.setItem(CLAVE,String(p)); }catch(e){} }
+
+function empezar(){
+  $("menu").style.display="none";
+  carril=1; objetos=[]; distancia=0; monedas=0; velocidad=5; tiempo=0; vivo=true; ultimoGeneraA=0;
+  saltoY=0; saltoV=0;
+  cancelAnimationFrame(raf);
+  raf=requestAnimationFrame(paso);
+}
+
+function generar(){
+  // cada cierto tramo sale una barrera en un carril, y a veces monedas en los otros
+  const libre=Math.floor(Math.random()*3);
+  for(let c=0;c<3;c++){
+    if(c===libre) continue;
+    if(Math.random()<0.55) objetos.push({t:"barrera",c:c,y:-60});
+  }
+  const moneda=(libre+1+Math.floor(Math.random()*2))%3;
+  for(let k=0;k<4;k++) objetos.push({t:"moneda",c:moneda,y:-60-k*50});
+}
+
+function chocan(o){
+  // el personaje está abajo (y=H-110); solo choca si está en el mismo carril y no está saltando
+  return o.c===carril && Math.abs(o.y-(H-110))<34 && saltoY<18;
+}
+
+function paso(){
+  raf=requestAnimationFrame(paso);
+  if(!vivo) return;
+  tiempo++;
+  distancia+=velocidad/10;
+  velocidad=Math.min(14,5+distancia/400);
+
+  // salto
+  if(saltoY>0||saltoV!==0){ saltoV-=0.9; saltoY+=saltoV; if(saltoY<=0){ saltoY=0; saltoV=0; } }
+
+  // generar cada cierto tiempo, más seguido cuando vas rápido
+  if(tiempo-ultimoGeneraA>Math.max(38,110-velocidad*5)){ generar(); ultimoGeneraA=tiempo; }
+
+  objetos.forEach(o=>o.y+=velocidad);
+  for(let i=objetos.length-1;i>=0;i--){
+    const o=objetos[i];
+    if(o.t==="moneda" && o.c===carril && Math.abs(o.y-(H-110))<30){
+      objetos.splice(i,1); monedas++; sonido(880,0.08,"sine"); continue;
+    }
+    if(o.t==="barrera" && chocan(o)){ perder(); return; }
+    if(o.y>H+60) objetos.splice(i,1);
+  }
+  dibujar();
+  $("dist").textContent=Math.floor(distancia)+" m";
+  $("mon").textContent=monedas+" monedas";
+}
+
+function perder(){
+  vivo=false; sonido(120,0.4,"sawtooth");
+  const puntos=Math.floor(distancia)+monedas*10;
+  guardarMejor(puntos);
+  dibujar();
+  ctx.fillStyle="rgba(0,0,0,.6)"; ctx.fillRect(0,0,W,H);
+  ctx.textAlign="center"; ctx.fillStyle="#fff"; ctx.font="900 40px Segoe UI,sans-serif";
+  ctx.shadowColor="#f05"; ctx.shadowBlur=18; ctx.fillText("CHOCASTE",W/2,H/2-30);
+  ctx.shadowBlur=0; ctx.fillStyle="#ffd12e"; ctx.font="800 22px Segoe UI,sans-serif";
+  ctx.fillText(puntos+" puntos",W/2,H/2+12);
+  ctx.fillStyle="#7fc8e8"; ctx.font="600 16px Segoe UI,sans-serif";
+  ctx.fillText("toca para volver a jugar",W/2,H/2+50);
+  setTimeout(()=>{ cv.onclick=()=>{ cv.onclick=null; empezar(); }; },400);
+  cancelAnimationFrame(raf);
+  $("mejor").textContent="Mejor puntaje: "+mejorGuardado();
+}
+
+function dibujar(){
+  // fondo: carreteras con líneas que se mueven
+  const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,"#05101e"); g.addColorStop(1,"#0a1c33");
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  // líneas divisorias
+  ctx.strokeStyle="rgba(0,190,255,.25)"; ctx.lineWidth=3; ctx.setLineDash([24,22]);
+  ctx.lineDashOffset=-(distancia*12)%46;
+  [W/3,W*2/3].forEach(x=>{ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); });
+  ctx.setLineDash([]); ctx.lineDashOffset=0;
+  // barreras y monedas
+  objetos.forEach(o=>{
+    const x=CARRILES[o.c];
+    if(o.t==="barrera"){
+      ctx.fillStyle="#ff3b5c"; ctx.shadowColor="#ff3b5c"; ctx.shadowBlur=14;
+      ctx.fillRect(x-48,o.y-22,96,30); ctx.shadowBlur=0;
+    } else {
+      ctx.fillStyle="#ffd12e"; ctx.shadowColor="#ffd12e"; ctx.shadowBlur=14;
+      ctx.beginPath(); ctx.arc(x,o.y,17,0,7); ctx.fill(); ctx.shadowBlur=0;
+      ctx.fillStyle="#7a5a00"; ctx.font="900 18px Segoe UI,sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText("$",x,o.y+1);
+    }
+  });
+  // personaje
+  const x=CARRILES[carril], y=H-110-saltoY;
+  ctx.shadowColor="#0cf"; ctx.shadowBlur=18; ctx.fillStyle="#0cf";
+  ctx.beginPath(); ctx.arc(x,y,26,0,7); ctx.fill(); ctx.shadowBlur=0;
+  ctx.fillStyle="#04101e"; ctx.beginPath(); ctx.arc(x-9,y-4,5,0,7); ctx.arc(x+9,y-4,5,0,7); ctx.fill();
+  if(saltoY>0){ ctx.fillStyle="rgba(0,200,255,.25)"; ctx.beginPath(); ctx.ellipse(x,H-110+28,22,6,0,0,7); ctx.fill(); }
+}
+
+function cambiar(d){ if(!vivo) return; carril=Math.max(0,Math.min(2,carril+d)); sonido(520,0.05,"triangle"); }
+function saltar(){ if(!vivo||saltoY>0) return; saltoV=13; }
+
+addEventListener("keydown",e=>{
+  const k=e.key.toLowerCase();
+  if(k==="arrowleft"||k==="a") cambiar(-1);
+  if(k==="arrowright"||k==="d") cambiar(1);
+  if(k==="arrowup"||k==="w"||k===" ") saltar();
+  if(["arrowleft","arrowright","arrowup","arrowdown"," "].includes(k)) e.preventDefault();
+});
+let toqueX=null;
+cv.addEventListener("pointerdown",e=>{ toqueX=e.clientX; const r=cv.getBoundingClientRect();
+  const lado=(e.clientX-r.left)/r.width;
+  if(lado<0.33) cambiar(-1); else if(lado>0.66) cambiar(1); else saltar(); });
+$("empezar").onclick=empezar;
+
+// no mostrar menu si ya se jugó: mantener el primer dibujo estático
+dibujar();
+$("mejor").textContent="Mejor puntaje: "+mejorGuardado();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>
