@@ -11,29 +11,41 @@
   canvas{display:block;max-width:100%;max-height:100%;border-radius:12px;touch-action:none;
     box-shadow:0 0 28px rgba(0,190,255,.35),inset 0 0 40px rgba(0,190,255,.12)}
   #hud{position:absolute;top:10px;left:0;right:0;display:flex;justify-content:space-between;padding:0 16px;
-    font-weight:900;font-size:18px;pointer-events:none;text-shadow:0 0 8px #0cf}
-  #hud span:last-child{color:#ffd12e;text-shadow:0 0 8px #ffd12e}
-  #ayuda{position:absolute;bottom:12px;left:0;right:0;text-align:center;color:#6fb8d8;font-size:13px;pointer-events:none}
+    font-weight:900;font-size:17px;pointer-events:none;text-shadow:0 0 8px #0cf}
+  #hud .monedas{color:#ffd12e;text-shadow:0 0 8px #ffd12e}
+  #ayuda{position:absolute;bottom:10px;left:0;right:0;text-align:center;color:#6fb8d8;font-size:13px;pointer-events:none}
+  #pausa{position:absolute;top:44px;right:12px;cursor:pointer;padding:6px 12px;border-radius:9px;border:1.5px solid #0cf;
+    background:rgba(0,0,0,.6);color:#fff;font-weight:800;font-size:13px;box-shadow:0 0 10px #0cf}
   #menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
-    background:rgba(4,6,12,.9);text-align:center;padding:20px}
+    background:rgba(4,6,12,.92);text-align:center;padding:20px}
   #menu h1{font-size:42px;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #fff,0 0 18px #0cf,0 0 40px #0cf}
-  #menu p{margin:14px 0 26px;color:#7fc8e8;line-height:1.6;font-size:16px;max-width:460px}
+  #menu p{margin:14px 0 22px;color:#7fc8e8;line-height:1.6;font-size:16px;max-width:480px}
+  #menu .leyenda{display:grid;grid-template-columns:auto 1fr;gap:8px 14px;text-align:left;margin:0 0 24px;font-size:14px;color:#bfe6f5}
+  #menu .leyenda b{font-weight:900}
   #menu button{cursor:pointer;padding:16px 42px;border-radius:14px;border:2px solid #0cf;background:rgba(0,0,0,.6);
     color:#fff;font-size:20px;font-weight:900;letter-spacing:2px;box-shadow:0 0 14px #0cf;text-shadow:0 0 8px #0cf}
   #menu button:hover{transform:scale(1.05)}
-  #menu .mejor{margin-top:20px;color:#ffd12e;font-weight:800;text-shadow:0 0 8px #ffd12e}
+  #menu .stats{margin-top:18px;color:#ffd12e;font-weight:800;text-shadow:0 0 8px #ffd12e;line-height:1.7}
 </style>
 </head>
 <body>
 <div id="wrap">
   <canvas id="cv" width="420" height="640"></canvas>
-  <div id="hud"><span id="dist">0 m</span><span id="mon">0 monedas</span></div>
-  <div id="ayuda">← → o toca los lados de la pantalla para cambiar de carril</div>
+  <div id="hud"><span id="dist">0 m</span><span class="monedas" id="mon">0</span></div>
+  <div id="pausa">PAUSA</div>
+  <div id="ayuda">← → o toca los lados · ↑ o toca el centro para saltar · P pausa</div>
   <div id="menu">
     <h1>MONEDAS RUSH</h1>
-    <p>Corre sin parar. Cambia de carril para juntar monedas y esquivar las barreras. Cada vez corres más rápido.</p>
+    <p>Corre sin parar por cuatro mundos. Esquiva vallas (salta) y muros (cambia de carril). Junta monedas en cadena para subir el multiplicador.</p>
+    <div class="leyenda">
+      <b style="color:#ff3b5c">■</b><span>Valla: hay que saltarla</span>
+      <b style="color:#ff8a3c">▮</b><span>Muro: hay que cambiar de carril</span>
+      <b style="color:#ffd12e">●</b><span>Moneda: suma puntos y combo</span>
+      <b style="color:#2fd0ff">◆</b><span>Imán: atrae monedas un rato</span>
+      <b style="color:#b6ff00">◈</b><span>Escudo: te salva de un choque</span>
+    </div>
     <button id="empezar">JUGAR</button>
-    <div class="mejor" id="mejor"></div>
+    <div class="stats" id="stats"></div>
   </div>
 </div>
 <script>
@@ -41,137 +53,296 @@ const $=id=>document.getElementById(id);
 const cv=$("cv"), ctx=cv.getContext("2d");
 const W=cv.width, H=cv.height;
 const CARRILES=[W*0.2, W*0.5, W*0.8];
-const CLAVE="edtu_monedas_mejor";
+const PIES=H-110;
+const CLAVE_MEJOR="edtu_monedas_mejor", CLAVE_TOTAL="edtu_monedas_total";
 
+/* ---------- memoria del navegador (con cuidado: puede no estar disponible) ---------- */
+function leer(k){ try{ return parseInt(localStorage.getItem(k)||"0",10)||0; }catch(e){ return 0; } }
+function guardar(k,v){ try{ localStorage.setItem(k,String(v)); }catch(e){} }
+
+/* ---------- sonido ---------- */
 let audio=null;
-function sonido(freq,dur,tipo){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
-  const o=audio.createOscillator(), g=audio.createGain(); o.type=tipo||"square"; o.frequency.value=freq;
-  g.gain.setValueAtTime(0.08,audio.currentTime); g.gain.exponentialRampToValueAtTime(0.0001,audio.currentTime+dur);
-  o.connect(g); g.connect(audio.destination); o.start(); o.stop(audio.currentTime+dur); }catch(e){} }
+function tono(freq,dur,tipo,vol,subida){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
+  const o=audio.createOscillator(), g=audio.createGain(); o.type=tipo||"square";
+  const t=audio.currentTime; o.frequency.setValueAtTime(freq,t);
+  if(subida) o.frequency.exponentialRampToValueAtTime(freq*subida,t+dur);
+  g.gain.setValueAtTime(vol||0.08,t); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t+dur); }catch(e){} }
 
-let carril=1, objetos=[], distancia=0, monedas=0, velocidad=5, tiempo=0, vivo=false, raf=null, ultimoGeneraA=0;
-let saltoY=0, saltoV=0;
+/* ---------- mundos: cambian según la distancia ---------- */
+const MUNDOS=[
+  {nombre:"CIUDAD",    desde:0,    cielo:["#0a1224","#16294a"], linea:"#2fd0ff"},
+  {nombre:"BOSQUE",    desde:700,  cielo:["#071a12","#123a26"], linea:"#7dff9a"},
+  {nombre:"NIEVE",     desde:1500, cielo:["#0c1622","#24405e"], linea:"#c8f0ff"},
+  {nombre:"DESIERTO",  desde:2400, cielo:["#2a1406","#5a2e10"], linea:"#ffb347"},
+];
+function mundoDe(d){ let m=MUNDOS[0]; for(const x of MUNDOS) if(d>=x.desde) m=x; return m; }
 
-function mejorGuardado(){ try{ return parseInt(localStorage.getItem(CLAVE)||"0",10)||0; }catch(e){ return 0; } }
-function guardarMejor(p){ try{ if(p>mejorGuardado()) localStorage.setItem(CLAVE,String(p)); }catch(e){} }
+/* ---------- estado ---------- */
+let carril=1, saltoY=0, saltoV=0;
+let objetos=[], monedasSuel=[], partes=[], flotantes=[];
+let distancia=0, monedas=0, velocidad=5, tiempo=0, vivo=false, pausado=false, raf=null, ultimoGenera=0;
+let combo=0, mult=1, ultimaMoneda=-999;
+let imanT=0, escudo=false, sacudida=0, mundoAnt=null, bandaT=0;
+let nuevoRecord=false;
+
+function reiniciar(){
+  carril=1; saltoY=0; saltoV=0; objetos=[]; monedasSuel=[]; partes=[]; flotantes=[];
+  distancia=0; monedas=0; velocidad=5; tiempo=0; vivo=true; pausado=false; ultimoGenera=0;
+  combo=0; mult=1; ultimaMoneda=-999; imanT=0; escudo=false; sacudida=0; mundoAnt=null; bandaT=0;
+  nuevoRecord=false;
+}
 
 function empezar(){
   $("menu").style.display="none";
-  carril=1; objetos=[]; distancia=0; monedas=0; velocidad=5; tiempo=0; vivo=true; ultimoGeneraA=0;
-  saltoY=0; saltoV=0;
+  reiniciar();
   cancelAnimationFrame(raf);
   raf=requestAnimationFrame(paso);
 }
 
+/* ---------- generar cosas ---------- */
 function generar(){
-  // cada cierto tramo sale una barrera en un carril, y a veces monedas en los otros
   const libre=Math.floor(Math.random()*3);
-  for(let c=0;c<3;c++){
-    if(c===libre) continue;
-    if(Math.random()<0.55) objetos.push({t:"barrera",c:c,y:-60});
+  const r=Math.random();
+  // a veces un muro grande en dos carriles: hay que buscar el hueco
+  if(r<0.18 && distancia>300){
+    const hueco=Math.floor(Math.random()*3);
+    for(let c=0;c<3;c++) if(c!==hueco) objetos.push({t:"muro",c:c,y:-60});
+  } else {
+    for(let c=0;c<3;c++){
+      if(c===libre) continue;
+      if(Math.random()<0.5) objetos.push({t:"valla",c:c,y:-60});
+    }
   }
+  // monedas en uno de los carriles libres
   const moneda=(libre+1+Math.floor(Math.random()*2))%3;
-  for(let k=0;k<4;k++) objetos.push({t:"moneda",c:moneda,y:-60-k*50});
+  const cant=3+Math.floor(Math.random()*3);
+  for(let k=0;k<cant;k++) objetos.push({t:"moneda",c:moneda,y:-60-k*46});
+  // power-up poco frecuente, en el carril libre
+  if(Math.random()<0.07){
+    const tipo=Math.random()<0.5?"iman":"escudo";
+    objetos.push({t:tipo,c:libre,y:-80});
+  }
 }
 
-function chocan(o){
-  // el personaje está abajo (y=H-110); solo choca si está en el mismo carril y no está saltando
-  return o.c===carril && Math.abs(o.y-(H-110))<34 && saltoY<18;
+function particulas(x,y,color,n){
+  for(let i=0;i<n;i++) partes.push({x,y,vx:(Math.random()-0.5)*7,vy:(Math.random()-0.9)*6,vida:30+Math.random()*18,color});
 }
 
+/* ---------- el paso del juego ---------- */
 function paso(){
   raf=requestAnimationFrame(paso);
-  if(!vivo) return;
+  if(!vivo||pausado) { if(pausado) dibujar(); return; }
   tiempo++;
-  distancia+=velocidad/10;
-  velocidad=Math.min(14,5+distancia/400);
 
-  // salto
+  distancia+=velocidad/10;
+  velocidad=Math.min(15,5+distancia/350);
+  if(imanT>0) imanT--;
+
+  // salto: sube y cae
   if(saltoY>0||saltoV!==0){ saltoV-=0.9; saltoY+=saltoV; if(saltoY<=0){ saltoY=0; saltoV=0; } }
 
-  // generar cada cierto tiempo, más seguido cuando vas rápido
-  if(tiempo-ultimoGeneraA>Math.max(38,110-velocidad*5)){ generar(); ultimoGeneraA=tiempo; }
+  // generar cada cierto tiempo; más seguido cuando vas rápido
+  if(tiempo-ultimoGenera>Math.max(34,100-velocidad*5)){ generar(); ultimoGenera=tiempo; }
 
   objetos.forEach(o=>o.y+=velocidad);
+
   for(let i=objetos.length-1;i>=0;i--){
     const o=objetos[i];
-    if(o.t==="moneda" && o.c===carril && Math.abs(o.y-(H-110))<30){
-      objetos.splice(i,1); monedas++; sonido(880,0.08,"sine"); continue;
+    const cerca=Math.abs(o.y-PIES)<30;
+    const mismoCarril=o.c===carril || (imanT>0 && o.t==="moneda" && Math.abs(o.c-carril)<=1);
+
+    if(o.t==="moneda" && cerca && mismoCarril){
+      objetos.splice(i,1); recogerMoneda(o.c,o.y); continue;
     }
-    if(o.t==="barrera" && chocan(o)){ perder(); return; }
+    if(o.t==="iman" && cerca && o.c===carril){ objetos.splice(i,1); imanT=300; tono(660,0.25,"sine",0.1,1.8); particulas(CARRILES[o.c],PIES,"#2fd0ff",14); continue; }
+    if(o.t==="escudo" && cerca && o.c===carril){ objetos.splice(i,1); escudo=true; tono(540,0.25,"triangle",0.1,1.6); particulas(CARRILES[o.c],PIES,"#b6ff00",14); continue; }
+
+    if(o.c===carril && cerca){
+      // valla: se salta. muro: siempre choca si estás en su carril
+      const choca = o.t==="muro" || (o.t==="valla" && saltoY<26);
+      if(choca){
+        if(escudo){
+          escudo=false; objetos.splice(i,1); tono(300,0.2,"triangle",0.1,0.5);
+          particulas(CARRILES[carril],PIES,"#b6ff00",24);
+          continue;
+        }
+        perder(); return;
+      }
+    }
     if(o.y>H+60) objetos.splice(i,1);
   }
+
+  // partículas y textos flotantes
+  partes.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=0.3; p.vida--; });
+  partes=partes.filter(p=>p.vida>0);
+  flotantes.forEach(f=>{ f.y-=1; f.vida--; });
+  flotantes=flotantes.filter(f=>f.vida>0);
+
+  if(sacudida>0) sacudida--;
   dibujar();
   $("dist").textContent=Math.floor(distancia)+" m";
-  $("mon").textContent=monedas+" monedas";
+  $("mon").textContent=monedas+(mult>1?"  x"+mult:"");
+}
+
+function recogerMoneda(c,y){
+  monedas++;
+  // combo: monedas seguidas (cada 40 fotogramas) suben el multiplicador hasta x5
+  if(tiempo-ultimaMoneda<40) combo++; else combo=1;
+  ultimaMoneda=tiempo;
+  mult=Math.min(5,1+Math.floor(combo/4));
+  tono(880+mult*90,0.08,"sine",0.09);
+  particulas(CARRILES[c],y,"#ffd12e",8);
+  flotantes.push({x:CARRILES[c],y:y,vida:30,texto:"+"+(10*mult),color:"#ffd12e"});
 }
 
 function perder(){
-  vivo=false; sonido(120,0.4,"sawtooth");
+  vivo=false; sacudida=18; tono(160,0.5,"sawtooth",0.12,0.3);
+  particulas(CARRILES[carril],PIES,"#ff3b5c",40);
   const puntos=Math.floor(distancia)+monedas*10;
-  guardarMejor(puntos);
+  const mejor=leer(CLAVE_MEJOR);
+  nuevoRecord = puntos>mejor;
+  if(nuevoRecord) guardar(CLAVE_MEJOR,puntos);
+  guardar(CLAVE_TOTAL, leer(CLAVE_TOTAL)+monedas);
   dibujar();
-  ctx.fillStyle="rgba(0,0,0,.6)"; ctx.fillRect(0,0,W,H);
-  ctx.textAlign="center"; ctx.fillStyle="#fff"; ctx.font="900 40px Segoe UI,sans-serif";
-  ctx.shadowColor="#f05"; ctx.shadowBlur=18; ctx.fillText("CHOCASTE",W/2,H/2-30);
-  ctx.shadowBlur=0; ctx.fillStyle="#ffd12e"; ctx.font="800 22px Segoe UI,sans-serif";
-  ctx.fillText(puntos+" puntos",W/2,H/2+12);
-  ctx.fillStyle="#7fc8e8"; ctx.font="600 16px Segoe UI,sans-serif";
-  ctx.fillText("toca para volver a jugar",W/2,H/2+50);
-  setTimeout(()=>{ cv.onclick=()=>{ cv.onclick=null; empezar(); }; },400);
+  pintarFin(puntos);
   cancelAnimationFrame(raf);
-  $("mejor").textContent="Mejor puntaje: "+mejorGuardado();
+  setTimeout(()=>{ cv.onclick=()=>{ cv.onclick=null; empezar(); }; },500);
 }
 
+function pintarFin(puntos){
+  ctx.fillStyle="rgba(0,0,0,.62)"; ctx.fillRect(0,0,W,H);
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  ctx.fillStyle="#fff"; ctx.font="900 40px Segoe UI,sans-serif";
+  ctx.shadowColor="#f05"; ctx.shadowBlur=18; ctx.fillText("CHOCASTE",W/2,H/2-70);
+  ctx.shadowBlur=0;
+  ctx.fillStyle="#ffd12e"; ctx.font="800 24px Segoe UI,sans-serif";
+  ctx.fillText(puntos+" puntos",W/2,H/2-20);
+  ctx.fillStyle=nuevoRecord?"#b6ff00":"#7fc8e8"; ctx.font="700 16px Segoe UI,sans-serif";
+  ctx.fillText(nuevoRecord?"¡NUEVO RÉCORD!":"Récord: "+leer(CLAVE_MEJOR),W/2,H/2+14);
+  ctx.fillStyle="#7fc8e8"; ctx.font="600 15px Segoe UI,sans-serif";
+  ctx.fillText(monedas+" monedas · llegaste a "+Math.floor(distancia)+" m",W/2,H/2+44);
+  ctx.fillText("toca para volver a jugar",W/2,H/2+80);
+}
+
+/* ---------- dibujo ---------- */
 function dibujar(){
-  // fondo: carreteras con líneas que se mueven
-  const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,"#05101e"); g.addColorStop(1,"#0a1c33");
-  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
-  // líneas divisorias
-  ctx.strokeStyle="rgba(0,190,255,.25)"; ctx.lineWidth=3; ctx.setLineDash([24,22]);
+  const ox=sacudida>0?(Math.random()-0.5)*sacudida*0.8:0;
+  const oy=sacudida>0?(Math.random()-0.5)*sacudida*0.8:0;
+  ctx.save(); ctx.translate(ox,oy);
+
+  const m=mundoDe(distancia);
+  if(m!==mundoAnt){ if(mundoAnt){ bandaT=60; } mundoAnt=m; }
+  const g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,m.cielo[0]); g.addColorStop(1,m.cielo[1]);
+  ctx.fillStyle=g; ctx.fillRect(-20,-20,W+40,H+40);
+
+  // franjas de fondo que se mueven: sensación de velocidad
+  ctx.fillStyle="rgba(255,255,255,.04)";
+  const off=(distancia*6)%80;
+  for(let y=-80+off;y<H;y+=80) ctx.fillRect(0,y,W,40);
+
+  // líneas de carril
+  ctx.strokeStyle=m.linea; ctx.globalAlpha=0.35; ctx.lineWidth=3; ctx.setLineDash([24,22]);
   ctx.lineDashOffset=-(distancia*12)%46;
   [W/3,W*2/3].forEach(x=>{ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); });
-  ctx.setLineDash([]); ctx.lineDashOffset=0;
-  // barreras y monedas
+  ctx.setLineDash([]); ctx.lineDashOffset=0; ctx.globalAlpha=1;
+
+  // línea de llegada del mundo
+  if(bandaT>0){ bandaT--; ctx.globalAlpha=Math.min(1,bandaT/30);
+    ctx.fillStyle=m.linea; ctx.font="900 34px Segoe UI,sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.shadowColor=m.linea; ctx.shadowBlur=18; ctx.fillText(m.nombre,W/2,H*0.35); ctx.shadowBlur=0; ctx.globalAlpha=1; }
+
+  // objetos
   objetos.forEach(o=>{
     const x=CARRILES[o.c];
-    if(o.t==="barrera"){
+    if(o.t==="valla"){
       ctx.fillStyle="#ff3b5c"; ctx.shadowColor="#ff3b5c"; ctx.shadowBlur=14;
-      ctx.fillRect(x-48,o.y-22,96,30); ctx.shadowBlur=0;
-    } else {
+      ctx.fillRect(x-48,o.y-12,96,22); ctx.shadowBlur=0;
+      ctx.fillStyle="#fff"; for(let k=0;k<4;k++) ctx.fillRect(x-42+k*24,o.y-12,8,22);
+    } else if(o.t==="muro"){
+      ctx.fillStyle="#ff8a3c"; ctx.shadowColor="#ff8a3c"; ctx.shadowBlur=16;
+      ctx.fillRect(x-48,o.y-44,96,64); ctx.shadowBlur=0;
+      ctx.fillStyle="rgba(0,0,0,.25)"; ctx.fillRect(x-40,o.y-36,80,10); ctx.fillRect(x-40,o.y-14,80,10);
+    } else if(o.t==="moneda"){
       ctx.fillStyle="#ffd12e"; ctx.shadowColor="#ffd12e"; ctx.shadowBlur=14;
-      ctx.beginPath(); ctx.arc(x,o.y,17,0,7); ctx.fill(); ctx.shadowBlur=0;
-      ctx.fillStyle="#7a5a00"; ctx.font="900 18px Segoe UI,sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.beginPath(); ctx.arc(x,o.y,16,0,7); ctx.fill(); ctx.shadowBlur=0;
+      ctx.fillStyle="#7a5a00"; ctx.font="900 17px Segoe UI,sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
       ctx.fillText("$",x,o.y+1);
+    } else if(o.t==="iman"){
+      ctx.fillStyle="#2fd0ff"; ctx.shadowColor="#2fd0ff"; ctx.shadowBlur=16;
+      ctx.beginPath(); ctx.moveTo(x,o.y-20); ctx.lineTo(x+18,o.y); ctx.lineTo(x,o.y+20); ctx.lineTo(x-18,o.y); ctx.closePath(); ctx.fill(); ctx.shadowBlur=0;
+    } else if(o.t==="escudo"){
+      ctx.strokeStyle="#b6ff00"; ctx.lineWidth=4; ctx.shadowColor="#b6ff00"; ctx.shadowBlur=16;
+      ctx.beginPath(); ctx.arc(x,o.y,18,0,7); ctx.stroke(); ctx.shadowBlur=0;
     }
   });
+
   // personaje
-  const x=CARRILES[carril], y=H-110-saltoY;
+  const x=CARRILES[carril], y=PIES-saltoY;
+  if(saltoY>0){ ctx.fillStyle="rgba(0,200,255,.22)"; ctx.beginPath(); ctx.ellipse(x,PIES+28,22,6,0,0,7); ctx.fill(); }
+  if(imanT>0){ ctx.strokeStyle="rgba(47,208,255,.5)"; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(x,y,44+Math.sin(tiempo*0.3)*4,0,7); ctx.stroke(); }
+  if(escudo){ ctx.strokeStyle="#b6ff00"; ctx.lineWidth=3; ctx.shadowColor="#b6ff00"; ctx.shadowBlur=12; ctx.beginPath(); ctx.arc(x,y,36,0,7); ctx.stroke(); ctx.shadowBlur=0; }
   ctx.shadowColor="#0cf"; ctx.shadowBlur=18; ctx.fillStyle="#0cf";
   ctx.beginPath(); ctx.arc(x,y,26,0,7); ctx.fill(); ctx.shadowBlur=0;
   ctx.fillStyle="#04101e"; ctx.beginPath(); ctx.arc(x-9,y-4,5,0,7); ctx.arc(x+9,y-4,5,0,7); ctx.fill();
-  if(saltoY>0){ ctx.fillStyle="rgba(0,200,255,.25)"; ctx.beginPath(); ctx.ellipse(x,H-110+28,22,6,0,0,7); ctx.fill(); }
+
+  // partículas
+  partes.forEach(p=>{ ctx.globalAlpha=Math.max(0,p.vida/40); ctx.fillStyle=p.color; ctx.fillRect(p.x-3,p.y-3,6,6); });
+  ctx.globalAlpha=1;
+  // textos flotantes
+  flotantes.forEach(f=>{ ctx.globalAlpha=Math.max(0,f.vida/30); ctx.fillStyle=f.color; ctx.font="900 18px Segoe UI,sans-serif"; ctx.textAlign="center"; ctx.fillText(f.texto,f.x,f.y); });
+  ctx.globalAlpha=1;
+
+  ctx.restore();
 }
 
-function cambiar(d){ if(!vivo) return; carril=Math.max(0,Math.min(2,carril+d)); sonido(520,0.05,"triangle"); }
-function saltar(){ if(!vivo||saltoY>0) return; saltoV=13; }
+function dibujarPausa(){
+  ctx.fillStyle="rgba(0,0,0,.55)"; ctx.fillRect(0,0,W,H);
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  ctx.fillStyle="#fff"; ctx.font="900 40px Segoe UI,sans-serif"; ctx.shadowColor="#0cf"; ctx.shadowBlur=16;
+  ctx.fillText("PAUSA",W/2,H/2-20); ctx.shadowBlur=0;
+  ctx.fillStyle="#7fc8e8"; ctx.font="600 16px Segoe UI,sans-serif";
+  ctx.fillText("P o Escape para seguir",W/2,H/2+24);
+}
+
+function alternarPausa(){
+  if(!vivo) return;
+  pausado=!pausado;
+  if(pausado){ dibujar(); dibujarPausa(); $("pausa").textContent="SEGUIR"; }
+  else $("pausa").textContent="PAUSA";
+}
+
+/* ---------- controles ---------- */
+function cambiar(d){ if(!vivo||pausado) return; carril=Math.max(0,Math.min(2,carril+d)); tono(520,0.05,"triangle",0.07); }
+function saltar(){ if(!vivo||pausado||saltoY>0) return; saltoV=13; tono(360,0.12,"triangle",0.06,2); }
 
 addEventListener("keydown",e=>{
   const k=e.key.toLowerCase();
+  if(k==="p"||k==="escape"){ alternarPausa(); return; }
   if(k==="arrowleft"||k==="a") cambiar(-1);
   if(k==="arrowright"||k==="d") cambiar(1);
   if(k==="arrowup"||k==="w"||k===" ") saltar();
   if(["arrowleft","arrowright","arrowup","arrowdown"," "].includes(k)) e.preventDefault();
 });
-let toqueX=null;
-cv.addEventListener("pointerdown",e=>{ toqueX=e.clientX; const r=cv.getBoundingClientRect();
-  const lado=(e.clientX-r.left)/r.width;
-  if(lado<0.33) cambiar(-1); else if(lado>0.66) cambiar(1); else saltar(); });
+cv.addEventListener("pointerdown",e=>{
+  if(!vivo) return;
+  const r=cv.getBoundingClientRect();
+  const lado=(e.clientX-r.left)/r.width, arriba=(e.clientY-r.top)/r.height;
+  if(pausado){ alternarPausa(); return; }
+  if(lado<0.3) cambiar(-1); else if(lado>0.7) cambiar(1); else if(arriba<0.85) saltar(); else alternarPausa();
+});
+$("pausa").onclick=alternarPausa;
 $("empezar").onclick=empezar;
 
-// no mostrar menu si ya se jugó: mantener el primer dibujo estático
+/* ---------- pantalla inicial ---------- */
+function pintarMenu(){
+  const mejor=leer(CLAVE_MEJOR), total=leer(CLAVE_TOTAL);
+  $("stats").innerHTML="Mejor puntaje: "+mejor+"<br>Monedas juntadas en total: "+total;
+}
+reiniciar(); vivo=false;
 dibujar();
-$("mejor").textContent="Mejor puntaje: "+mejorGuardado();
+pintarMenu();
 
 /* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
 ["mousedown","mouseup","auxclick"].forEach(ev=>{

@@ -32,8 +32,9 @@
 // v76: 18 de ciencia e inventos (219 juegos).
 // v77: 18 de cocina y oficios (237 juegos) + UN SOLO boton de salir:
 // v78: Monedas Rush, un corredor nuevo (monedas.html).
+// v79: Monedas Rush completo: 4 mundos, power-ups, combos y pausa.
 //      ahora vuelve al menu del paquete en vez de cerrar todo de golpe.
-const CACHE = "edtu-v78";
+const CACHE = "edtu-v79";
 const SHELL = ["./", "./index.html", "./starwars.html", "./wally-kb.js", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 // Estas SIEMPRE se piden a la red primero: son las que cambian con cada mejora.
 const FRESCOS = [".html", "/"];
