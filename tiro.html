@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Tiro Neón</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;background:#03040a;color:#eaf6ff}
+  #wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{display:block;max-width:100%;max-height:100%;border-radius:12px;touch-action:none;cursor:crosshair;
+    box-shadow:0 0 28px rgba(0,190,255,.3),inset 0 0 40px rgba(0,190,255,.1)}
+  #hud{position:absolute;top:10px;left:0;right:0;display:flex;justify-content:space-between;padding:0 16px;
+    font-weight:900;font-size:17px;pointer-events:none;text-shadow:0 0 8px #0cf}
+  #hud span:nth-child(2){color:#ffd12e;text-shadow:0 0 8px #ffd12e}
+  #ayuda{position:absolute;bottom:8px;left:0;right:0;text-align:center;color:#6fb8d8;font-size:13px;pointer-events:none}
+  #menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(3,4,10,.92);text-align:center;padding:20px}
+  #menu h1{font-size:40px;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #fff,0 0 18px #0cf,0 0 40px #0cf}
+  #menu p{margin:14px 0 22px;color:#7fc8e8;line-height:1.6;font-size:16px;max-width:460px}
+  #menu button{cursor:pointer;padding:16px 42px;border-radius:14px;border:2px solid #0cf;background:rgba(0,0,0,.6);
+    color:#fff;font-size:20px;font-weight:900;letter-spacing:2px;box-shadow:0 0 14px #0cf;text-shadow:0 0 8px #0cf}
+  #menu button:hover{transform:scale(1.05)}
+  #menu .stats{margin-top:18px;color:#ffd12e;font-weight:800;text-shadow:0 0 8px #ffd12e;line-height:1.7}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="480" height="640"></canvas>
+  <div id="hud"><span id="ronda">ronda 1</span><span id="puntos">0</span><span id="balas">balas 10</span></div>
+  <div id="ayuda">apunta con el mouse y haz clic · o mueve con ← → y dispara con ESPACIO</div>
+  <div id="menu">
+    <h1>TIRO NEÓN</h1>
+    <p>Dispara a los blancos que se mueven. Los dorados valen más. Cada ronda tiene más blancos y más rápidos. Tienes 10 balas por ronda: no las gastes en fallar.</p>
+    <button id="empezar">JUGAR</button>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+const W=cv.width, H=cv.height;
+const CLAVE="edtu_tiro_mejor";
+
+function leer(){ try{ return parseInt(localStorage.getItem(CLAVE)||"0",10)||0; }catch(e){ return 0; } }
+function guardar(v){ try{ localStorage.setItem(CLAVE,String(v)); }catch(e){} }
+
+let audio=null;
+function tono(f,d,tipo,vol,subida){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
+  const o=audio.createOscillator(), g=audio.createGain(); o.type=tipo||"square"; const t=audio.currentTime;
+  o.frequency.setValueAtTime(f,t); if(subida) o.frequency.exponentialRampToValueAtTime(f*subida,t+d);
+  g.gain.setValueAtTime(vol||0.07,t); g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t+d); }catch(e){} }
+
+let ronda=1, balas=10, puntos=0, blancos=[], marca={x:W/2,y:H/2}, vivo=false, pausado=false, raf=null;
+let partes=[], flotantes=[], teclas={l:false,r:false,f:false}, acertadosRonda=0, cambioRonda=0;
+
+function generarRonda(){
+  blancos=[];
+  const n=3+ronda;
+  for(let i=0;i<n;i++){
+    const dorado=Math.random()<0.2;
+    const radio=dorado?16:Math.max(20,38-ronda*1.5);
+    const vel=(0.8+Math.random()*0.8+ronda*0.25)*(Math.random()<0.5?-1:1);
+    blancos.push({x:radio+Math.random()*(W-2*radio),y:radio+60+Math.random()*(H-radio*2-260),
+      r:radio, vx:vel, dorado:dorado, vivo:true, ondas:Math.random()*6, fase:Math.random()*6});
+  }
+  balas=Math.max(6,12-ronda);
+  acertadosRonda=0;
+}
+
+function empezar(){
+  $("menu").style.display="none";
+  ronda=1; puntos=0; vivo=true; pausado=false; partes=[]; flotantes=[];
+  generarRonda();
+  cancelAnimationFrame(raf);
+  raf=requestAnimationFrame(paso);
+}
+
+function disparar(x,y){
+  if(!vivo||pausado||cambioRonda>0) return;
+  if(balas<=0) return;
+  balas--;
+  tono(210,0.12,"sawtooth",0.08,0.4);
+  let acierto=false;
+  for(let i=blancos.length-1;i>=0;i--){
+    const b=blancos[i];
+    if(!b.vivo) continue;
+    if(Math.hypot(b.x-x,b.y-y)<=b.r+2){
+      b.vivo=false; acierto=true; acertadosRonda++;
+      const pts=b.dorado?50*ronda:10*ronda;
+      puntos+=pts;
+      flotantes.push({x:b.x,y:b.y,vida:32,texto:"+"+pts,color:b.dorado?"#ffd12e":"#2fd0ff"});
+      for(let k=0;k<14;k++) partes.push({x:b.x,y:b.y,vx:(Math.random()-0.5)*6,vy:(Math.random()-0.5)*6,vida:30,color:b.dorado?"#ffd12e":"#ff3b5c"});
+      tono(b.dorado?880:600,0.16,"sine",0.1,1.8);
+      break;
+    }
+  }
+  if(!acierto){ partes.push({x,y,vx:0,vy:0,vida:10,color:"#7fc8e8"}); }
+  if(acertadosRonda>=blancos.length){ siguienteRonda(); }
+  else if(balas<=0 && !blancos.some(b=>b.vivo)) { siguienteRonda(); }
+  else if(balas<=0){ finDelJuego(); }
+}
+
+function siguienteRonda(){
+  // ronda superada: el bono de balas que sobran
+  const bono=balas*5*ronda; puntos+=bono;
+  ronda++; cambioRonda=90; tono(660,0.25,"sine",0.1,1.5);
+  setTimeout(()=>{ if(vivo){ generarRonda(); cambioRonda=0; } },1500);
+}
+
+function finDelJuego(){
+  vivo=false;
+  const mejor=leer(), nuevo=puntos>mejor;
+  if(nuevo) guardar(puntos);
+  dibujar(); pintarFin(nuevo);
+  cancelAnimationFrame(raf);
+  setTimeout(()=>{ cv.onclick=()=>{ cv.onclick=null; empezar(); }; },500);
+}
+
+function paso(){
+  raf=requestAnimationFrame(paso);
+  if(!vivo||pausado){ if(pausado) dibujar(); return; }
+  if(teclas.l) marca.x-=6; if(teclas.r) marca.x+=6;
+  marca.x=Math.max(0,Math.min(W,marca.x));
+  blancos.forEach(b=>{
+    if(!b.vivo) return;
+    b.x+=b.vx; b.fase+=0.05;
+    if(b.x<b.r){ b.x=b.r; b.vx=Math.abs(b.vx); }
+    if(b.x>W-b.r){ b.x=W-b.r; b.vx=-Math.abs(b.vx); }
+    b.y+=Math.sin(b.fase)*0.6;
+  });
+  partes.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=0.1; p.vida--; });
+  partes=partes.filter(p=>p.vida>0);
+  flotantes.forEach(f=>{ f.y-=1; f.vida--; });
+  flotantes=flotantes.filter(f=>f.vida>0);
+  if(cambioRonda>0) cambioRonda--;
+  dibujar();
+  $("ronda").textContent="ronda "+ronda;
+  $("puntos").textContent=puntos;
+  $("balas").textContent="balas "+balas;
+}
+
+function dibujar(){
+  const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,"#05060f"); g.addColorStop(1,"#0a1a2e");
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  // pared con franjas: el fondo del tiro
+  ctx.strokeStyle="rgba(0,190,255,.08)"; ctx.lineWidth=1;
+  for(let x=0;x<W;x+=40){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  // blancos
+  blancos.forEach(b=>{
+    if(!b.vivo) return;
+    const color=b.dorado?"#ffd12e":"#ff3b5c";
+    ctx.shadowColor=color; ctx.shadowBlur=16;
+    ctx.fillStyle=color; ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,7); ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(b.x,b.y,b.r*0.62,0,7); ctx.fill();
+    ctx.fillStyle=color; ctx.beginPath(); ctx.arc(b.x,b.y,b.r*0.32,0,7); ctx.fill();
+  });
+  // particulas y textos
+  partes.forEach(p=>{ ctx.globalAlpha=Math.max(0,p.vida/30); ctx.fillStyle=p.color; ctx.fillRect(p.x-2,p.y-2,4,4); });
+  flotantes.forEach(f=>{ ctx.globalAlpha=Math.max(0,f.vida/32); ctx.fillStyle=f.color; ctx.font="900 15px Segoe UI,sans-serif"; ctx.textAlign="center"; ctx.fillText(f.texto,f.x,f.y); });
+  ctx.globalAlpha=1;
+  // mira
+  ctx.strokeStyle="#0cf"; ctx.lineWidth=2; ctx.shadowColor="#0cf"; ctx.shadowBlur=10;
+  ctx.beginPath(); ctx.arc(marca.x,marca.y,14,0,7); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(marca.x-22,marca.y); ctx.lineTo(marca.x+22,marca.y); ctx.moveTo(marca.x,marca.y-22); ctx.lineTo(marca.x,marca.y+22); ctx.stroke();
+  ctx.shadowBlur=0;
+  // mensaje de ronda superada
+  if(cambioRonda>0 && vivo){ ctx.fillStyle="#b6ff00"; ctx.shadowColor="#b6ff00"; ctx.shadowBlur=16;
+    ctx.font="900 34px Segoe UI,sans-serif"; ctx.textAlign="center"; ctx.fillText("RONDA "+ronda,W/2,H/2); ctx.shadowBlur=0; }
+  if(pausado){ ctx.fillStyle="rgba(0,0,0,.55)"; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle="#fff"; ctx.font="900 40px Segoe UI,sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("PAUSA",W/2,H/2); }
+}
+
+function pintarFin(nuevo){
+  ctx.fillStyle="rgba(0,0,0,.62)"; ctx.fillRect(0,0,W,H);
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  ctx.fillStyle="#fff"; ctx.font="900 40px Segoe UI,sans-serif";
+  ctx.shadowColor="#f05"; ctx.shadowBlur=18; ctx.fillText("SIN BALAS",W/2,H/2-60); ctx.shadowBlur=0;
+  ctx.fillStyle="#ffd12e"; ctx.font="800 24px Segoe UI,sans-serif"; ctx.fillText(puntos+" puntos · ronda "+ronda,W/2,H/2-12);
+  ctx.fillStyle=nuevo?"#b6ff00":"#7fc8e8"; ctx.font="700 16px Segoe UI,sans-serif";
+  ctx.fillText(nuevo?"¡NUEVO RÉCORD!":"Récord: "+leer(),W/2,H/2+24);
+  ctx.fillStyle="#7fc8e8"; ctx.font="600 15px Segoe UI,sans-serif";
+  ctx.fillText("toca para volver a jugar",W/2,H/2+62);
+}
+
+/* ---------- controles ---------- */
+addEventListener("keydown",e=>{
+  const k=e.key.toLowerCase();
+  if(k==="arrowleft"||k==="a") teclas.l=true;
+  if(k==="arrowright"||k==="d") teclas.r=true;
+  if(k===" "){ e.preventDefault(); if(vivo) disparar(marca.x,marca.y); }
+  if(k==="p"&&vivo){ pausado=!pausado; }
+  if(["arrowleft","arrowright"].includes(k)) e.preventDefault();
+});
+addEventListener("keyup",e=>{
+  const k=e.key.toLowerCase();
+  if(k==="arrowleft"||k==="a") teclas.l=false;
+  if(k==="arrowright"||k==="d") teclas.r=false;
+});
+function apuntar(e){
+  const r=cv.getBoundingClientRect();
+  marca.x=(e.clientX-r.left)*(W/r.width); marca.y=(e.clientY-r.top)*(H/r.height);
+}
+cv.addEventListener("pointermove",apuntar);
+cv.addEventListener("pointerdown",e=>{ apuntar(e); disparar(marca.x,marca.y); });
+$("empezar").onclick=empezar;
+
+function pintarMenu(){ $("stats").innerHTML="Récord de puntos: "+leer(); }
+vivo=false; pintarMenu(); dibujar();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>
