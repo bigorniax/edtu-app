@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Rebote Neón</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;background:#03040a;color:#eaf6ff}
+  #wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{display:block;max-width:100%;max-height:100%;border-radius:12px;touch-action:none;cursor:none;
+    box-shadow:0 0 28px rgba(0,190,255,.3),inset 0 0 40px rgba(0,190,255,.1)}
+  #hud{position:absolute;top:10px;left:0;right:0;display:flex;justify-content:space-between;padding:0 16px;
+    font-weight:900;font-size:17px;pointer-events:none;text-shadow:0 0 8px #0cf}
+  #hud span:nth-child(2){color:#ffd12e;text-shadow:0 0 8px #ffd12e}
+  #ayuda{position:absolute;bottom:8px;left:0;right:0;text-align:center;color:#6fb8d8;font-size:13px;pointer-events:none}
+  #menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(3,4,10,.92);text-align:center;padding:20px}
+  #menu h1{font-size:40px;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #fff,0 0 18px #0cf,0 0 40px #0cf}
+  #menu p{margin:14px 0 22px;color:#7fc8e8;line-height:1.6;font-size:16px;max-width:460px}
+  #menu button{cursor:pointer;padding:16px 42px;border-radius:14px;border:2px solid #0cf;background:rgba(0,0,0,.6);
+    color:#fff;font-size:20px;font-weight:900;letter-spacing:2px;box-shadow:0 0 14px #0cf;text-shadow:0 0 8px #0cf}
+  #menu button:hover{transform:scale(1.05)}
+  #menu .stats{margin-top:18px;color:#ffd12e;font-weight:800;text-shadow:0 0 8px #ffd12e;line-height:1.7}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="480" height="640"></canvas>
+  <div id="hud"><span id="nivel">nivel 1</span><span id="puntos">0</span><span id="vidas">3 vidas</span></div>
+  <div id="ayuda">mueve el mouse o usa ← → · ESPACIO pausa</div>
+  <div id="menu">
+    <h1>REBOTE NEÓN</h1>
+    <p>Rebota la pelota con la paleta y rompe todos los ladrillos. Cada nivel tiene una forma distinta. Si la pelota cae, pierdes una vida.</p>
+    <button id="empezar">JUGAR</button>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+const W=cv.width, H=cv.height;
+const CLAVE="edtu_rebote_mejor";
+const COLORES=["#ff3b5c","#ff8a3c","#ffd12e","#b6ff00","#3ee6a0","#2fd0ff","#3a8cff","#c58cff"];
+
+function leer(){ try{ return parseInt(localStorage.getItem(CLAVE)||"0",10)||0; }catch(e){ return 0; } }
+function guardar(v){ try{ localStorage.setItem(CLAVE,String(v)); }catch(e){} }
+
+let audio=null;
+function tono(f,d,tipo,vol){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
+  const o=audio.createOscillator(), g=audio.createGain(); o.type=tipo||"square"; const t=audio.currentTime;
+  o.frequency.setValueAtTime(f,t); g.gain.setValueAtTime(vol||0.07,t); g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t+d); }catch(e){} }
+
+/* ---------- niveles: cada uno dibuja los ladrillos con una forma distinta ---------- */
+const FILAS=8, COLS=10, LADRILLO_W=44, LADRILLO_H=18, PADDING=4, TOP=70;
+function ladrillosNivel(n){
+  const lista=[];
+  const ox=(W-COLS*(LADRILLO_W+PADDING)+PADDING)/2;
+  for(let f=0;f<FILAS;f++) for(let c=0;c<COLS;c++){
+    let ponerlo=true, resistencia=1;
+    if(n===1){ ponerlo=true; }
+    if(n===2){ ponerlo=(c+f)%2===0; }                        // tablero de ajedrez
+    if(n===3){ ponerlo=Math.abs(c-4.5)+f*0.6<6; }            // triangulo
+    if(n===4){ ponerlo=!(c>=3&&c<=6&&f>=2&&f<=5); resistencia=f<2?2:1; }   // marco con fuerte arriba
+    if(n>=5){ ponerlo=Math.random()<0.75; resistencia=Math.random()<0.2?2:1; }
+    if(!ponerlo) continue;
+    lista.push({x:ox+c*(LADRILLO_W+PADDING), y:TOP+f*(LADRILLO_H+PADDING),
+      w:LADRILLO_W, h:LADRILLO_H, color:COLORES[(f+n)%COLORES.length], vida:resistencia, max:resistencia});
+  }
+  return lista;
+}
+
+/* ---------- estado ---------- */
+let nivel=1, vidas=3, puntos=0, ladrillos=[], vivo=false, pausado=false, raf=null, sacudida=0, partes=[], flotantes=[];
+let paleta={x:W/2-55,y:H-40,w:110,h:12};
+let bola={x:W/2,y:H-60,r:8,vx:0,vy:0,pegada:true};
+function reiniciarTodo(){ nivel=1; vidas=3; puntos=0; cargarNivel(); vivo=true; }
+function cargarNivel(){
+  ladrillos=ladrillosNivel(nivel);
+  paleta={x:W/2-55,y:H-40,w:110,h:12};
+  soltarBola(true);
+}
+function soltarBola(pegada){
+  const vel=4.2+Math.min(3,(nivel-1)*0.35);
+  bola={x:paleta.x+paleta.w/2, y:paleta.y-10, r:8, vx:(Math.random()<0.5?-1:1)*vel*0.6, vy:-vel*0.9, pegada:!!pegada};
+}
+
+function empezar(){
+  $("menu").style.display="none";
+  reiniciarTodo();
+  partes=[]; flotantes=[]; sacudida=0; pausado=false;
+  cancelAnimationFrame(raf);
+  raf=requestAnimationFrame(paso);
+}
+
+function paso(){
+  raf=requestAnimationFrame(paso);
+  if(!vivo||pausado){ if(pausado) dibujar(); return; }
+  // paleta: sigue el mouse o las flechas
+  if(teclas.l) paleta.x-=7; if(teclas.r) paleta.x+=7;
+  paleta.x=Math.max(0,Math.min(W-paleta.w,paleta.x));
+  if(bola.pegada){ bola.x=paleta.x+paleta.w/2; bola.y=paleta.y-10; }
+  else {
+    bola.x+=bola.vx; bola.y+=bola.vy;
+    // paredes
+    if(bola.x<bola.r){ bola.x=bola.r; bola.vx=Math.abs(bola.vx); tono(330,0.04,"triangle"); }
+    if(bola.x>W-bola.r){ bola.x=W-bola.r; bola.vx=-Math.abs(bola.vx); tono(330,0.04,"triangle"); }
+    if(bola.y<bola.r){ bola.y=bola.r; bola.vy=Math.abs(bola.vy); tono(330,0.04,"triangle"); }
+    // paleta: el angulo depende de donde cae
+    if(bola.vy>0 && bola.y+bola.r>=paleta.y && bola.y-bola.r<=paleta.y+paleta.h && bola.x>=paleta.x-bola.r && bola.x<=paleta.x+paleta.w+bola.r){
+      const k=((bola.x-paleta.x)/paleta.w)*2-1;     // -1 izquierda, 1 derecha
+      const v=Math.hypot(bola.vx,bola.vy);
+      bola.vx=k*v*0.75; bola.vy=-Math.sqrt(Math.max(1,v*v-bola.vx*bola.vx));
+      bola.y=paleta.y-bola.r;
+      tono(520,0.06,"square");
+    }
+    // ladrillos
+    for(let i=ladrillos.length-1;i>=0;i--){
+      const b=ladrillos[i];
+      if(bola.x+bola.r>b.x && bola.x-bola.r<b.x+b.w && bola.y+bola.r>b.y && bola.y-bola.r<b.y+b.h){
+        // de que lado entro: rebota en el eje correcto
+        const solapaX=Math.min(bola.x+bola.r-b.x, b.x+b.w-(bola.x-bola.r));
+        const solapaY=Math.min(bola.y+bola.r-b.y, b.y+b.h-(bola.y-bola.r));
+        if(solapaX<solapaY) bola.vx=-bola.vx; else bola.vy=-bola.vy;
+        b.vida--;
+        if(b.vida<=0){
+          ladrillos.splice(i,1);
+          puntos+=10*nivel; particulas(b.x+b.w/2,b.y+b.h/2,b.color,12);
+          tono(700+nivel*40,0.05,"sine");
+        } else { puntos+=2; tono(420,0.05,"triangle"); }
+        flotantes.push({x:b.x+b.w/2,y:b.y,vida:26,texto:"+"+(b.vida>0?2:10*nivel),color:"#ffd12e"});
+        break;
+      }
+    }
+    // se cayo
+    if(bola.y>H+20){
+      vidas--; sacudida=14; tono(150,0.4,"sawtooth",0.1);
+      if(vidas<=0){ perder(); return; }
+      soltarBola(true);
+    }
+  }
+  if(ladrillos.length===0){
+    nivel++; tono(880,0.25,"sine",0.1);
+    if(nivel>5){ /* sigue con niveles aleatorios */ }
+    cargarNivel();
+  }
+  partes.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=0.2; p.vida--; });
+  partes=partes.filter(p=>p.vida>0);
+  flotantes.forEach(f=>{ f.y-=1; f.vida--; });
+  flotantes=flotantes.filter(f=>f.vida>0);
+  if(sacudida>0) sacudida--;
+  dibujar();
+  $("nivel").textContent="nivel "+nivel;
+  $("puntos").textContent=puntos;
+  $("vidas").textContent=vidas+(vidas===1?" vida":" vidas");
+}
+
+function particulas(x,y,color,n){
+  for(let i=0;i<n;i++) partes.push({x,y,vx:(Math.random()-0.5)*5,vy:(Math.random()-0.5)*5,vida:26,color});
+}
+
+function perder(){
+  vivo=false; cancelAnimationFrame(raf);
+  const mejor=leer(), nuevo=puntos>mejor;
+  if(nuevo) guardar(puntos);
+  dibujar(); pintarFin(nuevo);
+  setTimeout(()=>{ cv.onclick=()=>{ cv.onclick=null; empezar(); }; },500);
+}
+
+function dibujar(){
+  const ox=sacudida>0?(Math.random()-0.5)*sacudida:0, oy=sacudida>0?(Math.random()-0.5)*sacudida:0;
+  ctx.save(); ctx.translate(ox,oy);
+  const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,"#05060f"); g.addColorStop(1,"#0a1430");
+  ctx.fillStyle=g; ctx.fillRect(-20,-20,W+40,H+40);
+  // ladrillos
+  ladrillos.forEach(b=>{
+    ctx.globalAlpha=b.vida<b.max?0.6:1;
+    ctx.fillStyle=b.color; ctx.shadowColor=b.color; ctx.shadowBlur=10;
+    ctx.fillRect(b.x,b.y,b.w,b.h);
+    ctx.shadowBlur=0; ctx.fillStyle="rgba(255,255,255,.3)"; ctx.fillRect(b.x+2,b.y+2,b.w-4,4);
+  });
+  ctx.globalAlpha=1;
+  // paleta
+  ctx.fillStyle="#0cf"; ctx.shadowColor="#0cf"; ctx.shadowBlur=16;
+  ctx.fillRect(paleta.x,paleta.y,paleta.w,paleta.h); ctx.shadowBlur=0;
+  // bola
+  ctx.fillStyle="#fff"; ctx.shadowColor="#fff"; ctx.shadowBlur=14;
+  ctx.beginPath(); ctx.arc(bola.x,bola.y,bola.r,0,7); ctx.fill(); ctx.shadowBlur=0;
+  // particulas y textos
+  partes.forEach(p=>{ ctx.globalAlpha=Math.max(0,p.vida/26); ctx.fillStyle=p.color; ctx.fillRect(p.x-2,p.y-2,4,4); });
+  flotantes.forEach(f=>{ ctx.globalAlpha=Math.max(0,f.vida/26); ctx.fillStyle=f.color; ctx.font="900 14px Segoe UI,sans-serif"; ctx.textAlign="center"; ctx.fillText(f.texto,f.x,f.y); });
+  ctx.globalAlpha=1;
+  if(pausado){
+    ctx.fillStyle="rgba(0,0,0,.55)"; ctx.fillRect(0,0,W,H);
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillStyle="#fff"; ctx.font="900 40px Segoe UI,sans-serif"; ctx.shadowColor="#0cf"; ctx.shadowBlur=16;
+    ctx.fillText("PAUSA",W/2,H/2); ctx.shadowBlur=0;
+  }
+  ctx.restore();
+}
+
+function pintarFin(nuevo){
+  ctx.fillStyle="rgba(0,0,0,.62)"; ctx.fillRect(0,0,W,H);
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  ctx.fillStyle="#fff"; ctx.font="900 40px Segoe UI,sans-serif";
+  ctx.shadowColor="#f05"; ctx.shadowBlur=18; ctx.fillText("SIN VIDAS",W/2,H/2-60); ctx.shadowBlur=0;
+  ctx.fillStyle="#ffd12e"; ctx.font="800 24px Segoe UI,sans-serif"; ctx.fillText(puntos+" puntos · nivel "+nivel,W/2,H/2-12);
+  ctx.fillStyle=nuevo?"#b6ff00":"#7fc8e8"; ctx.font="700 16px Segoe UI,sans-serif";
+  ctx.fillText(nuevo?"¡NUEVO RÉCORD!":"Récord: "+leer(),W/2,H/2+24);
+  ctx.fillStyle="#7fc8e8"; ctx.font="600 15px Segoe UI,sans-serif";
+  ctx.fillText("toca para volver a jugar",W/2,H/2+62);
+}
+
+/* ---------- controles ---------- */
+const teclas={l:false,r:false};
+addEventListener("keydown",e=>{
+  const k=e.key.toLowerCase();
+  if(k==="arrowleft"||k==="a") teclas.l=true;
+  if(k==="arrowright"||k==="d") teclas.r=true;
+  if(k===" "){ e.preventDefault(); if(bola&&bola.pegada&&vivo&&!pausado){ bola.pegada=false; } else if(vivo) pausado=!pausado; }
+  if(["arrowleft","arrowright"].includes(k)) e.preventDefault();
+});
+addEventListener("keyup",e=>{
+  const k=e.key.toLowerCase();
+  if(k==="arrowleft"||k==="a") teclas.l=false;
+  if(k==="arrowright"||k==="d") teclas.r=false;
+});
+function mover(e){
+  const r=cv.getBoundingClientRect();
+  const x=(e.clientX-r.left)*(W/r.width);
+  if(paleta&&vivo) paleta.x=Math.max(0,Math.min(W-paleta.w,x-paleta.w/2));
+}
+cv.addEventListener("pointermove",mover);
+cv.addEventListener("pointerdown",e=>{
+  mover(e);
+  if(vivo && bola && bola.pegada){ bola.pegada=false; }
+  else if(vivo && pausado) pausado=false;
+});
+$("empezar").onclick=empezar;
+
+function pintarMenu(){ $("stats").innerHTML="Récord de puntos: "+leer(); }
+vivo=false; pintarMenu();
+dibujar();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>

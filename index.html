@@ -1218,6 +1218,13 @@
   #mdCloseBtn,#apiCloseBtn{position:fixed;top:8px;right:12px;z-index:201;background:rgba(0,0,0,.55);color:#fff;
     border:1px solid #fff;border-radius:8px;padding:7px 13px;font-family:"Consolas",monospace;font-weight:700;cursor:pointer}
 </style>
+<style>
+  #rbFs{position:fixed;inset:0;z-index:200;display:none;background:#03040a}
+  #rbFs.open{display:block}
+  #rbFrame{width:100%;height:100%;border:none;display:block}
+  #rbCloseBtn{position:fixed;top:8px;right:12px;z-index:201;background:rgba(0,0,0,.55);color:#fff;
+    border:1px solid #fff;border-radius:8px;padding:7px 13px;font-family:"Consolas",monospace;font-weight:700;cursor:pointer}
+</style>
 </head>
 <body>
 
@@ -2087,6 +2094,7 @@
     <button class="btn pickgame" id="pickOfi" style="background:linear-gradient(90deg,#4a2a10,#c8761a);border-color:#ffb347;color:#ffeedd">👨‍🍳 18 DE OFICIOS</button>
     <button class="btn pickgame" id="pickMd" style="background:linear-gradient(90deg,#04182a,#0a5a8a);border-color:#0cf;color:#e0f6ff">🪙 MONEDAS RUSH</button>
     <button class="btn pickgame" id="pickApi" style="background:linear-gradient(90deg,#1a0a2a,#5a1a8a);border-color:#ff3bd4;color:#ffe0f8">🧱 APILA NEÓN</button>
+    <button class="btn pickgame" id="pickRb" style="background:linear-gradient(90deg,#04182a,#1a4a8a);border-color:#3a8cff;color:#dfeaff">🧱 REBOTE NEÓN</button>
     <button class="btn pickgame" id="pickDep" style="background:linear-gradient(90deg,#0d3a52,#2a8fc0);border-color:#5fd1ff;color:#d8f4ff">🏅 18 DE DEPORTES Y CARRERAS</button>
     <button class="btn pickgame" id="pickC4x" style="background:linear-gradient(90deg,#06121a,#0a4a6a);border-color:#00e0ff;color:#9be3ff">🧩 CUBO 4x4</button>
     <button class="btn pickgame" id="pickAve" style="background:linear-gradient(90deg,#10302a,#2a8f6a);border-color:#5fe0a0;color:#d8fff0">🗺️ 18 DE AVENTURA Y ESTRATEGIA</button>
@@ -2297,6 +2305,7 @@
 <div id="ofiFs"><iframe id="ofiFrame" allow="fullscreen; autoplay" title="OFICIOS"></iframe><button id="ofiCloseBtn">✕ Salir</button></div>
 <div id="mdFs"><iframe id="mdFrame" allow="fullscreen; autoplay" title="MONEDAS RUSH"></iframe><button id="mdCloseBtn">✕ Salir</button></div>
 <div id="apiFs"><iframe id="apiFrame" allow="fullscreen; autoplay" title="APILA NEON"></iframe><button id="apiCloseBtn">✕ Salir</button></div>
+<div id="rbFs"><iframe id="rbFrame" allow="fullscreen; autoplay" title="REBOTE NEON"></iframe><button id="rbCloseBtn">✕ Salir</button></div>
 <div id="depFs"><iframe id="depFrame" allow="fullscreen; autoplay" title="DEPORTES"></iframe><button id="depCloseBtn">✕ Salir</button></div>
 <div id="c4xFs"><iframe id="c4xFrame" allow="fullscreen; autoplay" title="CUBO 4x4"></iframe><button id="c4xCloseBtn">✕ Salir</button></div>
 <div id="aveFs"><iframe id="aveFrame" allow="fullscreen; autoplay" title="AVENTURA"></iframe><button id="aveCloseBtn">✕ Salir</button></div>
@@ -10585,6 +10594,8 @@ $("pickMd").onclick=()=>abreMundo("mdFrame","mdFs","monedas.html","MONEDAS RUSH"
 $("mdCloseBtn").onclick=()=>cierraMundo("mdFrame","mdFs");
 $("pickApi").onclick=()=>abreMundo("apiFrame","apiFs","apila.html","APILA NEÓN",["poniendo los bloques…","midiendo la torre…"]);
 $("apiCloseBtn").onclick=()=>cierraMundo("apiFrame","apiFs");
+$("pickRb").onclick=()=>abreMundo("rbFrame","rbFs","rebote.html","REBOTE NEÓN",["afilando la pelota…","colocando los ladrillos…"]);
+$("rbCloseBtn").onclick=()=>cierraMundo("rbFrame","rbFs");
 $("pickEst").onclick=()=>abreMundo("estFrame","estFs","estilista.html","SALÓN DE ESTILO",["calentando las planchas…","sacando el maquillaje…","eligiendo los peinados…"]);
 $("pickHer").onclick=()=>abreMundo("herFrame","herFs","heroe.html","HÉROE ARAÑA",["tejiendo las telarañas…","subiendo a los edificios…","cargando la ciudad…"]);
 $("pickPia").onclick=()=>abreMundo("piaFrame","piaFs","piano.html","PIANO MÁGICO",["afinando el piano…","buscando las canciones…"]);
@@ -11303,7 +11314,7 @@ function edtuAtras(){
   // 1) ¿hay un juego a pantalla completa abierto? ciérralo
   const mundos = [["swFrame","swFs"],["jpFrame","jpFs"],["scrFrame","scrFs"],["nagFrame","nagFs"],
     ["rkFrame","rkFs"],["tenFrame","tenFs"],["turboFrame","turboFs"],["canelaFrame","canelaFs"],
-    ["duoFrame","duoFs"],["refFrame","refFs"],["burFrame","burFs"],["claFrame","claFs"],["accFrame","accFs"],["peqFrame","peqFs"],["aveFrame","aveFs"],["c4xFrame","c4xFs"],["depFrame","depFs"],["espFrame","espFs"],["natFrame","natFs"],["musFrame","musFs"],["cieFrame","cieFs"],["ofiFrame","ofiFs"],["mdFrame","mdFs"],["apiFrame","apiFs"],["estFrame","estFs"],["herFrame","herFs"],["piaFrame","piaFs"]];
+    ["duoFrame","duoFs"],["refFrame","refFs"],["burFrame","burFs"],["claFrame","claFs"],["accFrame","accFs"],["peqFrame","peqFs"],["aveFrame","aveFs"],["c4xFrame","c4xFs"],["depFrame","depFs"],["espFrame","espFs"],["natFrame","natFs"],["musFrame","musFs"],["cieFrame","cieFs"],["ofiFrame","ofiFs"],["mdFrame","mdFs"],["apiFrame","apiFs"],["rbFrame","rbFs"],["estFrame","estFs"],["herFrame","herFs"],["piaFrame","piaFs"]];
   for(const [marco,panel] of mundos){
     const p = $(panel);
     if(p && p.classList.contains("open")){ try{ cierraMundo(marco,panel); }catch(e){} return true; }
