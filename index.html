@@ -1268,10 +1268,10 @@
   <div class="auth-card">
     <button class="v-close" id="authClose" title="Cerrar">✕</button>
     <h2 class="mono" id="authTitle">CREAR CUENTA</h2>
-    <div class="v-sub mono" id="authSub">Tu correo personal (no el del colegio) y una contraseña</div>
+    <div class="v-sub mono" id="authSub">Correo personal, o un usuario sin correo, y una contraseña</div>
 
     <label class="auth-lbl mono">Correo</label>
-    <input class="auth-inp" id="authEmail" type="email" autocomplete="email" placeholder="tunombre@gmail.com" />
+    <input class="auth-inp" id="authEmail" type="email" autocomplete="email" placeholder="correo o usuario (sin correo)" />
 
     <label class="auth-lbl mono">Contraseña</label>
     <input class="auth-inp" id="authPass" type="password" autocomplete="current-password" placeholder="mínimo 6 letras o números" />
@@ -11020,7 +11020,7 @@ function abrirAuth(modo){
   Cuenta.modo = modo;
   const crear = (modo === "signup");
   $("authTitle").textContent = crear ? "CREAR CUENTA" : "ENTRAR";
-  $("authSub").textContent   = crear ? "Tu correo personal (no el del colegio) y una contraseña" : "Con tu correo y contraseña";
+  $("authSub").textContent   = crear ? "Correo personal, o un usuario sin correo, y una contraseña" : "Con tu correo o usuario y contraseña";
   $("authGo").textContent    = crear ? "CREAR CUENTA" : "ENTRAR";
   $("authSwitchTxt").textContent = crear ? "¿Ya tienes cuenta?" : "¿No tienes cuenta?";
   $("authSwitch").textContent    = crear ? "Entra aquí" : "Créala aquí";
@@ -11429,10 +11429,15 @@ if($("tablaFs")) $("tablaFs").onclick = e=>{ if(e.target.id==="tablaFs") $("tabl
 
 // El botón grande: crear cuenta o entrar
 if($("authGo")) $("authGo").onclick = async ()=>{
-  const email = ($("authEmail").value || "").trim();
+  let email = ($("authEmail").value || "").trim();
   const pass  = $("authPass").value || "";
   const msg = $("authMsg");
-  if(!email || !email.includes("@")){ msg.style.color="#ff5b6e"; msg.textContent="Escribe un correo válido."; return; }
+  if(!email){ msg.style.color="#ff5b6e"; msg.textContent="Escribe tu correo o un usuario."; return; }
+  if(!email.includes("@")){
+    // usuario sin correo: se guarda con un correo interno que nadie recibe
+    if(!/^[a-z0-9_]{3,20}$/i.test(email)){ msg.style.color="#ff5b6e"; msg.textContent="El usuario tiene de 3 a 20 letras, números o _ (sin espacios)."; return; }
+    email = email.toLowerCase()+"@sincorreo.edtu.cl";
+  }
   if(pass.length < 6){ msg.style.color="#ff5b6e"; msg.textContent="La contraseña necesita al menos 6 letras o números."; return; }
   msg.style.color="#9fd"; msg.textContent="Un momento…";
   $("authGo").disabled = true;
