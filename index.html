@@ -1268,10 +1268,10 @@
   <div class="auth-card">
     <button class="v-close" id="authClose" title="Cerrar">✕</button>
     <h2 class="mono" id="authTitle">CREAR CUENTA</h2>
-    <div class="v-sub mono" id="authSub">Tu correo del colegio y una contraseña</div>
+    <div class="v-sub mono" id="authSub">Tu correo personal (no el del colegio) y una contraseña</div>
 
     <label class="auth-lbl mono">Correo</label>
-    <input class="auth-inp" id="authEmail" type="email" autocomplete="email" placeholder="tunombre@snm.cl" />
+    <input class="auth-inp" id="authEmail" type="email" autocomplete="email" placeholder="tunombre@gmail.com" />
 
     <label class="auth-lbl mono">Contraseña</label>
     <input class="auth-inp" id="authPass" type="password" autocomplete="current-password" placeholder="mínimo 6 letras o números" />
@@ -11020,7 +11020,7 @@ function abrirAuth(modo){
   Cuenta.modo = modo;
   const crear = (modo === "signup");
   $("authTitle").textContent = crear ? "CREAR CUENTA" : "ENTRAR";
-  $("authSub").textContent   = crear ? "Tu correo del colegio y una contraseña" : "Con tu correo y contraseña";
+  $("authSub").textContent   = crear ? "Tu correo personal (no el del colegio) y una contraseña" : "Con tu correo y contraseña";
   $("authGo").textContent    = crear ? "CREAR CUENTA" : "ENTRAR";
   $("authSwitchTxt").textContent = crear ? "¿Ya tienes cuenta?" : "¿No tienes cuenta?";
   $("authSwitch").textContent    = crear ? "Entra aquí" : "Créala aquí";
