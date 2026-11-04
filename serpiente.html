@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Serpiente Neón</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;background:#02030a;color:#eaf6ff}
+  #wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{display:block;max-width:100%;max-height:100%;border-radius:12px;touch-action:none;
+    box-shadow:0 0 28px rgba(0,190,255,.3),inset 0 0 40px rgba(0,190,255,.1)}
+  #hud{position:absolute;top:10px;left:0;right:0;display:flex;justify-content:space-between;padding:0 16px;
+    font-weight:900;font-size:17px;pointer-events:none;text-shadow:0 0 8px #0cf}
+  #hud span:nth-child(2){color:#ffd12e;text-shadow:0 0 8px #ffd12e}
+  #ayuda{position:absolute;bottom:8px;left:0;right:0;text-align:center;color:#6fb8d8;font-size:13px;pointer-events:none}
+  #menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(2,3,10,.92);text-align:center;padding:20px}
+  #menu h1{font-size:40px;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #fff,0 0 18px #0cf,0 0 40px #0cf}
+  #menu p{margin:14px 0 22px;color:#7fc8e8;line-height:1.6;font-size:16px;max-width:460px}
+  #menu button{cursor:pointer;padding:16px 42px;border-radius:14px;border:2px solid #0cf;background:rgba(0,0,0,.6);
+    color:#fff;font-size:20px;font-weight:900;letter-spacing:2px;box-shadow:0 0 14px #0cf;text-shadow:0 0 8px #0cf}
+  #menu button:hover{transform:scale(1.05)}
+  #menu .stats{margin-top:18px;color:#ffd12e;font-weight:800;text-shadow:0 0 8px #ffd12e;line-height:1.7}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="480" height="480"></canvas>
+  <div id="hud"><span id="largo">largo 3</span><span id="puntos">0</span><span id="vel">velocidad 1</span></div>
+  <div id="ayuda">flechas o WASD para girar · toca un lado de la pantalla para girar · P pausa</div>
+  <div id="menu">
+    <h1>SERPIENTE NEÓN</h1>
+    <p>Come las frutas para crecer. Cada fruta dorada vale más. No te choques con las paredes ni con tu propia cola. Cada vez va más rápido.</p>
+    <button id="empezar">JUGAR</button>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+const W=cv.width, H=cv.height, TAM=20, COLS=W/TAM, FILAS=H/TAM;
+const CLAVE="edtu_serpiente_mejor";
+
+function leer(){ try{ return parseInt(localStorage.getItem(CLAVE)||"0",10)||0; }catch(e){ return 0; } }
+function guardar(v){ try{ localStorage.setItem(CLAVE,String(v)); }catch(e){} }
+
+let audio=null;
+function tono(f,d,tipo,vol,subida){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
+  const o=audio.createOscillator(), g=audio.createGain(); o.type=tipo||"square"; const t=audio.currentTime;
+  o.frequency.setValueAtTime(f,t); if(subida) o.frequency.exponentialRampToValueAtTime(f*subida,t+d);
+  g.gain.setValueAtTime(vol||0.06,t); g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t+d); }catch(e){} }
+
+let cuerpo, dir, pendientes, fruta, frutaDorada, puntos, vel, vivo, pausado, raf, tiempo, particulas;
+let comidas=0;
+
+function nuevaPosicion(){
+  while(true){
+    const p={x:Math.floor(Math.random()*COLS), y:Math.floor(Math.random()*FILAS)};
+    if(!cuerpo.some(s=>s.x===p.x&&s.y===p.y)) return p;
+  }
+}
+
+function reiniciar(){
+  cuerpo=[{x:10,y:12},{x:9,y:12},{x:8,y:12}];
+  dir={x:1,y:0}; pendientes=[];
+  puntos=0; vel=7; tiempo=0; comidas=0; particulas=[];
+  fruta=nuevaPosicion(); frutaDorada=Math.random()<0.2;
+  vivo=true; pausado=false;
+}
+
+function empezar(){
+  $("menu").style.display="none";
+  reiniciar();
+  cancelAnimationFrame(raf);
+  raf=requestAnimationFrame(paso);
+}
+
+// gira la serpiente sin dejar que se devuelva sobre si misma
+function girar(dx,dy){
+  if(!vivo||pausado) return;
+  const ref=pendientes.length?pendientes[pendientes.length-1]:dir;
+  if(ref.x===-dx && ref.y===-dy) return;
+  if(ref.x===dx && ref.y===dy) return;
+  pendientes.push({x:dx,y:dy});
+  if(pendientes.length>2) pendientes.shift();
+}
+
+function paso(){
+  raf=requestAnimationFrame(paso);
+  if(!vivo||pausado){ if(pausado) dibujar(); return; }
+  tiempo++;
+  // la serpiente se mueve cada cierto numero de cuadros; mas rapido segun el largo
+  const cada=Math.max(4,Math.round(12-cuerpo.length*0.15));
+  if(tiempo%cada!==0){ dibujar(); return; }
+
+  if(pendientes.length){ dir=pendientes.shift(); }
+  const cabeza={x:cuerpo[0].x+dir.x, y:cuerpo[0].y+dir.y};
+  // paredes
+  if(cabeza.x<0||cabeza.x>=COLS||cabeza.y<0||cabeza.y>=FILAS){ perder(); return; }
+  // su propia cola (la ultima casilla se libera al moverse)
+  const sinUltima=cuerpo.slice(0,cuerpo.length-1);
+  if(sinUltima.some(s=>s.x===cabeza.x&&s.y===cabeza.y)){ perder(); return; }
+
+  cuerpo.unshift(cabeza);
+  if(cabeza.x===fruta.x&&cabeza.y===fruta.y){
+    comidas++;
+    const pts=frutaDorada?30:10;
+    puntos+=pts;
+    for(let i=0;i<12;i++) particulas.push({x:cabeza.x*TAM+TAM/2,y:cabeza.y*TAM+TAM/2,vx:(Math.random()-0.5)*4,vy:(Math.random()-0.5)*4,vida:22,color:frutaDorada?"#ffd12e":"#ff3b5c"});
+    tono(frutaDorada?880:620,0.1,"sine",0.08,1.4);
+    fruta=nuevaPosicion(); frutaDorada=Math.random()<0.2;
+  } else {
+    cuerpo.pop();
+  }
+  particulas.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.vida--; });
+  particulas=particulas.filter(p=>p.vida>0);
+
+  dibujar();
+  $("largo").textContent="largo "+cuerpo.length;
+  $("puntos").textContent=puntos;
+  $("vel").textContent="velocidad "+Math.max(1,Math.round((12-cada)*0.8+1));
+}
+
+function perder(){
+  vivo=false; tono(150,0.5,"sawtooth",0.08,0.4);
+  const mejor=leer(), nuevo=puntos>mejor;
+  if(nuevo) guardar(puntos);
+  cancelAnimationFrame(raf);
+  dibujar(); pintarFin(nuevo);
+  setTimeout(()=>{ cv.onclick=()=>{ cv.onclick=null; empezar(); }; },500);
+}
+
+function dibujar(){
+  ctx.fillStyle="#02030a"; ctx.fillRect(0,0,W,H);
+  // cuadricula
+  ctx.strokeStyle="rgba(0,190,255,.06)"; ctx.lineWidth=1;
+  for(let x=0;x<=W;x+=TAM){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for(let y=0;y<=H;y+=TAM){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+  // fruta
+  const fc=frutaDorada?"#ffd12e":"#ff3b5c";
+  ctx.fillStyle=fc; ctx.shadowColor=fc; ctx.shadowBlur=14;
+  ctx.beginPath(); ctx.arc(fruta.x*TAM+TAM/2,fruta.y*TAM+TAM/2,TAM/2-3,0,7); ctx.fill(); ctx.shadowBlur=0;
+  // serpiente
+  cuerpo.forEach((s,i)=>{
+    const t=1-i/Math.max(1,cuerpo.length);
+    ctx.fillStyle=i===0?"#b6ff00":"rgba(0,"+Math.round(180+t*75)+",255,"+(0.5+t*0.5)+")";
+    ctx.shadowColor=i===0?"#b6ff00":"#0cf"; ctx.shadowBlur=i===0?14:6;
+    ctx.fillRect(s.x*TAM+2,s.y*TAM+2,TAM-4,TAM-4);
+  });
+  ctx.shadowBlur=0;
+  // ojos de la cabeza
+  if(cuerpo.length&&vivo){ const h=cuerpo[0]; ctx.fillStyle="#02030a";
+    ctx.fillRect(h.x*TAM+5+dir.x*4,h.y*TAM+5+dir.y*4,3,3); ctx.fillRect(h.x*TAM+12+dir.x*4,h.y*TAM+5+dir.y*4,3,3); }
+  particulas.forEach(p=>{ ctx.globalAlpha=Math.max(0,p.vida/22); ctx.fillStyle=p.color; ctx.fillRect(p.x-2,p.y-2,4,4); });
+  ctx.globalAlpha=1;
+  if(pausado){ ctx.fillStyle="rgba(0,0,0,.55)"; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle="#fff"; ctx.font="900 40px Segoe UI,sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("PAUSA",W/2,H/2); }
+}
+
+function pintarFin(nuevo){
+  ctx.fillStyle="rgba(0,0,0,.62)"; ctx.fillRect(0,0,W,H);
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  ctx.fillStyle="#fff"; ctx.font="900 40px Segoe UI,sans-serif";
+  ctx.shadowColor="#f05"; ctx.shadowBlur=18; ctx.fillText("CHOCASTE",W/2,H/2-60); ctx.shadowBlur=0;
+  ctx.fillStyle="#ffd12e"; ctx.font="800 24px Segoe UI,sans-serif"; ctx.fillText(puntos+" puntos · largo "+cuerpo.length,W/2,H/2-12);
+  ctx.fillStyle=nuevo?"#b6ff00":"#7fc8e8"; ctx.font="700 16px Segoe UI,sans-serif";
+  ctx.fillText(nuevo?"¡NUEVO RÉCORD!":"Récord: "+leer(),W/2,H/2+24);
+  ctx.fillStyle="#7fc8e8"; ctx.font="600 15px Segoe UI,sans-serif";
+  ctx.fillText("toca para volver a jugar",W/2,H/2+62);
+}
+
+/* ---------- controles ---------- */
+addEventListener("keydown",e=>{
+  const k=e.key.toLowerCase();
+  if(k==="arrowup"||k==="w") girar(0,-1);
+  if(k==="arrowdown"||k==="s") girar(0,1);
+  if(k==="arrowleft"||k==="a") girar(-1,0);
+  if(k==="arrowright"||k==="d") girar(1,0);
+  if(k==="p"&&vivo){ pausado=!pausado; }
+  if(["arrowup","arrowdown","arrowleft","arrowright"," "].includes(k)) e.preventDefault();
+});
+// tocar un lado de la pantalla gira a la izquierda o a la derecha segun hacia donde va
+cv.addEventListener("pointerdown",e=>{
+  if(!vivo) return;
+  if(pausado){ pausado=false; return; }
+  // giro relativo: izquierda de la pantalla = girar a la izquierda, derecha = a la derecha
+  const r=cv.getBoundingClientRect();
+  const lado=(e.clientX-r.left)/r.width;
+  const ref=pendientes.length?pendientes[pendientes.length-1]:dir;
+  if(lado<0.5) girar(ref.y,-ref.x);   // izquierda
+  else girar(-ref.y,ref.x);           // derecha
+});
+$("empezar").onclick=empezar;
+
+function pintarMenu(){ $("stats").innerHTML="Récord de puntos: "+leer(); }
+reiniciar(); vivo=false; pintarMenu(); dibujar();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>
