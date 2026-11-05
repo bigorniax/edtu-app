@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Topo Neón</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;background:#02030a;color:#eaf6ff}
+  #wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{display:block;max-width:100%;max-height:100%;border-radius:12px;touch-action:none;cursor:crosshair;
+    box-shadow:0 0 28px rgba(0,190,255,.3),inset 0 0 40px rgba(0,190,255,.1)}
+  #hud{position:absolute;top:10px;left:0;right:0;display:flex;justify-content:space-between;padding:0 16px;
+    font-weight:900;font-size:17px;pointer-events:none;text-shadow:0 0 8px #0cf}
+  #hud span:nth-child(2){color:#ffd12e;text-shadow:0 0 8px #ffd12e}
+  #ayuda{position:absolute;bottom:8px;left:0;right:0;text-align:center;color:#6fb8d8;font-size:13px;pointer-events:none}
+  #menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(2,3,10,.92);text-align:center;padding:20px}
+  #menu h1{font-size:40px;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #fff,0 0 18px #0cf,0 0 40px #0cf}
+  #menu p{margin:14px 0 22px;color:#7fc8e8;line-height:1.6;font-size:16px;max-width:460px}
+  #menu button{cursor:pointer;padding:16px 42px;border-radius:14px;border:2px solid #0cf;background:rgba(0,0,0,.6);
+    color:#fff;font-size:20px;font-weight:900;letter-spacing:2px;box-shadow:0 0 14px #0cf;text-shadow:0 0 8px #0cf}
+  #menu button:hover{transform:scale(1.05)}
+  #menu .stats{margin-top:18px;color:#ffd12e;font-weight:800;text-shadow:0 0 8px #ffd12e;line-height:1.7}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="480" height="560"></canvas>
+  <div id="hud"><span id="tiempoT">30 s</span><span id="puntos">0</span><span id="fallos">fallos 0/5</span></div>
+  <div id="ayuda">toca los topos antes que se escondan · los dorados valen el doble · los rojos son bombas</div>
+  <div id="menu">
+    <h1>TOPO NEÓN</h1>
+    <p>Toca los topos cuando asomen. Tienes 30 segundos. Si tocas una bomba o dejas escapar 5 topos, se acaba.</p>
+    <button id="empezar">JUGAR</button>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+const W=cv.width, H=cv.height;
+const CLAVE="edtu_topo_mejor";
+const DURACION=30;
+
+function leer(){ try{ return parseInt(localStorage.getItem(CLAVE)||"0",10)||0; }catch(e){ return 0; } }
+function guardar(v){ try{ localStorage.setItem(CLAVE,String(v)); }catch(e){} }
+
+let audio=null;
+function tono(f,d,tipo,vol,subida){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
+  const o=audio.createOscillator(), g=audio.createGain(); o.type=tipo||"square"; const t=audio.currentTime;
+  o.frequency.setValueAtTime(f,t); if(subida) o.frequency.exponentialRampToValueAtTime(f*subida,t+d);
+  g.gain.setValueAtTime(vol||0.07,t); g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t+d); }catch(e){} }
+
+// 3 filas de 3 agujeros
+const AGUJEROS=[];
+for(let f=0;f<3;f++) for(let c=0;c<3;c++) AGUJEROS.push({x:W*0.2+c*W*0.3, y:H*0.3+f*H*0.22, estado:"vacio", t:0, tipo:"topo", vida:0});
+
+let puntos=0, fallos=0, inicio=0, vivo=false, raf=null, acierto=[], partes=[], flotantes=[], proximo=0, tiempoJuego=0;
+
+function empezar(){
+  $("menu").style.display="none";
+  puntos=0; fallos=0; inicio=performance.now(); vivo=true; partes=[]; flotantes=[]; proximo=0;
+  AGUJEROS.forEach(a=>{ a.estado="vacio"; a.t=0; });
+  cancelAnimationFrame(raf);
+  raf=requestAnimationFrame(paso);
+}
+
+function dificultad(seg){
+  // al principio asoman despacio; al final mas rapido y mas seguido
+  return { cada: Math.max(380, 1100 - seg*22), mostrar: Math.max(700, 1800 - seg*35) };
+}
+
+function paso(){
+  raf=requestAnimationFrame(paso);
+  if(!vivo) return;
+  const ahora=performance.now();
+  const seg=(ahora-inicio)/1000;
+  if(seg>=DURACION){ finJuego(); return; }
+  const d=dificultad(seg);
+  if(ahora>=proximo){
+    const libres=AGUJEROS.filter(a=>a.estado==="vacio");
+    if(libres.length){
+      const a=libres[Math.floor(Math.random()*libres.length)];
+      const r=Math.random();
+      a.tipo = r<0.12 ? "bomba" : r<0.3 ? "dorado" : "topo";
+      a.estado="subiendo"; a.t=ahora; a.mostrar=d.mostrar;
+    }
+    proximo=ahora+d.cada*(0.7+Math.random()*0.6);
+  }
+  AGUJEROS.forEach(a=>{
+    if(a.estado==="subiendo" && ahora-a.t>280){ a.estado="arriba"; a.t=ahora; }
+    else if(a.estado==="arriba" && ahora-a.t>a.mostrar){
+      a.estado="bajando"; a.t=ahora;
+      if(a.tipo!=="bomba"){ fallos++; tono(180,0.15,"sawtooth",0.05); flotantes.push({x:a.x,y:a.y,vida:30,texto:"¡escapó!",color:"#ff8fa0"}); }
+    }
+    else if(a.estado==="bajando" && ahora-a.t>280){ a.estado="vacio"; }
+  });
+  if(fallos>=5){ finJuego(); return; }
+  partes.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=0.2; p.vida--; });
+  partes=partes.filter(p=>p.vida>0);
+  flotantes.forEach(f=>{ f.y-=1; f.vida--; });
+  flotantes=flotantes.filter(f=>f.vida>0);
+  dibujar();
+  $("tiempoT").textContent=Math.ceil(DURACION-seg)+" s";
+  $("puntos").textContent=puntos;
+  $("fallos").textContent="fallos "+fallos+"/5";
+}
+
+function golpear(a){
+  if(!vivo) return;
+  if(a.estado==="vacio"||a.estado==="bajando") return;
+  if(a.tipo==="bomba"){
+    puntos=Math.max(0,puntos-30);
+    for(let i=0;i<24;i++) partes.push({x:a.x,y:a.y,vx:(Math.random()-0.5)*8,vy:(Math.random()-0.5)*8,vida:30,color:"#ff3b5c"});
+    tono(120,0.4,"sawtooth",0.09,0.3);
+    flotantes.push({x:a.x,y:a.y-20,vida:30,texto:"-30 ¡BOMBA!",color:"#ff3b5c"});
+    a.estado="bajando"; a.t=performance.now();
+    return;
+  }
+  const pts=a.tipo==="dorado"?20:10;
+  puntos+=pts; acierto.push(1);
+  for(let i=0;i<14;i++) partes.push({x:a.x,y:a.y,vx:(Math.random()-0.5)*6,vy:(Math.random()-0.5)*6,vida:26,color:a.tipo==="dorado"?"#ffd12e":"#b6ff00"});
+  tono(a.tipo==="dorado"?900:700,0.1,"sine",0.09,1.4);
+  flotantes.push({x:a.x,y:a.y-20,vida:28,texto:"+"+pts,color:a.tipo==="dorado"?"#ffd12e":"#b6ff00"});
+  a.estado="bajando"; a.t=performance.now();
+}
+
+function finJuego(){
+  vivo=false; cancelAnimationFrame(raf);
+  const mejor=leer(), nuevo=puntos>mejor;
+  if(nuevo) guardar(puntos);
+  dibujar(); pintarFin(nuevo);
+  setTimeout(()=>{ cv.onclick=()=>{ cv.onclick=null; empezar(); }; },500);
+}
+
+function dibujar(){
+  ctx.fillStyle="#02030a"; ctx.fillRect(0,0,W,H);
+  AGUJEROS.forEach(a=>{
+    // hoyo
+    ctx.fillStyle="#05101e"; ctx.strokeStyle="#0cf"; ctx.lineWidth=3; ctx.shadowColor="#0cf"; ctx.shadowBlur=10;
+    ctx.beginPath(); ctx.ellipse(a.x,a.y+30,62,22,0,0,7); ctx.fill(); ctx.stroke(); ctx.shadowBlur=0;
+    // altura del topo segun la animacion
+    const ahora=performance.now();
+    let k=0;
+    if(a.estado==="subiendo") k=Math.min(1,(ahora-a.t)/280);
+    else if(a.estado==="arriba") k=1;
+    else if(a.estado==="bajando") k=Math.max(0,1-(ahora-a.t)/280);
+    if(k>0){
+      const top=a.y+30-k*70;
+      const col=a.tipo==="bomba"?"#ff3b5c":a.tipo==="dorado"?"#ffd12e":"#b6ff00";
+      ctx.fillStyle=col; ctx.shadowColor=col; ctx.shadowBlur=14;
+      ctx.beginPath(); ctx.arc(a.x,top,42,Math.PI,0); ctx.lineTo(a.x+42,a.y+30); ctx.lineTo(a.x-42,a.y+30); ctx.closePath(); ctx.fill();
+      ctx.shadowBlur=0;
+      ctx.fillStyle="#02030a";
+      if(a.tipo==="bomba"){ ctx.font="900 28px Segoe UI,sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("✸",a.x,top-10); }
+      else { ctx.beginPath(); ctx.arc(a.x-14,top-6,5,0,7); ctx.arc(a.x+14,top-6,5,0,7); ctx.fill();
+        ctx.beginPath(); ctx.arc(a.x,top+10,10,0,Math.PI); ctx.lineWidth=3; ctx.strokeStyle="#02030a"; ctx.stroke(); }
+    }
+  });
+  partes.forEach(p=>{ ctx.globalAlpha=Math.max(0,p.vida/30); ctx.fillStyle=p.color; ctx.fillRect(p.x-3,p.y-3,6,6); });
+  flotantes.forEach(f=>{ ctx.globalAlpha=Math.max(0,f.vida/30); ctx.fillStyle=f.color; ctx.font="900 18px Segoe UI,sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(f.texto,f.x,f.y); });
+  ctx.globalAlpha=1;
+}
+
+function pintarFin(nuevo){
+  ctx.fillStyle="rgba(0,0,0,.62)"; ctx.fillRect(0,0,W,H);
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  ctx.fillStyle="#fff"; ctx.font="900 36px Segoe UI,sans-serif";
+  ctx.shadowColor="#f05"; ctx.shadowBlur=18; ctx.fillText(fallos>=5?"SE ESCAPARON":"¡TIEMPO!",W/2,H/2-60); ctx.shadowBlur=0;
+  ctx.fillStyle="#ffd12e"; ctx.font="800 24px Segoe UI,sans-serif"; ctx.fillText(puntos+" puntos",W/2,H/2-12);
+  ctx.fillStyle=nuevo?"#b6ff00":"#7fc8e8"; ctx.font="700 16px Segoe UI,sans-serif";
+  ctx.fillText(nuevo?"¡NUEVO RÉCORD!":"Récord: "+leer(),W/2,H/2+24);
+  ctx.fillStyle="#7fc8e8"; ctx.font="600 15px Segoe UI,sans-serif";
+  ctx.fillText("toca para volver a jugar",W/2,H/2+62);
+}
+
+/* ---------- controles ---------- */
+function alTocar(x,y){
+  if(!vivo) return;
+  for(const a of AGUJEROS){
+    if(Math.hypot(x-a.x,y-(a.y-10))<60){ golpear(a); return; }
+  }
+}
+cv.addEventListener("pointerdown",e=>{
+  const r=cv.getBoundingClientRect();
+  alTocar((e.clientX-r.left)*(W/r.width),(e.clientY-r.top)*(H/r.height));
+});
+$("empezar").onclick=empezar;
+
+function pintarMenu(){ $("stats").innerHTML="Récord de puntos: "+leer(); }
+vivo=false; pintarMenu(); dibujar();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>
