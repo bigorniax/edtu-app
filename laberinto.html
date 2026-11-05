@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Laberinto Neón</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;background:#02030a;color:#eaf6ff}
+  #wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{display:block;max-width:100%;max-height:100%;border-radius:12px;touch-action:none;
+    box-shadow:0 0 28px rgba(0,190,255,.3),inset 0 0 40px rgba(0,190,255,.1)}
+  #hud{position:absolute;top:10px;left:0;right:0;display:flex;justify-content:space-between;padding:0 16px;
+    font-weight:900;font-size:17px;pointer-events:none;text-shadow:0 0 8px #0cf}
+  #hud span:nth-child(2){color:#ffd12e;text-shadow:0 0 8px #ffd12e}
+  #ayuda{position:absolute;bottom:8px;left:0;right:0;text-align:center;color:#6fb8d8;font-size:13px;pointer-events:none}
+  #menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(2,3,10,.92);text-align:center;padding:20px}
+  #menu h1{font-size:40px;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #fff,0 0 18px #0cf,0 0 40px #0cf}
+  #menu p{margin:14px 0 22px;color:#7fc8e8;line-height:1.6;font-size:16px;max-width:460px}
+  #menu button{cursor:pointer;padding:16px 42px;border-radius:14px;border:2px solid #0cf;background:rgba(0,0,0,.6);
+    color:#fff;font-size:20px;font-weight:900;letter-spacing:2px;box-shadow:0 0 14px #0cf;text-shadow:0 0 8px #0cf}
+  #menu button:hover{transform:scale(1.05)}
+  #menu .stats{margin-top:18px;color:#ffd12e;font-weight:800;text-shadow:0 0 8px #ffd12e;line-height:1.7}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="480" height="480"></canvas>
+  <div id="hud"><span id="nivelT">nivel 1</span><span id="tiempoT">0.0 s</span><span id="pasosT">0 pasos</span></div>
+  <div id="ayuda">flechas o WASD para moverte · llega a la salida dorada · P pausa</div>
+  <div id="menu">
+    <h1>LABERINTO NEÓN</h1>
+    <p>Encuentra la salida dorada. Cada nivel es un laberinto nuevo y más grande. Gana el que llega con menos pasos y más rápido.</p>
+    <button id="empezar">JUGAR</button>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+const W=cv.width, H=cv.height;
+const CLAVE="edtu_laberinto_mejor";
+
+function leer(){ try{ return parseInt(localStorage.getItem(CLAVE)||"0",10)||0; }catch(e){ return 0; } }
+function guardar(v){ try{ localStorage.setItem(CLAVE,String(v)); }catch(e){} }
+
+let audio=null;
+function tono(f,d,tipo,vol,subida){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
+  const o=audio.createOscillator(), g=audio.createGain(); o.type=tipo||"square"; const t=audio.currentTime;
+  o.frequency.setValueAtTime(f,t); if(subida) o.frequency.exponentialRampToValueAtTime(f*subida,t+d);
+  g.gain.setValueAtTime(vol||0.06,t); g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t+d); }catch(e){} }
+
+/* ---------- generar laberinto (recorrido en profundidad) ---------- */
+// cada celda tiene paredes: n, e, s, o. Empieza con todas.
+function generar(n){
+  const celdas=[];
+  for(let y=0;y<n;y++) for(let x=0;x<n;x++) celdas.push({x,y,n:true,e:true,s:true,o:true,vis:false});
+  const at=(x,y)=>(x<0||y<0||x>=n||y>=n)?null:celdas[y*n+x];
+  const pila=[celdas[0]]; celdas[0].vis=true;
+  while(pila.length){
+    const c=pila[pila.length-1];
+    const vecinos=[];
+    const opc=[[0,-1,"n","s"],[1,0,"e","o"],[0,1,"s","n"],[-1,0,"o","e"]];
+    for(const [dx,dy,pared,opuesta] of opc){ const v=at(c.x+dx,c.y+dy); if(v&&!v.vis) vecinos.push({v,pared,opuesta}); }
+    if(!vecinos.length){ pila.pop(); continue; }
+    const e=vecinos[Math.floor(Math.random()*vecinos.length)];
+    c[e.pared]=false; e.v[e.opuesta]=false; e.v.vis=true; pila.push(e.v);
+  }
+  return {n,celdas,at};
+}
+
+/* ---------- estado ---------- */
+let nivel=1, lab, jugador, pasos, inicioT, vivo=false, pausado=false, raf=null, ganado=false, tiempoGanado=0;
+let ultimoMov=0;
+
+function tamanoNivel(n){ return Math.min(15, 5+ (n-1)); }
+
+function nuevoNivel(){
+  const n=tamanoNivel(nivel);
+  lab=generar(n);
+  jugador={x:0,y:0};
+  pasos=0; inicioT=performance.now(); ganado=false; ultimoMov=0;
+}
+
+function empezar(){
+  $("menu").style.display="none";
+  nivel=1; vivo=true; pausado=false;
+  nuevoNivel();
+  cancelAnimationFrame(raf);
+  raf=requestAnimationFrame(paso);
+}
+
+function mover(dx,dy){
+  if(!vivo||pausado||ganado) return;
+  const c=lab.at(jugador.x,jugador.y);
+  const ok =
+    (dx===1&&!c.e)||(dx===-1&&!c.o)||(dy===1&&!c.s)||(dy===-1&&!c.n);
+  if(!ok){ tono(140,0.05,"triangle",0.04); return; }
+  jugador.x+=dx; jugador.y+=dy; pasos++;
+  tono(440,0.03,"sine",0.03);
+  const n=lab.n;
+  if(jugador.x===n-1&&jugador.y===n-1){ ganarNivel(); }
+}
+
+function ganarNivel(){
+  ganado=true; tono(660,0.15,"sine",0.08,1.5); setTimeout(()=>tono(880,0.25,"sine",0.08,1.4),120);
+  // el puntaje premia menos pasos y menos tiempo
+  const seg=(performance.now()-inicioT)/1000;
+  const pts=Math.max(10, Math.round(500-pasos*2-seg*3));
+  tiempoGanado=(seg);
+  setTimeout(()=>{
+    if(nivel>=12){ finJuego(true); return; }
+    nivel++; nuevoNivel();
+  },800);
+  // guardamos un puntaje acumulado de la partida
+  window.__total=(window.__total||0)+pts;
+}
+
+function finJuego(gano){
+  vivo=false; cancelAnimationFrame(raf);
+  const total=window.__total||0, mejor=leer(), nuevo=total>mejor;
+  if(nuevo) guardar(total);
+  dibujar(); pintarFin(gano,total,nuevo);
+  setTimeout(()=>{ cv.onclick=()=>{ cv.onclick=null; window.__total=0; empezar(); }; },500);
+}
+
+function paso(){
+  raf=requestAnimationFrame(paso);
+  if(!vivo||pausado){ if(pausado) dibujar(); return; }
+  dibujar();
+  const seg=(performance.now()-inicioT)/1000;
+  $("nivelT").textContent="nivel "+nivel+" / 12";
+  $("tiempoT").textContent=seg.toFixed(1)+" s";
+  $("pasosT").textContent=pasos+" pasos";
+}
+
+function dibujar(){
+  ctx.fillStyle="#02030a"; ctx.fillRect(0,0,W,H);
+  if(!lab) return;
+  const n=lab.n, m=Math.floor((W-40)/n), ox=(W-m*n)/2, oy=(H-m*n)/2+10;
+  // salida
+  ctx.fillStyle="rgba(255,209,46,.25)"; ctx.fillRect(ox+(n-1)*m+2,oy+(n-1)*m+2,m-4,m-4);
+  ctx.strokeStyle="#0cf"; ctx.lineWidth=Math.max(2,m/9); ctx.shadowColor="#0cf"; ctx.shadowBlur=8; ctx.lineCap="square";
+  ctx.beginPath();
+  lab.celdas.forEach(c=>{
+    const x=ox+c.x*m, y=oy+c.y*m;
+    if(c.n){ ctx.moveTo(x,y); ctx.lineTo(x+m,y); }
+    if(c.o){ ctx.moveTo(x,y); ctx.lineTo(x,y+m); }
+    if(c.x===n-1&&c.e){ ctx.moveTo(x+m,y); ctx.lineTo(x+m,y+m); }
+    if(c.y===n-1&&c.s){ ctx.moveTo(x,y+m); ctx.lineTo(x+m,y+m); }
+  });
+  ctx.stroke(); ctx.shadowBlur=0;
+  // salida dorada
+  ctx.fillStyle="#ffd12e"; ctx.shadowColor="#ffd12e"; ctx.shadowBlur=14;
+  ctx.beginPath(); ctx.arc(ox+(n-1)*m+m/2,oy+(n-1)*m+m/2,m*0.28,0,7); ctx.fill(); ctx.shadowBlur=0;
+  // jugador
+  ctx.fillStyle="#b6ff00"; ctx.shadowColor="#b6ff00"; ctx.shadowBlur=12;
+  ctx.beginPath(); ctx.arc(ox+jugador.x*m+m/2,oy+jugador.y*m+m/2,m*0.3,0,7); ctx.fill(); ctx.shadowBlur=0;
+  if(ganado && nivel>=12){ }
+}
+
+function pintarFin(gano,total,nuevo){
+  ctx.fillStyle="rgba(0,0,0,.62)"; ctx.fillRect(0,0,W,H);
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  ctx.fillStyle="#fff"; ctx.font="900 36px Segoe UI,sans-serif";
+  ctx.shadowColor="#0cf"; ctx.shadowBlur=18; ctx.fillText(gano?"¡LLEGASTE A LA SALIDA!":"FIN DEL JUEGO",W/2,H/2-60); ctx.shadowBlur=0;
+  ctx.fillStyle="#ffd12e"; ctx.font="800 24px Segoe UI,sans-serif"; ctx.fillText(total+" puntos · nivel "+nivel,W/2,H/2-12);
+  ctx.fillStyle=nuevo?"#b6ff00":"#7fc8e8"; ctx.font="700 16px Segoe UI,sans-serif";
+  ctx.fillText(nuevo?"¡NUEVO RÉCORD!":"Récord: "+leer(),W/2,H/2+24);
+  ctx.fillStyle="#7fc8e8"; ctx.font="600 15px Segoe UI,sans-serif";
+  ctx.fillText("toca para volver a jugar",W/2,H/2+62);
+}
+
+/* ---------- controles ---------- */
+addEventListener("keydown",e=>{
+  const k=e.key.toLowerCase();
+  if(k==="arrowup"||k==="w") mover(0,-1);
+  if(k==="arrowdown"||k==="s") mover(0,1);
+  if(k==="arrowleft"||k==="a") mover(-1,0);
+  if(k==="arrowright"||k==="d") mover(1,0);
+  if(k==="p"&&vivo){ pausado=!pausado; }
+  if(["arrowup","arrowdown","arrowleft","arrowright"," "].includes(k)) e.preventDefault();
+});
+// tocar la pantalla: se mueve hacia el lado que tocas, respecto al jugador
+cv.addEventListener("pointerdown",e=>{
+  if(!vivo) return;
+  if(pausado){ pausado=false; return; }
+  if(!lab) return;
+  const r=cv.getBoundingClientRect();
+  const n=lab.n, m=Math.floor((W-40)/n), ox=(W-m*n)/2, oy=(H-m*n)/2+10;
+  const x=(e.clientX-r.left)*(W/r.width), y=(e.clientY-r.top)*(H/r.height);
+  const dx=x-(ox+jugador.x*m+m/2), dy=y-(oy+jugador.y*m+m/2);
+  if(Math.abs(dx)>Math.abs(dy)) mover(dx>0?1:-1,0); else mover(0,dy>0?1:-1);
+});
+$("empezar").onclick=empezar;
+
+function pintarMenu(){ $("stats").innerHTML="Récord (puntos totales): "+leer(); }
+vivo=false; pintarMenu(); dibujar();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>
