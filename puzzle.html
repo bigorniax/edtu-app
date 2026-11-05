@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Puzzle Neón</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;background:#02030a;color:#eaf6ff}
+  #wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{display:block;max-width:100%;max-height:100%;border-radius:12px;touch-action:none;
+    box-shadow:0 0 28px rgba(0,190,255,.3),inset 0 0 40px rgba(0,190,255,.1)}
+  #hud{position:absolute;top:10px;left:0;right:0;display:flex;justify-content:space-between;padding:0 16px;
+    font-weight:900;font-size:17px;pointer-events:none;text-shadow:0 0 8px #0cf}
+  #hud span:nth-child(2){color:#ffd12e;text-shadow:0 0 8px #ffd12e}
+  #ayuda{position:absolute;bottom:8px;left:0;right:0;text-align:center;color:#6fb8d8;font-size:13px;pointer-events:none}
+  #menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(2,3,10,.92);text-align:center;padding:20px}
+  #menu h1{font-size:40px;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #fff,0 0 18px #0cf,0 0 40px #0cf}
+  #menu p{margin:14px 0 22px;color:#7fc8e8;line-height:1.6;font-size:16px;max-width:460px}
+  #menu button{cursor:pointer;padding:16px 42px;border-radius:14px;border:2px solid #0cf;background:rgba(0,0,0,.6);
+    color:#fff;font-size:20px;font-weight:900;letter-spacing:2px;box-shadow:0 0 14px #0cf;text-shadow:0 0 8px #0cf}
+  #menu button:hover{transform:scale(1.05)}
+  #menu .stats{margin-top:18px;color:#ffd12e;font-weight:800;text-shadow:0 0 8px #ffd12e;line-height:1.7}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="480" height="560"></canvas>
+  <div id="hud"><span id="nivelT">nivel 1</span><span id="movT">0 movs</span><span id="tiempoT">0 s</span></div>
+  <div id="ayuda">toca una ficha junto al hueco para moverla · o usa las flechas · R reinicia el nivel</div>
+  <div id="menu">
+    <h1>PUZZLE NEÓN</h1>
+    <p>Ordena los números del 1 al final, con el hueco al final. Mueve una ficha a la vez hacia el hueco. Cada nivel es más grande.</p>
+    <button id="empezar">JUGAR</button>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+const W=cv.width, H=cv.height;
+const CLAVE="edtu_puzzle_mejor";
+
+function leer(){ try{ return parseInt(localStorage.getItem(CLAVE)||"0",10)||0; }catch(e){ return 0; } }
+function guardar(v){ try{ localStorage.setItem(CLAVE,String(v)); }catch(e){} }
+
+let audio=null;
+function tono(f,d,tipo,vol,subida){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
+  const o=audio.createOscillator(), g=audio.createGain(); o.type=tipo||"square"; const t=audio.currentTime;
+  o.frequency.setValueAtTime(f,t); if(subida) o.frequency.exponentialRampToValueAtTime(f*subida,t+d);
+  g.gain.setValueAtTime(vol||0.06,t); g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t+d); }catch(e){} }
+
+/* ---------- tablero ---------- */
+let nivel=1, N=3, tab=[1,2,3,4,5,6,7,8,0], hueco=8, movs=0, inicio=0, vivo=false, raf=null, resuelto=false, totalMovs=0, terminaT=0;
+const COLORES=["#ff3b5c","#ff8a3c","#ffd12e","#b6ff00","#3ee6a0","#2fd0ff","#3a8cff","#c58cff","#ff3bd4","#fff"];
+
+function resolverPosible(lista){
+  // las fichas con inversiones pares se pueden ordenar (el hueco se cuenta aparte)
+  let inv=0; const sinHueco=lista.filter(v=>v!==0);
+  for(let i=0;i<sinHueco.length;i++) for(let j=i+1;j<sinHueco.length;j++) if(sinHueco[i]>sinHueco[j]) inv++;
+  const filaHueco=Math.floor(lista.indexOf(0)/N);
+  if(N%2===1) return inv%2===0;
+  return (inv+ (N-1-filaHueco))%2===0;
+}
+
+function mezclar(){
+  const total=N*N;
+  do{
+    const arr=[]; for(let i=1;i<total;i++) arr.push(i); arr.push(0);
+    for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; }
+    tab=arr;
+  }while(!resolverPosible(tab) || estaOrdenado());
+  hueco=tab.indexOf(0);
+}
+function estaOrdenado(){ for(let i=0;i<tab.length-1;i++) if(tab[i]!==i+1) return false; return tab[tab.length-1]===0; }
+
+function nuevoNivel(){
+  N=Math.min(6,2+nivel);    // 3x3, 4x4, 5x5, 6x6 (y se queda en 6x6)
+  mezclar(); movs=0; inicio=performance.now(); resuelto=false;
+}
+
+function empezar(){
+  $("menu").style.display="none";
+  nivel=1; totalMovs=0; terminaT=0; vivo=true;
+  nuevoNivel();
+  cancelAnimationFrame(raf);
+  raf=requestAnimationFrame(paso);
+}
+
+function mover(i){
+  if(!vivo||resuelto) return;
+  const fi=Math.floor(i/N), ci=i%N, fh=Math.floor(hueco/N), ch=hueco%N;
+  // solo se mueve una ficha vecina del hueco (misma fila o columna, una casilla)
+  const vecina=(Math.abs(fi-fh)+Math.abs(ci-ch))===1;
+  if(!vecina) return;
+  tab[hueco]=tab[i]; tab[i]=0; hueco=i; movs++; tono(520,0.05,"triangle",0.05);
+  if(estaOrdenado()){
+    resuelto=true; const seg=(performance.now()-inicio)/1000;
+    tono(660,0.2,"sine",0.08,1.5); setTimeout(()=>tono(880,0.3,"sine",0.08,1.4),120);
+    totalMovs+=movs;
+    setTimeout(()=>{
+      if(nivel>=6){ finJuego(); return; }
+      nivel++; nuevoNivel();
+    },1200);
+  }
+}
+
+function finJuego(){
+  vivo=false; cancelAnimationFrame(raf);
+  const mejor=leer(), nuevo=totalMovs<mejor || mejor===0;
+  if(nuevo) guardar(totalMovs);
+  dibujar(); pintarFin(nuevo);
+  setTimeout(()=>{ cv.onclick=()=>{ cv.onclick=null; empezar(); }; },500);
+}
+
+function paso(){
+  raf=requestAnimationFrame(paso);
+  if(!vivo) return;
+  dibujar();
+  const seg=resuelto?terminaT:(performance.now()-inicio)/1000;
+  $("nivelT").textContent="nivel "+nivel+" / 6";
+  $("movT").textContent=movs+" movs";
+  $("tiempoT").textContent=seg.toFixed(0)+" s";
+}
+
+function dibujar(){
+  ctx.fillStyle="#02030a"; ctx.fillRect(0,0,W,H);
+  const lado=Math.min(W,H-60)-40, c=lado/N, ox=(W-lado)/2, oy=60;
+  for(let i=0;i<N*N;i++){
+    const v=tab[i]; if(v===0) continue;
+    const x=ox+(i%N)*c+4, y=oy+Math.floor(i/N)*c+4, s=c-8;
+    const col=COLORES[(v-1)%COLORES.length];
+    ctx.fillStyle=col; ctx.shadowColor=col; ctx.shadowBlur=resuelto?18:8;
+    ctx.fillRect(x,y,s,s); ctx.shadowBlur=0;
+    ctx.fillStyle="#02030a"; ctx.font="900 "+Math.floor(c*0.42)+"px Segoe UI,sans-serif";
+    ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(v,x+s/2,y+s/2+1);
+  }
+  // marco
+  ctx.strokeStyle=resuelto?"#b6ff00":"#0cf"; ctx.lineWidth=3; ctx.strokeRect(ox,oy,lado,lado);
+  if(resuelto){
+    ctx.fillStyle="#b6ff00"; ctx.font="900 26px Segoe UI,sans-serif"; ctx.textAlign="center";
+    ctx.fillText("¡ORDENADO!",W/2,oy+lado+30);
+  }
+}
+
+function pintarFin(nuevo){
+  ctx.fillStyle="rgba(0,0,0,.62)"; ctx.fillRect(0,0,W,H);
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  ctx.fillStyle="#fff"; ctx.font="900 36px Segoe UI,sans-serif";
+  ctx.shadowColor="#0cf"; ctx.shadowBlur=18; ctx.fillText("¡TODOS LOS NIVELES!",W/2,H/2-60); ctx.shadowBlur=0;
+  ctx.fillStyle="#ffd12e"; ctx.font="800 22px Segoe UI,sans-serif"; ctx.fillText(totalMovs+" movimientos en total",W/2,H/2-12);
+  ctx.fillStyle=nuevo?"#b6ff00":"#7fc8e8"; ctx.font="700 16px Segoe UI,sans-serif";
+  ctx.fillText(nuevo?"¡NUEVO RÉCORD (menos movimientos)!":"Mejor: "+leer()+" movimientos",W/2,H/2+24);
+  ctx.fillStyle="#7fc8e8"; ctx.font="600 15px Segoe UI,sans-serif";
+  ctx.fillText("toca para volver a jugar",W/2,H/2+62);
+}
+
+/* ---------- controles ---------- */
+addEventListener("keydown",e=>{
+  const k=e.key.toLowerCase();
+  // las flechas mueven el hueco: la ficha de ese lado entra al hueco
+  const fh=Math.floor(hueco/N), ch=hueco%N;
+  if(k==="arrowup"||k==="w"){ if(fh<N-1) mover(hueco+N); }
+  if(k==="arrowdown"||k==="s"){ if(fh>0) mover(hueco-N); }
+  if(k==="arrowleft"||k==="a"){ if(ch<N-1) mover(hueco+1); }
+  if(k==="arrowright"||k==="d"){ if(ch>0) mover(hueco-1); }
+  if(k==="r"&&vivo&&!resuelto){ mezclar(); movs=0; inicio=performance.now(); }
+  if(["arrowup","arrowdown","arrowleft","arrowright"," "].includes(k)) e.preventDefault();
+});
+cv.addEventListener("pointerdown",e=>{
+  if(!vivo||resuelto) return;
+  const r=cv.getBoundingClientRect();
+  const lado=Math.min(W,H-60)-40, c=lado/N, ox=(W-lado)/2, oy=60;
+  const x=(e.clientX-r.left)*(W/r.width)-ox, y=(e.clientY-r.top)*(H/r.height)-oy;
+  if(x<0||y<0||x>lado||y>lado) return;
+  mover(Math.floor(y/c)*N+Math.floor(x/c));
+});
+$("empezar").onclick=empezar;
+
+function pintarMenu(){ $("stats").innerHTML="Mejor (menos movimientos): "+(leer()||"—"); }
+vivo=false; pintarMenu(); dibujar();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>
