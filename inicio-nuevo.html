@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Juegos gratis</title>
+<meta name="description" content="EDTU: más de 200 juegos gratis para jugar en el navegador. Sin instalar nada, con cuenta opcional." />
+<link rel="stylesheet" href="nuevo.css" />
+<style>
+  /* ---------- primera pantalla ---------- */
+  .hero{position:relative;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:110px 18px 70px;overflow:hidden}
+  #fondo{position:absolute;inset:0;width:100%;height:100%;z-index:0}
+  .hero .dentro{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center}
+  .etiqueta{font-size:11px;letter-spacing:.3em;color:var(--acento);text-transform:uppercase}
+  .titulo{margin-top:16px;font-weight:400;font-size:clamp(70px,17vw,200px);letter-spacing:.14em;line-height:1;transition:transform .4s ease-out}
+  .sub{margin-top:18px;color:var(--suave);font-size:clamp(12px,2vw,16px);letter-spacing:.2em;text-transform:uppercase}
+  .botones{margin-top:34px;display:flex;gap:14px;flex-wrap:wrap;justify-content:center}
+  .botones .btn-pl{padding:15px 28px;font-size:13px;text-decoration:none}
+  .botones .btn-pl.fuerte{animation:pulso 2.6s ease-out infinite}
+  .flota{position:absolute;border-radius:50%;border:1px solid rgba(220,226,234,.12);background:radial-gradient(circle,rgba(220,226,234,.07),transparent 70%);z-index:0;animation:flotar 9s ease-in-out infinite}
+  .flota.a{width:360px;height:360px;left:-80px;top:14%}
+  .flota.b{width:220px;height:220px;right:-40px;top:58%;animation-delay:-3s}
+  .flota.c{width:140px;height:140px;left:18%;bottom:8%;animation-delay:-6s}
+  .scroll{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);z-index:1;color:var(--plata-oscuro);font-size:11px;letter-spacing:.3em}
+  .scroll span{display:inline-block;animation:flotar 2s ease-in-out infinite}
+
+  /* ---------- cinta de juegos ---------- */
+  .cinta{border-block:1px solid var(--linea);overflow:hidden;white-space:nowrap;padding:16px 0;background:#070708}
+  .cinta .pista{display:inline-flex;gap:46px;animation:cinta 40s linear infinite;padding-left:46px}
+  .cinta span{font-size:14px;letter-spacing:.14em;color:var(--plata)}
+  .cinta span i{font-style:normal;color:var(--acento);margin-right:10px}
+  @keyframes cinta{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+  /* ---------- secciones ---------- */
+  section{max-width:1160px;margin:0 auto;padding:110px 22px}
+  h2{font-weight:400;font-size:clamp(26px,4.2vw,44px);letter-spacing:.06em;line-height:1.2;margin-top:12px;color:#eef1f4}
+  .lead{color:var(--suave);font-size:16px;line-height:1.7;max-width:680px;margin-top:16px}
+  .centro{text-align:center}
+  .centro .lead{margin-left:auto;margin-right:auto}
+
+  /* tarjetas */
+  .grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:18px;margin-top:48px}
+  .tarjeta{position:relative;background:linear-gradient(160deg,var(--fondo2),var(--fondo));border:1px solid var(--linea);border-radius:18px;padding:26px;overflow:hidden;transition:transform .35s ease,border-color .35s ease,box-shadow .35s ease}
+  .tarjeta::before{content:"";position:absolute;inset:0;background:radial-gradient(420px circle at var(--mx,50%) var(--my,0%),rgba(220,226,234,.12),transparent 40%);opacity:0;transition:opacity .4s;pointer-events:none}
+  .tarjeta:hover{transform:translateY(-6px);border-color:rgba(255,184,77,.45);box-shadow:0 18px 40px rgba(0,0,0,.5)}
+  .tarjeta:hover::before{opacity:1}
+  .tarjeta .ico{font-size:30px;display:block;margin-bottom:16px;transition:transform .4s;filter:grayscale(1) brightness(1.4)}
+  .tarjeta:hover .ico{transform:scale(1.15) rotate(-6deg)}
+  .tarjeta h3{font-weight:400;font-size:17px;letter-spacing:.06em;color:#eef1f4}
+  .tarjeta p{margin-top:10px;color:var(--suave);font-size:14px;line-height:1.65}
+  .tarjeta .n{margin-top:16px;font-size:11px;letter-spacing:.14em;color:var(--plata-oscuro)}
+  .tarjeta a.ir{display:inline-block;margin-top:16px;font-size:12px;letter-spacing:.12em;color:var(--acento);text-decoration:none;border-bottom:1px solid rgba(255,184,77,.35);padding-bottom:3px}
+  .tarjeta a.ir:hover{color:#fff;border-color:var(--plata)}
+
+  /* pasos */
+  .pasos{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:28px;margin-top:56px}
+  .paso{text-align:left;padding:8px 0}
+  .paso .num{font-size:44px;font-weight:400;background:var(--plata-grad);-webkit-background-clip:text;background-clip:text;color:transparent;line-height:1}
+  .paso h3{font-weight:400;font-size:16px;letter-spacing:.06em;margin-top:14px;color:#eef1f4}
+  .paso p{margin-top:10px;color:var(--suave);font-size:14px;line-height:1.65}
+
+  /* cifras */
+  .cifras{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:18px;margin-top:48px}
+  .cifra{border:1px solid var(--linea);border-radius:18px;padding:30px 20px;text-align:center;background:var(--fondo2)}
+  .cifra b{display:block;font-weight:400;font-size:clamp(40px,6vw,64px);background:var(--plata-grad);-webkit-background-clip:text;background-clip:text;color:transparent;line-height:1}
+  .cifra span{display:block;margin-top:12px;color:var(--suave);font-size:12px;letter-spacing:.12em;text-transform:uppercase}
+
+  /* preguntas */
+  .preguntas{margin-top:44px;display:grid;gap:12px;max-width:820px}
+  details{border:1px solid var(--linea);border-radius:14px;background:var(--fondo2);padding:0 22px;transition:border-color .3s}
+  details[open]{border-color:rgba(255,184,77,.4)}
+  summary{cursor:pointer;list-style:none;padding:20px 0;font-size:15px;letter-spacing:.04em;color:#eef1f4;display:flex;justify-content:space-between;gap:16px;align-items:center}
+  summary::-webkit-details-marker{display:none}
+  summary::after{content:"+";font-size:22px;color:var(--acento);transition:transform .3s}
+  details[open] summary::after{transform:rotate(45deg)}
+  details p{color:var(--suave);font-size:14px;line-height:1.7;padding:0 0 22px}
+
+  /* llamada final */
+  .final{text-align:center;padding:120px 22px}
+  .final h2{font-size:clamp(28px,5vw,52px)}
+  .final .btn-pl{margin-top:30px;padding:17px 34px;font-size:14px;text-decoration:none;display:inline-block}
+
+  .pie{border-top:1px solid var(--linea);padding:36px 22px;text-align:center;color:var(--suave);font-size:12px;letter-spacing:.12em}
+  .pie b{font-weight:400;color:var(--plata)}
+
+  @media (max-width:720px){
+    .menu-top a:not(.ir-juegos){display:none}
+    .flota.a{width:240px;height:240px}
+    .flota.b{display:none}
+  }
+</style>
+</head>
+<body>
+
+<!-- barra de arriba -->
+<nav class="topbar">
+  <a class="logo" href="inicio-nuevo.html">EDTU</a>
+  <div class="menu-top">
+    <a href="#como">CÓMO FUNCIONA</a>
+    <a href="#categorias">CATEGORÍAS</a>
+    <a href="#preguntas">PREGUNTAS</a>
+    <a class="ir-juegos" href="juegos.html">JUEGOS</a>
+  </div>
+  <div class="cuenta" id="cuenta"></div>
+</nav>
+
+<!-- primera pantalla -->
+<header class="hero">
+  <canvas id="fondo" aria-hidden="true"></canvas>
+  <span class="flota a"></span><span class="flota b"></span><span class="flota c"></span>
+  <div class="dentro">
+    <div class="etiqueta revela visto">Juegos gratis · en el navegador</div>
+    <h1 class="titulo plata-viva" id="titulo">EDTU</h1>
+    <p class="sub revela visto d1">Más de 200 juegos para jugar sin instalar nada</p>
+    <div class="botones revela visto d2">
+      <a class="btn-pl fuerte" href="juegos.html">JUGAR AHORA</a>
+      <a class="btn-pl" href="#categorias">VER CATEGORÍAS</a>
+    </div>
+  </div>
+  <div class="scroll"><span>↓</span> DESLIZA PARA SEGUIR</div>
+</header>
+
+<!-- cinta con nombres -->
+<div class="cinta" aria-hidden="true">
+  <div class="pista" id="pista"></div>
+</div>
+
+<!-- que es -->
+<section>
+  <div class="revela">
+    <div class="etiqueta">Qué es EDTU</div>
+    <h2>Juegos de verdad, al alcance de un clic</h2>
+    <p class="lead">EDTU reúne juegos hechos para todas las edades: rápidos, con puntajes y récords, para jugar solo o con un amigo. No tienes que descargar nada ni pagar. Abres la página, eliges y juegas.</p>
+  </div>
+  <div class="grid3">
+    <article class="tarjeta revela d1" data-tilt>
+      <span class="ico">🎮</span>
+      <h3>Gratis de verdad</h3>
+      <p>Todos los juegos son gratis. No hay compras dentro del juego ni cosas escondidas que haya que pagar.</p>
+    </article>
+    <article class="tarjeta revela d2" data-tilt>
+      <span class="ico">📱</span>
+      <h3>Funciona en todo</h3>
+      <p>Funciona en computador, tablet y celular, con mouse, teclado o tocando la pantalla.</p>
+    </article>
+    <article class="tarjeta revela d3" data-tilt>
+      <span class="ico">🏆</span>
+      <h3>Récords y cuenta</h3>
+      <p>Guarda tus mejores puntajes. Con una cuenta, tus récords quedan guardados aunque cambies de computador.</p>
+    </article>
+  </div>
+</section>
+
+<!-- categorias -->
+<section id="categorias">
+  <div class="revela">
+    <div class="etiqueta">Categorías</div>
+    <h2>Elige lo que te gusta</h2>
+    <p class="lead">Cada categoría tiene su propio tipo de juego. Si no sabes por dónde empezar, prueba un corredor o un puzzle.</p>
+  </div>
+  <div class="grid3">
+    <article class="tarjeta revela d1" data-tilt>
+      <span class="ico">🚀</span>
+      <h3>Espacio</h3>
+      <p>Naves, asteroides, aterrizajes y misiones en el cosmos. Muy rápidos y con mucha acción.</p>
+      <div class="n">18 JUEGOS</div>
+      <a class="ir" href="juegos.html">VER ESPACIO →</a>
+    </article>
+    <article class="tarjeta revela d2" data-tilt>
+      <span class="ico">🏅</span>
+      <h3>Deportes</h3>
+      <p>Penales, básquet, tenis, golf, bolos y más. Compite contra el tiempo o contra la IA.</p>
+      <div class="n">18 JUEGOS</div>
+      <a class="ir" href="juegos.html">VER DEPORTES →</a>
+    </article>
+    <article class="tarjeta revela d3" data-tilt>
+      <span class="ico">🎵</span>
+      <h3>Música</h3>
+      <p>Piano, batería, guitarra y ritmo. Sigue el compás, adivina canciones y compón tu propia melodía.</p>
+      <div class="n">18 JUEGOS</div>
+      <a class="ir" href="juegos.html">VER MÚSICA →</a>
+    </article>
+    <article class="tarjeta revela d1" data-tilt>
+      <span class="ico">🧩</span>
+      <h3>Puzzles</h3>
+      <p>Laberintos, puzzles de fichas y desafíos de lógica. Piensa, planea y encuentra la salida.</p>
+      <div class="n">PUZZLES Y LABERINTOS</div>
+      <a class="ir" href="juegos.html">VER PUZZLES →</a>
+    </article>
+    <article class="tarjeta revela d2" data-tilt>
+      <span class="ico">🪙</span>
+      <h3>Corredores y acción</h3>
+      <p>Corre sin parar, esquiva barreras, junta monedas y dispara a los enemigos antes que te alcancen.</p>
+      <div class="n">ACCIÓN Y CORREDORES</div>
+      <a class="ir" href="juegos.html">VER ACCIÓN →</a>
+    </article>
+    <article class="tarjeta revela d3" data-tilt>
+      <span class="ico">👥</span>
+      <h3>Dos jugadores</h3>
+      <p>Pong, fútbol, tenis de mesa y carreras para jugar con un amigo en el mismo computador.</p>
+      <div class="n">2 JUGADORES</div>
+      <a class="ir" href="juegos.html">VER 2 JUGADORES →</a>
+    </article>
+  </div>
+</section>
+
+<!-- como funciona -->
+<section id="como">
+  <div class="centro revela">
+    <div class="etiqueta">Cómo funciona</div>
+    <h2>Tres pasos y estás jugando</h2>
+    <p class="lead">No hay que instalar, ni registrarse, ni aprender nada complicado.</p>
+  </div>
+  <div class="pasos">
+    <div class="paso revela d1"><div class="num">01</div><h3>Elige un juego</h3><p>Busca por nombre o mira las categorías. Cada juego tiene su tarjeta con el nombre y el tipo.</p></div>
+    <div class="paso revela d2"><div class="num">02</div><h3>Toca y arranca</h3><p>El juego se abre a pantalla completa y empieza solo. No hay que buscar ningún botón de jugar.</p></div>
+    <div class="paso revela d3"><div class="num">03</div><h3>Guarda tu récord</h3><p>Crea una cuenta y tus puntajes quedan guardados. Así puedes competir contra ti mismo.</p></div>
+  </div>
+</section>
+
+<!-- cifras -->
+<section>
+  <div class="centro revela">
+    <div class="etiqueta">En números</div>
+    <h2>Un montón de juegos</h2>
+  </div>
+  <div class="cifras">
+    <div class="cifra revela d1"><b data-cuenta="205">0</b><span>juegos</span></div>
+    <div class="cifra revela d2"><b data-cuenta="13">0</b><span>categorías</span></div>
+    <div class="cifra revela d3"><b data-cuenta="1">0</b><span>clic para empezar a jugar</span></div>
+    <div class="cifra revela d4"><b data-cuenta="0">0</b><span>pesos para jugar</span></div>
+  </div>
+</section>
+
+<!-- preguntas -->
+<section id="preguntas">
+  <div class="revela">
+    <div class="etiqueta">Preguntas</div>
+    <h2>Lo que más preguntan</h2>
+  </div>
+  <div class="preguntas">
+    <details class="revela"><summary>¿Tengo que pagar para jugar?</summary><p>No. Todos los juegos de EDTU son gratis. Nunca te van a pedir pagar para seguir jugando.</p></details>
+    <details class="revela d1"><summary>¿Necesito instalar algo?</summary><p>No. Todo corre en el navegador. Solo abre la página y juega.</p></details>
+    <details class="revela d2"><summary>¿Para qué sirve la cuenta?</summary><p>Para guardar tus récords. La cuenta es opcional: puedes jugar sin crearla, pero entonces tus récords solo quedan en ese computador.</p></details>
+    <details class="revela d3"><summary>¿Puedo crear cuenta sin correo?</summary><p>Sí. Puedes usar un usuario de 3 a 20 letras, números o guion bajo, con una contraseña. Guárdala bien, porque sin correo no hay cómo recuperarla.</p></details>
+  </div>
+</section>
+
+<!-- llamada final -->
+<section class="final">
+  <div class="revela">
+    <div class="etiqueta">Empieza ahora</div>
+    <h2>Tu próximo récord<br>está a un clic</h2>
+    <a class="btn-pl fuerte" href="juegos.html">VER TODOS LOS JUEGOS</a>
+  </div>
+</section>
+
+<footer class="pie"><b>EDTU</b> · hecho por David · juegos gratis</footer>
+
+<script src="nuevo.js"></script>
+<script src="juegos-datos.js"></script>
+<script>
+/* estrellitas de fondo */
+(function () {
+  const cv = document.getElementById("fondo"), ctx = cv.getContext("2d");
+  let w, h, pts = [];
+  function ajusta() {
+    const d = Math.min(2, devicePixelRatio || 1);
+    w = cv.width = innerWidth * d; h = cv.height = innerHeight * d;
+    cv.style.width = innerWidth + "px"; cv.style.height = innerHeight + "px";
+    pts = []; const n = Math.round(innerWidth / 8);
+    for (let i = 0; i < n; i++) pts.push({ x: Math.random() * w, y: Math.random() * h, v: (0.15 + Math.random() * 0.5) * d, r: (0.5 + Math.random() * 1.3) * d, a: Math.random() * 6 });
+  }
+  addEventListener("resize", ajusta); ajusta();
+  function dibuja() {
+    ctx.clearRect(0, 0, w, h);
+    pts.forEach(p => {
+      p.y -= p.v; p.a += 0.012;
+      if (p.y < -4) { p.y = h + 4; p.x = Math.random() * w; }
+      ctx.globalAlpha = 0.2 + 0.5 * Math.abs(Math.sin(p.a));
+      ctx.fillStyle = "#e4e8ec"; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+    requestAnimationFrame(dibuja);
+  }
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches) dibuja();
+})();
+
+/* cinta con nombres de juegos */
+(function () {
+  const mezclados = JUEGOS.map(j => j.nom).filter((_, i) => i % 7 === 0).slice(0, 26);
+  const html = mezclados.map(n => '<span><i>●</i>' + n + '</span>').join("");
+  document.getElementById("pista").innerHTML = html + html;
+})();
+
+/* tarjetas: brillo que sigue al mouse */
+document.querySelectorAll("[data-tilt]").forEach(t => {
+  t.addEventListener("mousemove", e => {
+    const r = t.getBoundingClientRect();
+    t.style.setProperty("--mx", (e.clientX - r.left) + "px");
+    t.style.setProperty("--my", (e.clientY - r.top) + "px");
+  });
+});
+
+/* titulo que se mueve un poco con el mouse (solo en la primera pantalla) */
+(function () {
+  const t = document.getElementById("titulo");
+  addEventListener("mousemove", e => {
+    if (scrollY > innerHeight * 0.5) return;
+    const x = (e.clientX / innerWidth - 0.5) * 14, y = (e.clientY / innerHeight - 0.5) * 8;
+    t.style.transform = "translate(" + x + "px," + y + "px)";
+  }, { passive: true });
+})();
+</script>
+</body>
+</html>

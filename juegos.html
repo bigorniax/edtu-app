@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Juegos</title>
+<link rel="stylesheet" href="nuevo.css" />
+<style>
+  :root{--fondo:#050505;--tarjeta:#0b0b0c;--texto:#dfe3e8;--suave:#9aa2ab;--linea:rgba(255,255,255,.12);--plata:#c9d0d8}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%;background:var(--fondo);color:var(--texto);font-family:"AW",system-ui,sans-serif}
+  .cabeza{padding:96px 22px 14px;max-width:1200px;margin:0 auto}
+  .logo{font-size:26px;letter-spacing:.14em;background:linear-gradient(180deg,#fff,#d7dce2 45%,#8c949d);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .volver{color:var(--suave);text-decoration:none;font-size:13px;letter-spacing:.12em;border:1px solid var(--linea);border-radius:8px;padding:8px 12px}
+  .volver:hover{color:#fff;border-color:var(--plata)}
+  .busca{display:block;width:100%;max-width:1200px;margin:14px auto 0;padding:12px 16px;border-radius:10px;border:1px solid var(--linea);background:#0b0b0c;color:var(--texto);font-family:"AW",sans-serif;font-size:15px;outline:none}
+  .busca:focus{border-color:var(--plata)}
+  .cats{max-width:1200px;margin:12px auto 0;display:flex;gap:8px;flex-wrap:wrap}
+  .cat{cursor:pointer;background:transparent;color:var(--suave);border:1px solid var(--linea);border-radius:999px;padding:6px 12px;font-family:"AW",sans-serif;font-size:12px;letter-spacing:.06em}
+  .cat:hover{color:#fff}
+  .cat.on{color:#140d02;background:linear-gradient(180deg,var(--acento-claro),var(--acento));border-color:var(--acento)}
+  main{max-width:1200px;margin:0 auto;padding:22px 20px 60px}
+  .info{color:var(--suave);font-size:13px;letter-spacing:.08em;margin-bottom:14px}
+  .grilla{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+  .card{cursor:pointer;text-align:left;background:var(--tarjeta);border:1px solid var(--linea);border-radius:14px;padding:16px;color:var(--texto);font-family:"AW",sans-serif;transition:border-color .15s,transform .15s}
+  .card:hover{transform:translateY(-3px);border-color:rgba(255,184,77,.5)}
+  .card .ico{font-size:26px;display:block;margin-bottom:10px}
+  .card .nom{display:block;font-size:14px;letter-spacing:.04em;line-height:1.3;color:#e6e9ed}
+  .card .pk{display:block;margin-top:8px;font-size:11px;color:var(--suave);letter-spacing:.08em}
+  .vacio{display:none;color:var(--suave);padding:30px 0;text-align:center}
+
+  /* juego a pantalla completa */
+  #jugar{position:fixed;inset:0;z-index:100;background:#000;display:none;flex-direction:column}
+  #jugar.on{display:flex}
+  #jugar .barra{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;background:#050505;border-bottom:1px solid var(--linea)}
+  #jugar .titulo{font-size:14px;letter-spacing:.1em;color:var(--plata);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #jugar button{cursor:pointer;background:transparent;color:var(--texto);border:1px solid var(--linea);border-radius:8px;padding:7px 12px;font-family:"AW",sans-serif;font-size:12px}
+  #jugar button:hover{border-color:var(--plata);color:#fff}
+  #marco{flex:1;width:100%;border:none;background:#000}
+</style>
+</head>
+<body>
+<nav class="topbar">
+  <a class="logo" href="inicio-nuevo.html">EDTU</a>
+  <div class="menu-top"><a href="inicio-nuevo.html">INICIO</a><a href="juegos.html">JUEGOS</a></div>
+  <div class="cuenta" id="cuenta"></div>
+</nav>
+<header class="cabeza">
+  <input class="busca" id="busca" type="search" placeholder="Busca un juego…" autocomplete="off" />
+  <div class="cats" id="cats"></div>
+</header>
+<main>
+  <div class="info" id="info"></div>
+  <div class="grilla" id="grilla"></div>
+  <div class="vacio" id="vacio">No encontré ese juego. Prueba con otra palabra.</div>
+</main>
+
+<div id="jugar">
+  <div class="barra">
+    <div class="titulo" id="tituloJuego"></div>
+    <button id="cerrar">✕ CERRAR</button>
+  </div>
+  <iframe id="marco" allow="fullscreen; autoplay" title="Juego"></iframe>
+</div>
+
+<script src="nuevo.js"></script>
+<script src="juegos-datos.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const norm = s => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+// categorias: "Todos" + cada categoria que aparece en los juegos
+const CATS = ["Todos"];
+JUEGOS.forEach(j => { if (!CATS.includes(j.pack)) CATS.push(j.pack); });
+let catActiva = "Todos";
+
+function pintaCats() {
+  $("cats").innerHTML = "";
+  CATS.forEach(c => {
+    const b = document.createElement("button");
+    b.className = "cat" + (c === catActiva ? " on" : "");
+    b.textContent = c.toUpperCase();
+    b.onclick = () => { catActiva = c; pintaCats(); filtra(); };
+    $("cats").appendChild(b);
+  });
+}
+
+function filtra() {
+  const q = norm($("busca").value.trim());
+  const lista = JUEGOS.filter(j =>
+    (catActiva === "Todos" || j.pack === catActiva) &&
+    (!q || norm(j.nom).includes(q) || norm(j.pack).includes(q)));
+  $("grilla").innerHTML = "";
+  lista.forEach(j => {
+    const b = document.createElement("button");
+    b.className = "card";
+    b.innerHTML = '<span class="ico">' + j.ico + '</span><span class="nom">' + j.nom + '</span><span class="pk">' + j.pack.toUpperCase() + '</span>';
+    b.onclick = () => abrir(j);
+    $("grilla").appendChild(b);
+  });
+  $("info").textContent = lista.length + " juegos";
+  $("vacio").style.display = lista.length ? "none" : "block";
+}
+
+/* abrir: carga la pagina del juego y lo arranca solo, sin boton de jugar */
+let arrancado = false, timer = null;
+function abrir(j) {
+  $("tituloJuego").textContent = j.ico + " " + j.nom.toUpperCase();
+  arrancado = false;
+  const marco = $("marco");
+  marco.onload = () => arrancar(j);
+  marco.src = j.file;
+  $("jugar").classList.add("on");
+  document.body.style.overflow = "hidden";
+  clearInterval(timer);
+  // respaldo: si no llega el aviso de carga, reintenta cada 200 ms (12 s como maximo)
+  let n = 0;
+  timer = setInterval(() => { n++; if (arrancado || n > 60) { clearInterval(timer); return; } arrancar(j); }, 200);
+}
+function arrancar(j) {
+  if (arrancado) return;
+  try {
+    const d = $("marco").contentDocument;
+    if (!d) return;
+    const boton = d.getElementById("empezar");          // juegos sueltos
+    if (boton) { boton.click(); arrancado = true; return; }
+    if (j.idx !== null) {                                // juegos de paquetes
+      const g = d.querySelector('.gbtn[data-i="' + j.idx + '"]');
+      if (g) { g.click(); arrancado = true; }
+    }
+  } catch (e) {}
+}
+function cerrar() {
+  clearInterval(timer);
+  $("marco").onload = null;
+  $("marco").src = "about:blank";
+  $("jugar").classList.remove("on");
+  document.body.style.overflow = "";
+}
+$("cerrar").onclick = cerrar;
+addEventListener("keydown", e => { if (e.key === "Escape" && $("jugar").classList.contains("on")) cerrar(); });
+$("busca").addEventListener("input", filtra);
+
+/* boton lateral del mouse: vuelve del juego al selector */
+["mousedown", "mouseup", "auxclick"].forEach(ev => {
+  document.addEventListener(ev, e => {
+    if (e.button === 3 || e.button === 4) {
+      e.preventDefault(); e.stopPropagation();
+      if (ev === "mouseup" && e.button === 3 && $("jugar").classList.contains("on")) cerrar();
+    }
+  }, true);
+});
+
+pintaCats();
+filtra();
+</script>
+</body>
+</html>
