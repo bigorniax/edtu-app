@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Récords y amigos</title>
+<link rel="stylesheet" href="nuevo.css" />
+<style>
+  main{max-width:960px;margin:0 auto;padding:98px 18px 60px;min-height:100vh}
+  .etiqueta{font-size:11px;letter-spacing:.3em;color:var(--acento);text-transform:uppercase}
+  h1{font-weight:400;font-size:clamp(24px,3.6vw,36px);letter-spacing:.06em;color:#eef1f4;margin-top:10px}
+
+  .tabs{display:flex;gap:8px;margin:22px 0 18px;flex-wrap:wrap}
+  .tab{cursor:pointer;background:transparent;color:var(--suave);border:1px solid var(--linea);border-radius:999px;padding:9px 18px;font-size:12px;letter-spacing:.12em;transition:.2s}
+  .tab:hover{color:#fff}
+  .tab.on{color:#140d02;background:linear-gradient(180deg,#ffd28a,#ffb84d);border-color:#ffb84d}
+  .panel{display:none}
+  .panel.on{display:block;animation:subir .4s ease both}
+
+  .resumen{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:18px}
+  .res{border:1px solid var(--linea);border-radius:16px;padding:18px;background:var(--fondo2)}
+  .res b{display:block;font-weight:400;font-size:28px;background:var(--plata-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .res span{display:block;margin-top:6px;font-size:11px;color:var(--suave);letter-spacing:.1em;text-transform:uppercase}
+
+  .lista{display:grid;gap:10px}
+  .rec{border:1px solid var(--linea);border-radius:14px;background:var(--fondo2);overflow:hidden;transition:border-color .25s}
+  .rec:hover{border-color:rgba(255,184,77,.35)}
+  .rec .cab{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 18px;cursor:pointer;flex-wrap:wrap}
+  .rec .nom{font-size:15px;color:#eef1f4;letter-spacing:.03em}
+  .rec .nums{display:flex;gap:10px;align-items:center}
+  .rec .mejor{font-size:18px;color:#fff}
+  .puesto{font-size:11px;letter-spacing:.1em;padding:5px 10px;border-radius:999px;border:1px solid rgba(255,184,77,.4);color:var(--acento)}
+  .puesto.top{background:linear-gradient(180deg,#ffd28a,#ffb84d);color:#140d02;border-color:transparent}
+  .tabla{display:none;padding:0 18px 16px;border-top:1px solid var(--linea)}
+  .rec.abierto .tabla{display:block;animation:subir .3s ease both}
+  .fila-t{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px dashed rgba(255,255,255,.07);font-size:14px}
+  .fila-t.yo{color:var(--acento)}
+  .fila-t span:first-child{color:var(--suave)}
+
+  .buscar{display:flex;gap:10px;flex-wrap:wrap}
+  .buscar input{flex:1;min-width:200px;padding:13px 15px;border-radius:12px;border:1px solid var(--linea);background:#000;color:var(--texto);font-family:"AW",sans-serif;font-size:14px;outline:none}
+  .buscar input:focus{border-color:var(--acento)}
+  .seccion{margin-top:30px;font-size:12px;letter-spacing:.2em;color:var(--plata-oscuro);text-transform:uppercase}
+  .amigo{display:flex;justify-content:space-between;align-items:center;gap:12px;border:1px solid var(--linea);border-radius:14px;background:var(--fondo2);padding:14px 16px;transition:border-color .25s,transform .25s}
+  .amigo:hover{border-color:rgba(255,184,77,.35);transform:translateX(4px)}
+  .quien{display:flex;align-items:center;gap:12px;min-width:0}
+  .av{flex:0 0 38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#0b0b0c;font-size:15px}
+  .punto{width:9px;height:9px;border-radius:50%;background:#555;flex:0 0 9px}
+  .punto.on{background:#7dff9a;box-shadow:0 0 10px rgba(125,255,154,.6)}
+  .estado{font-size:11px;color:var(--suave);letter-spacing:.08em}
+  .aviso{font-size:13px;color:var(--suave);padding:18px;text-align:center;border:1px dashed var(--linea);border-radius:14px;margin-top:12px;line-height:1.6}
+  .error{color:#ff9a9a}
+  .mini{font-size:12px;padding:9px 14px}
+</style>
+</head>
+<body>
+
+<nav class="topbar">
+  <a class="logo" href="index.html">EDTU</a>
+  <div class="menu-top">
+    <a href="index.html">INICIO</a>
+    <a href="juegos.html">JUEGOS</a>
+    <a href="chat.html">CHAT</a>
+    <a class="ir-juegos" href="social.html">RÉCORDS Y AMIGOS</a>
+  </div>
+  <div class="cuenta" id="cuenta"></div>
+</nav>
+
+<main>
+  <div class="etiqueta">Tu cuenta</div>
+  <h1>Récords y amigos</h1>
+
+  <div class="tabs">
+    <button class="tab on" data-t="records">RÉCORDS</button>
+    <button class="tab" data-t="amigos">AMIGOS</button>
+  </div>
+
+  <!-- ===== RECORDS ===== -->
+  <section class="panel on" id="p-records">
+    <div class="resumen">
+      <div class="res"><b id="r-juegos">0</b><span>juegos con récord</span></div>
+      <div class="res"><b id="r-puestos">–</b><span>puesto promedio</span></div>
+      <div class="res"><b id="r-primeros">0</b><span>veces en 1º lugar</span></div>
+    </div>
+    <div class="lista" id="lista-records"></div>
+    <div class="aviso" id="aviso-records">Entra con tu cuenta para ver tus récords.</div>
+  </section>
+
+  <!-- ===== AMIGOS ===== -->
+  <section class="panel" id="p-amigos">
+    <div class="buscar">
+      <input id="buscaJugador" type="search" placeholder="Busca a un jugador por su nombre (2 letras o más)" autocomplete="off" />
+    </div>
+    <div class="lista" id="resultados" style="margin-top:12px"></div>
+
+    <div class="seccion">Mis amigos</div>
+    <div class="lista" id="lista-amigos" style="margin-top:12px"></div>
+    <div class="aviso" id="aviso-amigos">Entra con tu cuenta para agregar amigos.</div>
+  </section>
+</main>
+
+<script src="nuevo.js"></script>
+<script src="nombres-juegos.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+(function () {
+  const SB_URL = "https://gesqkfjcdyntkgsptwwa.supabase.co";
+  const SB_KEY = "sb_publishable_RS9lYVszixarVsB4C3eOhw_yW_8uLit";
+  const $ = id => document.getElementById(id);
+  const COLORES = ["#ffb84d", "#c9d0d8", "#7fd3ff", "#ff9ab8", "#9be37d", "#b89cff", "#ffd966", "#8ee3d4"];
+  let sb = null, yo = null, nombres = {};
+
+  const colorDe = id => { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return COLORES[h % COLORES.length]; };
+  const esc = t => String(t == null ? "" : t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const nombreJuego = k => (typeof NOMBRES_JUEGOS !== "undefined" && NOMBRES_JUEGOS[k]) || k.charAt(0).toUpperCase() + k.slice(1);
+  const esTiempo = k => typeof JUEGOS_DE_TIEMPO !== "undefined" && JUEGOS_DE_TIEMPO.includes(k);
+
+  /* ----- pestañas ----- */
+  document.querySelectorAll(".tab").forEach(b => b.onclick = () => {
+    document.querySelectorAll(".tab").forEach(x => x.classList.toggle("on", x === b));
+    document.querySelectorAll(".panel").forEach(p => p.classList.toggle("on", p.id === "p-" + b.dataset.t));
+  });
+
+  async function cargaNombres(ids) {
+    const pedir = [...new Set(ids)].filter(id => !(id in nombres));
+    if (!pedir.length) return;
+    const { data } = await sb.from("players").select("id,username").in("id", pedir);
+    (data || []).forEach(p => nombres[p.id] = p.username || "jugador");
+    pedir.forEach(id => { if (!(id in nombres)) nombres[id] = "jugador"; });
+  }
+
+  /* ----- RECORDS ----- */
+  async function cargaRecords() {
+    const { data, error } = await sb.from("player_scores").select("player_id,game,best");
+    if (error) { $("aviso-records").className = "aviso error"; $("aviso-records").textContent = "No pude leer los récords: " + error.message; return; }
+    const todos = data || [];
+    await cargaNombres(todos.map(r => r.player_id));
+    // agrupar por juego
+    const porJuego = {};
+    todos.forEach(r => { (porJuego[r.game] = porJuego[r.game] || []).push(r); });
+    const mios = todos.filter(r => r.player_id === yo.id);
+    const puestos = [];
+    let primeros = 0;
+    const lista = $("lista-records");
+    lista.innerHTML = "";
+    mios.sort((a, b) => nombreJuego(a.game).localeCompare(nombreJuego(b.game))).forEach(mi => {
+      const rank = porJuego[mi.game].slice().sort((a, b) => esTiempo(mi.game) ? a.best - b.best : b.best - a.best);
+      const puesto = rank.findIndex(r => r.player_id === yo.id) + 1;
+      puestos.push(puesto); if (puesto === 1 && rank.length > 1) primeros++;
+      const card = document.createElement("div");
+      card.className = "rec revela visto";
+      const filas = rank.slice(0, 10).map((r, i) =>
+        '<div class="fila-t' + (r.player_id === yo.id ? " yo" : "") + '"><span>' + (i + 1) + '. ' + esc(nombres[r.player_id]) + '</span><span>' + r.best + (esTiempo(mi.game) ? " ms" : "") + '</span></div>').join("");
+      card.innerHTML =
+        '<div class="cab"><span class="nom">' + esc(nombreJuego(mi.game)) + '</span>' +
+        '<span class="nums"><span class="puesto' + (puesto === 1 ? " top" : "") + '">' + puesto + 'º' + (rank.length > 1 ? ' de ' + rank.length : '') + '</span>' +
+        '<span class="mejor">' + mi.best + (esTiempo(mi.game) ? " ms" : "") + '</span></span></div>' +
+        '<div class="tabla">' + filas + '</div>';
+      card.querySelector(".cab").onclick = () => card.classList.toggle("abierto");
+      lista.appendChild(card);
+    });
+    $("r-juegos").textContent = mios.length;
+    $("r-primeros").textContent = primeros;
+    $("r-puestos").textContent = puestos.length ? (puestos.reduce((a, b) => a + b, 0) / puestos.length).toFixed(1) : "–";
+    $("aviso-records").style.display = mios.length ? "none" : "block";
+    if (!mios.length) $("aviso-records").textContent = "Todavía no tienes récords. Juega y aparecerán aquí.";
+  }
+
+  /* ----- AMIGOS ----- */
+  async function cargaAmigos() {
+    const { data: rels } = await sb.from("amistades").select("de_id,a_id,estado")
+      .or("de_id.eq." + yo.id + ",a_id.eq." + yo.id);
+    const ids = [...new Set((rels || []).map(r => r.de_id === yo.id ? r.a_id : r.de_id))];
+    const lista = $("lista-amigos"); lista.innerHTML = "";
+    if (!ids.length) { $("aviso-amigos").style.display = "block"; $("aviso-amigos").textContent = "Todavía no tienes amigos. Busca a alguien arriba y agrégalo."; return; }
+    $("aviso-amigos").style.display = "none";
+    await cargaNombres(ids);
+    const { data: pres } = await sb.from("presencia").select("id,ultimo_visto").in("id", ids);
+    const visto = {}; (pres || []).forEach(p => visto[p.id] = p.ultimo_visto);
+    const ahora = Date.now();
+    ids.sort((a, b) => nombres[a].localeCompare(nombres[b])).forEach(id => {
+      const en = visto[id] && (ahora - new Date(visto[id]).getTime() < 70000);
+      const col = colorDe(id);
+      const d = document.createElement("div"); d.className = "amigo revela visto";
+      d.innerHTML = '<div class="quien"><div class="av" style="background:' + col + '">' + esc(nombres[id].charAt(0).toUpperCase()) + '</div>' +
+        '<div><div style="color:' + col + ';font-size:15px">' + esc(nombres[id]) + '</div><div class="estado">' + (en ? "EN LÍNEA" : "DESCONECTADO") + '</div></div></div>' +
+        '<span class="punto' + (en ? " on" : "") + '"></span>';
+      lista.appendChild(d);
+    });
+  }
+
+  async function buscaJugadores(q) {
+    const box = $("resultados"); box.innerHTML = "";
+    if (q.length < 2) return;
+    const { data, error } = await sb.rpc("buscar_jugadores", { q });
+    if (error) { box.innerHTML = '<div class="aviso error">No pude buscar: ' + esc(error.message) + '</div>'; return; }
+    if (!data || !data.length) { box.innerHTML = '<div class="aviso">No encontré jugadores con ese nombre.</div>'; return; }
+    data.forEach(p => {
+      const d = document.createElement("div"); d.className = "amigo";
+      const col = colorDe(p.id);
+      d.innerHTML = '<div class="quien"><div class="av" style="background:' + col + '">' + esc((p.username || "?").charAt(0).toUpperCase()) + '</div><span style="color:' + col + '">' + esc(p.username) + '</span></div>';
+      const b = document.createElement("button"); b.className = "btn-pl fuerte mini"; b.textContent = "AGREGAR";
+      b.onclick = async () => {
+        b.disabled = true;
+        const { error } = await sb.from("amistades").upsert([
+          { de_id: yo.id, a_id: p.id, estado: "aceptada" },
+          { de_id: p.id, a_id: yo.id, estado: "aceptada" }
+        ], { onConflict: "de_id,a_id" });
+        if (error) { b.disabled = false; b.textContent = "ERROR"; return; }
+        b.textContent = "AMIGOS ✓"; cargaAmigos();
+      };
+      d.appendChild(b); box.appendChild(d);
+    });
+  }
+
+  function sinCuenta() {
+    $("aviso-records").style.display = "block";
+    $("aviso-records").innerHTML = 'Entra con tu cuenta para ver tus récords.<br><br><button class="btn-pl fuerte mini" id="entraR">ENTRAR</button>';
+    $("entraR").onclick = () => window.EDTU_NUEVO && window.EDTU_NUEVO.abreAuth("entrar");
+    $("aviso-amigos").style.display = "block";
+    $("aviso-amigos").innerHTML = 'Entra con tu cuenta para agregar amigos.<br><br><button class="btn-pl fuerte mini" id="entraA">ENTRAR</button>';
+    $("entraA").onclick = () => window.EDTU_NUEVO && window.EDTU_NUEVO.abreAuth("entrar");
+  }
+
+  async function arranca() {
+    if (!window.supabase) return sinCuenta();
+    sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+    const { data } = await sb.auth.getSession();
+    yo = data.session ? data.session.user : null;
+    if (!yo) return sinCuenta();
+    await cargaRecords();
+    await cargaAmigos();
+    let t = null;
+    $("buscaJugador").addEventListener("input", e => { clearTimeout(t); t = setTimeout(() => buscaJugadores(e.target.value.trim()), 300); });
+  }
+  arranca();
+})();
+</script>
+</body>
+</html>
