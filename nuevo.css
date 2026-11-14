@@ -13,7 +13,7 @@ a{color:inherit}
 button{font-family:"AW",sans-serif}
 
 /* ---------- barra de arriba ---------- */
-.topbar{position:fixed;top:0;left:0;right:0;z-index:50;display:flex;align-items:center;justify-content:space-between;gap:12px;
+.topbar{position:fixed;top:0;left:0;right:0;z-index:60;height:64px;display:flex;align-items:center;justify-content:space-between;gap:12px;
   padding:14px 22px;background:rgba(5,5,5,.72);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--linea);transition:background .3s}
 .topbar.scroll{background:rgba(5,5,5,.94)}
 .logo{font-size:22px;letter-spacing:.16em;background:var(--plata-grad);-webkit-background-clip:text;background-clip:text;color:transparent;text-decoration:none}
