@@ -2,6 +2,7 @@
 @font-face{font-family:"AW";src:url("fonts/Audiowide-Regular.ttf") format("truetype");font-display:swap}
 :root{
   --fondo:#050505; --fondo2:#0b0c0e; --texto:#e4e8ec; --suave:#9aa2ab; --linea:rgba(255,255,255,.12);
+  --barra:64px;
   --plata:#c9d0d8; --plata-claro:#f2f4f7; --plata-oscuro:#8c949d;
   --acento:#ffb84d; --acento-claro:#ffd28a;
   --plata-grad:linear-gradient(180deg,#ffffff 0%,#d7dce2 45%,#8c949d 100%);
@@ -13,7 +14,7 @@ a{color:inherit}
 button{font-family:"AW",sans-serif}
 
 /* ---------- barra de arriba ---------- */
-.topbar{position:fixed;top:0;left:0;right:0;z-index:60;height:64px;display:flex;align-items:center;justify-content:space-between;gap:12px;
+.topbar{position:fixed;top:0;left:0;right:0;z-index:60;height:var(--barra);display:flex;align-items:center;justify-content:space-between;gap:12px;
   padding:14px 22px;background:rgba(5,5,5,.72);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--linea);transition:background .3s}
 .topbar.scroll{background:rgba(5,5,5,.94)}
 .logo{font-size:22px;letter-spacing:.16em;background:var(--plata-grad);-webkit-background-clip:text;background-clip:text;color:transparent;text-decoration:none}
@@ -56,6 +57,16 @@ button{font-family:"AW",sans-serif}
 
 .plata-viva{background:linear-gradient(100deg,#8c949d 0%,#f2f4f7 35%,#8c949d 50%,#f2f4f7 65%,#8c949d 100%);background-size:250% 100%;
   -webkit-background-clip:text;background-clip:text;color:transparent;animation:brillo 6s linear infinite}
+
+@media (max-width:720px){
+  :root{--barra:56px}
+  .topbar{padding:10px 12px;gap:8px}
+  .logo{font-size:18px;letter-spacing:.12em}
+  .menu-top{display:none}
+  .cuenta{gap:6px;flex-wrap:nowrap}
+  .btn-pl{padding:8px 10px;font-size:10px;letter-spacing:.06em;white-space:nowrap}
+  .saludo{max-width:84px;font-size:10px}
+}
 
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
