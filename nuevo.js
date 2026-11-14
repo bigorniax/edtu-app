@@ -133,6 +133,56 @@
     });
   }
 
+  /* ---------- configuracion ---------- */
+  const CONF_KEY = "edtu_config";
+  const CONF_DEF = { anim: true, part: true, grande: false };
+  function leeConf() {
+    try { return Object.assign({}, CONF_DEF, JSON.parse(localStorage.getItem(CONF_KEY) || "{}")); }
+    catch (e) { return Object.assign({}, CONF_DEF); }
+  }
+  function guardaConf(c) { try { localStorage.setItem(CONF_KEY, JSON.stringify(c)); } catch (e) {} }
+  function aplicaConf(c) {
+    const h = document.documentElement;
+    h.classList.toggle("sin-anim", !c.anim);
+    h.classList.toggle("sin-part", !c.part);
+    h.classList.toggle("letra-grande", !!c.grande);
+  }
+  function creaConfig() {
+    const d = document.createElement("div");
+    d.id = "configFs";
+    d.innerHTML = '<div class="config-card"><button class="cerrar" id="configCerrar" aria-label="Cerrar">✕</button>' +
+      '<h2>CONFIGURACIÓN</h2>' +
+      '<div class="opcion"><span>Animaciones<small>Efectos y movimientos de la página</small></span><button class="interruptor" data-k="anim"></button></div>' +
+      '<div class="opcion"><span>Partículas de fondo<small>Las lucecitas que flotan</small></span><button class="interruptor" data-k="part"></button></div>' +
+      '<div class="opcion"><span>Letra grande<small>Textos un poco más grandes</small></span><button class="interruptor" data-k="grande"></button></div>' +
+      '<div class="opcion"><span>Restablecer<small>Vuelve todo como al principio</small></span><button class="btn-pl" id="configReset" style="font-size:10px;padding:7px 10px">RESTABLECER</button></div>' +
+      '</div>';
+    document.body.appendChild(d);
+    const pinta = () => {
+      const c = leeConf();
+      d.querySelectorAll(".interruptor").forEach(b => b.classList.toggle("on", !!c[b.dataset.k]));
+    };
+    d.querySelectorAll(".interruptor").forEach(b => b.onclick = () => {
+      const c = leeConf(); c[b.dataset.k] = !c[b.dataset.k]; guardaConf(c); aplicaConf(c); pinta();
+    });
+    document.getElementById("configReset").onclick = () => { guardaConf(Object.assign({}, CONF_DEF)); aplicaConf(CONF_DEF); pinta(); };
+    document.getElementById("configCerrar").onclick = () => d.classList.remove("open");
+    d.addEventListener("click", e => { if (e.target === d) d.classList.remove("open"); });
+    addEventListener("keydown", e => { if (e.key === "Escape") d.classList.remove("open"); });
+    window.EDTU_CONFIG_ABRIR = () => { pinta(); d.classList.add("open"); };
+    pinta();
+  }
+  function ponGear() {
+    const nav = document.querySelector(".topbar"); if (!nav) return;
+    const g = document.createElement("button");
+    g.className = "gear"; g.setAttribute("aria-label", "Configuración"); g.title = "Configuración"; g.innerHTML = "⚙";
+    g.onclick = () => window.EDTU_CONFIG_ABRIR && window.EDTU_CONFIG_ABRIR();
+    nav.insertBefore(g, nav.querySelector(".cuenta"));
+  }
+  aplicaConf(leeConf());
+  creaConfig();
+  ponGear();
+
   /* ---------- menu de tres rayitas (celular) ---------- */
   function creaMenuMovil() {
     const nav = document.querySelector(".topbar"), enlaces = document.querySelectorAll(".menu-top a");

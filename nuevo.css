@@ -87,3 +87,23 @@ button{font-family:"AW",sans-serif}
 @media (max-width:720px){
   .burger{display:flex}
 }
+
+/* ---------- configuracion ---------- */
+.gear{cursor:pointer;background:transparent;border:1px solid var(--linea);border-radius:9px;width:40px;height:36px;color:var(--plata);font-size:18px;display:flex;align-items:center;justify-content:center;transition:.2s}
+.gear:hover{border-color:var(--acento);color:#fff}
+#configFs{position:fixed;inset:0;z-index:210;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:20px}
+#configFs.open{display:flex;animation:aparece .25s ease}
+.config-card{width:100%;max-width:380px;background:var(--fondo2);border:1px solid var(--linea);border-radius:16px;padding:24px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.config-card h2{font-size:18px;letter-spacing:.12em;background:var(--plata-grad);-webkit-background-clip:text;background-clip:text;color:transparent;margin-bottom:16px}
+.opcion{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid var(--linea);font-size:13px;color:var(--texto);letter-spacing:.04em}
+.opcion small{display:block;color:var(--suave);font-size:11px;margin-top:4px;letter-spacing:.02em}
+.interruptor{position:relative;width:46px;height:26px;flex:0 0 46px;background:#1a1b1f;border:1px solid var(--linea);border-radius:999px;cursor:pointer;transition:.25s}
+.interruptor::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--plata);transition:.25s}
+.interruptor.on{background:linear-gradient(180deg,#ffd28a,#ffb84d);border-color:transparent}
+.interruptor.on::after{left:23px;background:#140d02}
+.config-card .cerrar{position:absolute;right:12px;top:10px;background:none;border:none;color:var(--suave);font-size:18px;cursor:pointer}
+.config-card .cerrar:hover{color:#fff}
+html.sin-anim *,html.sin-anim *::before,html.sin-anim *::after{animation:none!important;transition:none!important}
+html.sin-anim .revela{opacity:1!important;transform:none!important}
+html.sin-part #fondo{display:none}
+html.letra-grande{font-size:112%}
