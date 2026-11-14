@@ -122,6 +122,11 @@ function arrancar(j) {
   try {
     const d = $("marco").contentDocument;
     if (!d) return;
+    if (j.abrir) {                                      // juegos grandes: se abren con su boton de la pagina vieja
+      const b = d.getElementById(j.abrir);
+      if (b) { b.click(); arrancado = true; }
+      return;
+    }
     const boton = d.getElementById("empezar");          // juegos sueltos
     if (boton) { boton.click(); arrancado = true; return; }
     if (j.idx !== null) {                                // juegos de paquetes
