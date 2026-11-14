@@ -133,6 +133,25 @@
     });
   }
 
+  /* ---------- menu de tres rayitas (celular) ---------- */
+  function creaMenuMovil() {
+    const nav = document.querySelector(".topbar"), enlaces = document.querySelectorAll(".menu-top a");
+    if (!nav || !enlaces.length) return;
+    const boton = document.createElement("button");
+    boton.className = "burger"; boton.setAttribute("aria-label", "Menú");
+    boton.innerHTML = "<span></span><span></span><span></span>";
+    const panel = document.createElement("div");
+    panel.className = "menu-movil";
+    enlaces.forEach(a => { const c = document.createElement("a"); c.href = a.getAttribute("href"); c.textContent = a.textContent; panel.appendChild(c); });
+    nav.insertBefore(boton, nav.querySelector(".cuenta"));
+    document.body.appendChild(panel);
+    const cierra = () => { boton.classList.remove("abierto"); panel.classList.remove("abierto"); };
+    boton.onclick = () => { const abre = !panel.classList.contains("abierto"); boton.classList.toggle("abierto", abre); panel.classList.toggle("abierto", abre); };
+    panel.addEventListener("click", e => { if (e.target.tagName === "A") cierra(); });
+    addEventListener("keydown", e => { if (e.key === "Escape") cierra(); });
+  }
+  creaMenuMovil();
+
   creaVentanaAuth();
   conectaCuentas();
   pintaModo();

@@ -72,3 +72,18 @@ button{font-family:"AW",sans-serif}
   *,*::before,*::after{animation:none!important;transition:none!important}
   .revela{opacity:1;transform:none}
 }
+
+/* ---------- menu de tres rayitas (solo celular) ---------- */
+.burger{display:none;cursor:pointer;background:transparent;border:1px solid var(--linea);border-radius:9px;width:40px;height:36px;align-items:center;justify-content:center;flex-direction:column;gap:4px;padding:0}
+.burger span{display:block;width:18px;height:2px;background:var(--plata);border-radius:2px;transition:transform .25s,opacity .25s}
+.burger.abierto span:nth-child(1){transform:translateY(6px) rotate(45deg)}
+.burger.abierto span:nth-child(2){opacity:0}
+.burger.abierto span:nth-child(3){transform:translateY(-6px) rotate(-45deg)}
+.menu-movil{position:fixed;top:var(--barra);left:0;right:0;z-index:55;background:rgba(5,5,5,.97);border-bottom:1px solid var(--linea);display:none;flex-direction:column;padding:8px 12px 14px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.menu-movil.abierto{display:flex;animation:subir .25s ease both}
+.menu-movil a{color:var(--texto);text-decoration:none;font-size:14px;letter-spacing:.12em;padding:14px 10px;border-bottom:1px solid var(--linea)}
+.menu-movil a:last-child{border-bottom:none}
+.menu-movil a:hover{color:#fff;background:rgba(255,255,255,.04)}
+@media (max-width:720px){
+  .burger{display:flex}
+}
