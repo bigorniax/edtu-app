@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Chat</title>
+<link rel="stylesheet" href="nuevo.css" />
+<style>
+  main{max-width:900px;margin:0 auto;padding:98px 16px 24px;min-height:100vh;display:flex;flex-direction:column}
+  .cab{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .cab h1{font-weight:400;font-size:clamp(22px,3.4vw,32px);letter-spacing:.06em;color:#eef1f4}
+  .cab .etiqueta{font-size:11px;letter-spacing:.3em;color:var(--acento);text-transform:uppercase}
+  .cab .en{font-size:12px;color:var(--suave);letter-spacing:.08em}
+  .cab .en b{color:var(--acento);font-weight:400}
+
+  .caja{flex:1;display:flex;flex-direction:column;border:1px solid var(--linea);border-radius:18px;background:var(--fondo2);overflow:hidden;min-height:420px}
+  .mensajes{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:12px;max-height:62vh}
+  .vacio{margin:auto;color:var(--suave);font-size:14px;text-align:center;line-height:1.7;padding:30px}
+  .vacio b{color:var(--plata);font-weight:400}
+
+  .msg{display:flex;gap:10px;align-items:flex-end;animation:subir .35s ease both;max-width:86%}
+  .msg.mio{margin-left:auto;flex-direction:row-reverse}
+  .av{flex:0 0 36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;color:#0b0b0c;font-weight:400;box-shadow:0 0 0 2px rgba(0,0,0,.6)}
+  .cuerpo{min-width:0}
+  .nombre{font-size:12px;letter-spacing:.06em;margin-bottom:4px}
+  .burbuja{padding:10px 14px;border-radius:14px;font-size:15px;line-height:1.45;word-break:break-word;background:#15161a;border:1px solid var(--linea);color:#e4e8ec}
+  .msg.mio .burbuja{background:linear-gradient(180deg,#ffd28a,#ffb84d);color:#140d02;border-color:transparent}
+  .hora{font-size:10px;color:var(--plata-oscuro);margin-top:4px;letter-spacing:.06em}
+  .msg.mio .hora{text-align:right}
+
+  .escribe{display:flex;gap:10px;padding:12px;border-top:1px solid var(--linea);background:#070708}
+  .escribe input{flex:1;padding:12px 14px;border-radius:12px;border:1px solid var(--linea);background:#000;color:var(--texto);font-family:"AW",sans-serif;font-size:14px;outline:none}
+  .escribe input:focus{border-color:var(--acento)}
+  .escribe input:disabled{opacity:.5}
+  .escribe .btn-pl{padding:12px 18px}
+  .aviso{font-size:12px;color:var(--suave);padding:10px 14px;text-align:center;border-top:1px solid var(--linea)}
+  .aviso.error{color:#ff9a9a}
+</style>
+</head>
+<body>
+
+<nav class="topbar">
+  <a class="logo" href="index.html">EDTU</a>
+  <div class="menu-top">
+    <a href="index.html">INICIO</a>
+    <a href="juegos.html">JUEGOS</a>
+    <a class="ir-juegos" href="chat.html">CHAT</a>
+  </div>
+  <div class="cuenta" id="cuenta"></div>
+</nav>
+
+<main>
+  <div class="cab">
+    <div>
+      <div class="etiqueta">Canal general</div>
+      <h1>Chat de jugadores</h1>
+    </div>
+    <div class="en" id="en"></div>
+  </div>
+
+  <div class="caja">
+    <div class="mensajes" id="lista">
+      <div class="vacio" id="vacio">Cargando…</div>
+    </div>
+    <div class="aviso" id="aviso"></div>
+    <form class="escribe" id="formulario">
+      <input id="texto" type="text" maxlength="300" autocomplete="off" placeholder="Escribe un mensaje…" disabled />
+      <button class="btn-pl fuerte" id="enviar" type="submit" disabled>ENVIAR</button>
+    </form>
+  </div>
+</main>
+
+<script src="nuevo.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+(function () {
+  const SB_URL = "https://gesqkfjcdyntkgsptwwa.supabase.co";
+  const SB_KEY = "sb_publishable_RS9lYVszixarVsB4C3eOhw_yW_8uLit";
+  const $ = id => document.getElementById(id);
+  const COLORES = ["#ffb84d", "#c9d0d8", "#7fd3ff", "#ff9ab8", "#9be37d", "#b89cff", "#ffd966", "#8ee3d4"];
+  let sb = null, yo = null, nombres = {}, ultimoId = null, vistos = new Set(), ultimoTiempo = 0;
+
+  // color fijo por persona (siempre el mismo para el mismo jugador)
+  function colorDe(id) { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return COLORES[h % COLORES.length]; }
+  function nombreDe(id) { return nombres[id] || "jugador"; }
+  function hora(t) { const d = new Date(t); return d.getHours().toString().padStart(2, "0") + ":" + d.getMinutes().toString().padStart(2, "0"); }
+  function escapa(t) { return String(t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+  function pintaEstado(texto, error) {
+    const a = $("aviso"); a.textContent = texto || ""; a.className = "aviso" + (error ? " error" : "");
+  }
+
+  function pintaMensaje(m) {
+    const mio = yo && m.de_id === yo.id;
+    const nom = nombreDe(m.de_id), col = colorDe(m.de_id);
+    const div = document.createElement("div");
+    div.className = "msg" + (mio ? " mio" : "");
+    div.innerHTML =
+      '<div class="av" style="background:' + col + '">' + escapa(nom.charAt(0).toUpperCase()) + '</div>' +
+      '<div class="cuerpo">' +
+        (mio ? "" : '<div class="nombre" style="color:' + col + '">' + escapa(nom) + '</div>') +
+        '<div class="burbuja">' + escapa(m.texto) + '</div>' +
+        '<div class="hora">' + hora(m.created_at) + '</div>' +
+      '</div>';
+    return div;
+  }
+
+  async function cargaNombres(ids) {
+    const pedir = [...new Set(ids)].filter(id => !(id in nombres));
+    if (!pedir.length) return;
+    const { data } = await sb.from("players").select("id,username").in("id", pedir);
+    (data || []).forEach(p => { nombres[p.id] = p.username || "jugador"; });
+    pedir.forEach(id => { if (!(id in nombres)) nombres[id] = "jugador"; });
+  }
+
+  async function traeMensajes(primera) {
+    if (!sb || !yo) return;
+    const { data, error } = await sb.from("mensajes")
+      .select("id,de_id,texto,created_at").is("a_id", null)
+      .order("created_at", { ascending: true }).limit(80);
+    if (error) {
+      if (primera) pintaEstado("El chat todavía no está listo en la base de datos. Hay que correr el SQL del chat.", true);
+      return;
+    }
+    await cargaNombres((data || []).map(m => m.de_id));
+    const lista = $("lista");
+    const cercaFondo = lista.scrollHeight - lista.scrollTop - lista.clientHeight < 80;
+    const nuevos = (data || []).filter(m => !vistos.has(m.id));
+    if (primera || nuevos.length) {
+      if (primera) lista.innerHTML = "";
+      nuevos.forEach(m => { vistos.add(m.id); lista.appendChild(pintaMensaje(m)); });
+      if (!(data || []).length && primera) {
+        lista.innerHTML = '<div class="vacio"><b>Todavía no hay mensajes.</b><br>Sé el primero en escribir.</div>';
+      }
+      if (cercaFondo || primera) lista.scrollTop = lista.scrollHeight;
+    }
+    if (data && data.length) ultimoId = data[data.length - 1].id;
+  }
+
+  async function envia(e) {
+    e.preventDefault();
+    const texto = $("texto").value.trim();
+    if (!texto || !yo) return;
+    $("enviar").disabled = true;
+    const { error } = await sb.from("mensajes").insert({ de_id: yo.id, a_id: null, texto });
+    $("enviar").disabled = false;
+    if (error) { pintaEstado("No se pudo enviar: " + error.message, true); return; }
+    $("texto").value = "";
+    pintaEstado("");
+    await traeMensajes(false);
+  }
+
+  function activaEscritura(on) {
+    $("texto").disabled = !on; $("enviar").disabled = !on;
+    if (on) $("texto").focus();
+  }
+
+  function pintaSinCuenta() {
+    activaEscritura(false);
+    $("lista").innerHTML = '<div class="vacio"><b>Entra con tu cuenta para chatear.</b><br>Así tus mensajes salen con tu nombre.<br><br><button class="btn-pl fuerte" id="irEntrar">ENTRAR</button></div>';
+    $("irEntrar").onclick = () => window.EDTU_NUEVO && window.EDTU_NUEVO.abreAuth("entrar");
+    pintaEstado("");
+  }
+
+  async function arranca() {
+    if (!window.supabase) { pintaEstado("No se pudo cargar el chat. Revisa tu conexión.", true); return; }
+    sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+    const { data } = await sb.auth.getSession();
+    yo = data.session ? data.session.user : null;
+    if (!yo) { pintaSinCuenta(); }
+    else {
+      $("lista").innerHTML = '<div class="vacio">Cargando mensajes…</div>';
+      activaEscritura(true);
+      await traeMensajes(true);
+      setInterval(() => traeMensajes(false), 3500);
+      // se muestra cuantos estan en linea (aprox: los que escribieron hace poco)
+      const ahora = Date.now();
+      $("en").innerHTML = "Chateando como <b>" + escapa(nombreDe(yo.id) || (yo.email || "").split("@")[0]) + "</b>";
+    }
+    sb.auth.onAuthStateChange((_e, sesion) => {
+      const nuevo = sesion ? sesion.user : null;
+      if (nuevo && (!yo || yo.id !== nuevo.id)) location.reload();
+      if (!nuevo && yo) location.reload();
+    });
+  }
+
+  $("formulario").addEventListener("submit", envia);
+  arranca();
+})();
+</script>
+</body>
+</html>
