@@ -84,8 +84,9 @@ button{font-family:"AW",sans-serif}
 .menu-movil a{color:var(--texto);text-decoration:none;font-size:14px;letter-spacing:.12em;padding:14px 10px;border-bottom:1px solid var(--linea)}
 .menu-movil a:last-child{border-bottom:none}
 .menu-movil a:hover{color:#fff;background:rgba(255,255,255,.04)}
-@media (max-width:720px){
+@media (max-width:900px){
   .burger{display:flex}
+  .menu-top{display:none}
 }
 
 /* ---------- configuracion ---------- */
@@ -107,3 +108,19 @@ html.sin-anim *,html.sin-anim *::before,html.sin-anim *::after{animation:none!im
 html.sin-anim .revela{opacity:1!important;transform:none!important}
 html.sin-part #fondo{display:none}
 html.letra-grande{font-size:112%}
+
+/* ---------- entrar con Google ---------- */
+.auth-card .o{text-align:center;font-size:11px;color:var(--plata-oscuro);letter-spacing:.2em;margin:16px 0 12px;position:relative}
+.auth-card .o::before,.auth-card .o::after{content:"";position:absolute;top:50%;width:38%;height:1px;background:var(--linea)}
+.auth-card .o::before{left:0}.auth-card .o::after{right:0}
+.btn-google{width:100%;cursor:pointer;background:#0b0c0e;color:var(--texto);border:1px solid var(--linea);border-radius:9px;padding:11px 12px;font-family:"AW",sans-serif;font-size:12px;letter-spacing:.08em;display:flex;align-items:center;justify-content:center;gap:10px;transition:.2s}
+.btn-google:hover{border-color:var(--plata);color:#fff;box-shadow:0 0 14px rgba(220,226,234,.12)}
+.btn-google .g{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#fff;color:#4285f4;font-size:13px;font-weight:700}
+
+/* la barra de arriba siempre en una sola linea (pantallas medianas y grandes) */
+.menu-top{flex-wrap:nowrap;white-space:nowrap}
+@media (min-width:721px) and (max-width:1180px){
+  .menu-top a{padding:8px 6px;font-size:10px;letter-spacing:.06em}
+  .topbar{gap:8px}
+  .btn-pl{padding:8px 10px;font-size:10px}
+}

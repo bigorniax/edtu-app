@@ -101,12 +101,24 @@
       '<label>CORREO O USUARIO</label><input id="authEmail" type="text" autocomplete="username" placeholder="tu correo o un usuario" />' +
       '<label>CONTRASEÑA</label><input id="authPass" type="password" autocomplete="current-password" placeholder="mínimo 6" />' +
       '<button class="btn-pl fuerte go" id="authGo">ENTRAR</button>' +
+      '<div class="o">o</div>' +
+      '<button class="btn-google" id="authGoogle"><span class="g">G</span> CONTINUAR CON GOOGLE</button>' +
       '<div class="msg" id="authMsg"></div>' +
       '<div class="cambio" id="authCambio"></div></div>';
     document.body.appendChild(d);
     $("authCerrar").onclick = cierraAuth;
     d.addEventListener("click", e => { if (e.target === d) cierraAuth(); });
     $("authGo").onclick = enviaAuth;
+    $("authGoogle").onclick = async () => {
+      const msg = $("authMsg");
+      if (!sb) { msg.style.color = "#ff8a8a"; msg.textContent = "Las cuentas no están disponibles ahora mismo."; return; }
+      msg.style.color = "#c9d0d8"; msg.textContent = "Abriendo Google…";
+      const { error } = await sb.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: window.location.origin + window.location.pathname }
+      });
+      if (error) { msg.style.color = "#ff8a8a"; msg.textContent = "No pude abrir Google: " + error.message; }
+    };
     $("authPass").addEventListener("keydown", e => { if (e.key === "Enter") enviaAuth(); });
     $("authCambio").onclick = () => { modo = modo === "crear" ? "entrar" : "crear"; pintaModo(); $("authMsg").textContent = ""; };
     addEventListener("keydown", e => { if (e.key === "Escape") cierraAuth(); });
