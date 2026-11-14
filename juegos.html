@@ -111,6 +111,8 @@ function abrir(j) {
   marco.onload = () => arrancar(j);
   marco.src = j.file;
   $("jugar").classList.add("on");
+  // el foco pasa al juego: si no, las teclas se quedan en la pagina de afuera
+  [200, 700, 1500].forEach(ms => setTimeout(enfocaJuego, ms));
   document.body.style.overflow = "hidden";
   clearInterval(timer);
   // respaldo: si no llega el aviso de carga, reintenta cada 200 ms (12 s como maximo)
@@ -135,6 +137,14 @@ function arrancar(j) {
     }
   } catch (e) {}
 }
+function enfocaJuego() {
+  try {
+    const m = $("marco");
+    m.focus();
+    if (m.contentWindow) m.contentWindow.focus();
+  } catch (e) {}
+}
+$("jugar").addEventListener("pointerdown", enfocaJuego);
 function cerrar() {
   clearInterval(timer);
   $("marco").onload = null;
