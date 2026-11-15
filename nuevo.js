@@ -31,7 +31,10 @@
   function pinta(usuario) {
     const zona = $("cuenta"); if (!zona) return;
     if (usuario) {
-      zona.innerHTML = '<span class="saludo">' + nombreDe(usuario) + '</span><button class="btn-pl" id="salir">SALIR</button>';
+      // solo David (el creador) ve el acceso al Centro de Mando (la pagina antigua)
+      const creador = nombreDe(usuario).toLowerCase() === "rodriguezlazarte7";
+      zona.innerHTML = (creador ? '<a class="btn-pl fuerte" href="edtu-clasico.html" style="text-decoration:none" title="Centro de Mando">MANDO</a>' : '') +
+        '<span class="saludo">' + nombreDe(usuario) + '</span><button class="btn-pl" id="salir">SALIR</button>';
       $("salir").onclick = () => sb && sb.auth.signOut();
     } else {
       zona.innerHTML = '<button class="btn-pl" id="entrar">ENTRAR</button><button class="btn-pl fuerte" id="registro">CREAR CUENTA</button>';

@@ -2,6 +2,34 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8" />
+<script>
+/* 🔒 ESTA PÁGINA YA NO ES PÚBLICA. EDTU vive en la página nueva (index.html).
+   Aquí solo se entra de dos formas:
+   1) MODO JUEGO: el selector nuevo (juegos.html) la carga escondida con ?juego=…
+      para abrir un juego grande; la portada vieja nunca se ve.
+   2) David (cuenta rodriguezlazarte7) para el Centro de Mando.
+   Cualquier otro que llegue aquí vuelve a la página nueva. */
+(function(){
+  var enMarco = false; try { enMarco = window.parent !== window; } catch(e) { enMarco = true; }
+  if (enMarco && /[?&]juego=/.test(location.search)) {
+    window.EDTU_SOLO_JUEGO = true;
+    document.documentElement.classList.add("solo-juego");
+    return;
+  }
+  var creador = false;
+  try {
+    var s = JSON.parse(localStorage.getItem("sb-gesqkfjcdyntkgsptwwa-auth-token") || "null");
+    var u = s && (s.user || (s.currentSession && s.currentSession.user));
+    creador = !!(u && u.email && u.email.split("@")[0].toLowerCase() === "rodriguezlazarte7");
+  } catch(e) {}
+  if (!creador) location.replace("index.html");
+})();
+</script>
+<style>
+  /* modo juego: nada de la página vieja a la vista, solo el juego */
+  html.solo-juego, html.solo-juego body{background:#000!important}
+  html.solo-juego #landing, html.solo-juego #hubFs, html.solo-juego #gamePick{display:none!important}
+</style>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="theme-color" content="#000000" />
 <meta name="mobile-web-app-capable" content="yes" />
@@ -13647,6 +13675,24 @@ const JUEGOS_PAQUETES = [{"nom":"Pong","ico":"🏓","btn":"pickDuo","frame":"duo
     if(e.key === "Enter"){ const primero = res.querySelector(".bres"); if(primero) primero.click(); }
   });
 })();
+</script>
+<script>
+/* 🎮 MODO JUEGO: le avisa al selector nuevo cuando el juego se abre y cuando se cierra
+   (por ✕ Salir, Escape, el botón de atrás del mouse o lo que sea). Así el selector
+   cierra todo y vuelves a la página nueva: la vieja no aparece nunca. */
+if (window.EDTU_SOLO_JUEGO) {
+  const NO_JUEGO = new Set(["authFs","bioFs","convFs","faceFs","funFs","hubFs","posterFs","robotFs","tablaFs","trophyFs","vaultFs","wallyFs"]);
+  const hayJuego = () => [...document.querySelectorAll('[id$="Fs"].open')].some(e => !NO_JUEGO.has(e.id));
+  // "atrás" (mouse, gesto del celular, aviso de un juego) ya no cierra cosas aquí:
+  // le pide al selector nuevo que cierre todo
+  edtuAtras = function () { parent.postMessage({ edtuAtras: 1 }, "*"); return true; };
+  let abierto = false;
+  setInterval(() => {
+    const h = hayJuego();
+    if (h && !abierto) { abierto = true; parent.postMessage({ edtuJuegoAbierto: 1 }, "*"); }
+    else if (!h && abierto) { abierto = false; parent.postMessage({ edtuJuegoCerrado: 1 }, "*"); }
+  }, 150);
+}
 </script>
 </body>
 </html>

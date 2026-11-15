@@ -37,6 +37,9 @@
   #jugar button{cursor:pointer;background:transparent;color:var(--texto);border:1px solid var(--linea);border-radius:8px;padding:7px 12px;font-family:"AW",sans-serif;font-size:12px}
   #jugar button:hover{border-color:var(--plata);color:#fff}
   #marco{flex:1;width:100%;border:none;background:#000}
+  #marco.escondido{visibility:hidden}
+  #cargando{position:absolute;left:0;right:0;top:50%;text-align:center;color:var(--suave);font-size:13px;letter-spacing:.2em;display:none}
+  #jugar.cargando #cargando{display:block}
 </style>
 </head>
 <body>
@@ -60,7 +63,8 @@
     <div class="titulo" id="tituloJuego"></div>
     <button id="cerrar">✕ CERRAR</button>
   </div>
-  <iframe id="marco" allow="fullscreen; autoplay" title="Juego"></iframe>
+  <div id="cargando">CARGANDO…</div>
+  <iframe id="marco" allow="fullscreen; autoplay; gamepad; pointer-lock" title="Juego"></iframe>
 </div>
 
 <script src="nuevo.js"></script>
@@ -109,7 +113,11 @@ function abrir(j) {
   arrancado = false;
   const marco = $("marco");
   marco.onload = () => arrancar(j);
-  marco.src = j.file;
+  // juegos grandes: viven en la pagina vieja, que se carga ESCONDIDA en "modo juego"
+  // y solo se muestra cuando el juego ya esta abierto (aviso edtuJuegoAbierto)
+  marco.classList.toggle("escondido", !!j.abrir);
+  $("jugar").classList.toggle("cargando", !!j.abrir);
+  marco.src = j.abrir ? j.file + "?juego=" + j.abrir : j.file;
   $("jugar").classList.add("on");
   // el foco pasa al juego: si no, las teclas se quedan en la pagina de afuera
   [200, 700, 1500].forEach(ms => setTimeout(enfocaJuego, ms));
@@ -146,8 +154,40 @@ function enfocaJuego() {
   } catch (e) {}
 }
 $("jugar").addEventListener("pointerdown", enfocaJuego);
+
+/* boton de ATRAS del mouse dentro de CUALQUIER juego: se engancha a la pagina del juego
+   y a los marcos que tenga adentro (los juegos grandes tienen marcos dentro de marcos).
+   Siempre vuelve al selector nuevo, nunca a la pagina vieja. */
+function enganchaAtras(doc) {
+  if (!doc || doc.__edtuAtras) return;
+  doc.__edtuAtras = true;
+  ["mousedown", "mouseup", "auxclick"].forEach(ev => doc.addEventListener(ev, e => {
+    if (e.button !== 3 && e.button !== 4) return;
+    e.preventDefault(); e.stopPropagation();
+    if (ev === "mouseup" && e.button === 3 && $("jugar").classList.contains("on")) cerrar();
+  }, true));
+}
+function recorreMarcos(win, n) {
+  try {
+    enganchaAtras(win.document);
+    if (n < 3) for (const f of win.document.querySelectorAll("iframe")) if (f.contentWindow) recorreMarcos(f.contentWindow, n + 1);
+  } catch (e) {}
+}
+setInterval(() => { if ($("jugar").classList.contains("on")) recorreMarcos($("marco").contentWindow, 0); }, 300);
+/* avisos que llegan desde el juego:
+   - edtuJuegoAbierto: el juego grande ya esta a la vista -> mostrar el marco
+   - edtuJuegoCerrado / edtuAtras / edtuCerrarMundo: el juego se cerro o apretaste
+     atras (boton del mouse, ✕ Salir, boton EDTU) -> volver al selector */
+addEventListener("message", e => {
+  if (e.source !== $("marco").contentWindow) return;
+  const d = e.data || {};
+  if (d.edtuJuegoAbierto) { $("marco").classList.remove("escondido"); $("jugar").classList.remove("cargando"); enfocaJuego(); }
+  if ((d.edtuJuegoCerrado || d.edtuAtras || d.edtuCerrarMundo) && $("jugar").classList.contains("on")) cerrar();
+});
 function cerrar() {
   clearInterval(timer);
+  $("marco").classList.remove("escondido");
+  $("jugar").classList.remove("cargando");
   $("marco").onload = null;
   $("marco").src = "about:blank";
   $("jugar").classList.remove("on");
