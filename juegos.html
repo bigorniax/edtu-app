@@ -117,13 +117,14 @@ function abrir(j) {
   clearInterval(timer);
   // respaldo: si no llega el aviso de carga, reintenta cada 200 ms (12 s como maximo)
   let n = 0;
-  timer = setInterval(() => { n++; if (arrancado || n > 60) { clearInterval(timer); return; } arrancar(j); }, 200);
+  timer = setInterval(() => { n++; if (arrancado || n > 100) { clearInterval(timer); return; } arrancar(j); }, 200);
 }
 function arrancar(j) {
   if (arrancado) return;
   try {
     const d = $("marco").contentDocument;
-    if (!d) return;
+    // esperar a que la pagina cargue ENTERA: si se aprieta antes, el boton todavia no tiene su codigo y el clic se pierde
+    if (!d || d.readyState !== "complete" || d.location.href === "about:blank") return;
     if (j.abrir) {                                      // juegos grandes: se abren con su boton de la pagina vieja
       const b = d.getElementById(j.abrir);
       if (b) { b.click(); arrancado = true; }
