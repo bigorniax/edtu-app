@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Golf Neón</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;background:#02030a;color:#eaf6ff}
+  #wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{display:block;max-width:100%;max-height:100%;border-radius:12px;touch-action:none;cursor:crosshair;
+    box-shadow:0 0 28px rgba(182,255,0,.25),inset 0 0 40px rgba(182,255,0,.08)}
+  #hud{position:absolute;top:10px;left:0;right:0;display:flex;justify-content:space-between;padding:0 16px;
+    font-weight:900;font-size:17px;pointer-events:none;text-shadow:0 0 8px #b6ff00}
+  #hud span:nth-child(2){color:#ffd12e;text-shadow:0 0 8px #ffd12e}
+  #ayuda{position:absolute;bottom:8px;left:0;right:0;text-align:center;color:#9fd08a;font-size:13px;pointer-events:none}
+  #menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(2,3,10,.92);text-align:center;padding:20px}
+  #menu h1{font-size:40px;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #fff,0 0 18px #b6ff00,0 0 40px #b6ff00}
+  #menu p{margin:14px 0 22px;color:#bde59a;line-height:1.6;font-size:16px;max-width:460px}
+  #menu button{cursor:pointer;padding:16px 42px;border-radius:14px;border:2px solid #b6ff00;background:rgba(0,0,0,.6);
+    color:#fff;font-size:20px;font-weight:900;letter-spacing:2px;box-shadow:0 0 14px #b6ff00;text-shadow:0 0 8px #b6ff00}
+  #menu button:hover{transform:scale(1.05)}
+  #menu .stats{margin-top:18px;color:#ffd12e;font-weight:800;text-shadow:0 0 8px #ffd12e;line-height:1.7}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="480" height="640"></canvas>
+  <div id="hud"><span id="hoyoT">HOYO 1/9</span><span id="golpesT">0 golpes</span><span id="parT">PAR 2</span></div>
+  <div id="ayuda">arrastra hacia atrás desde cualquier parte y suelta para golpear</div>
+  <div id="menu">
+    <h1>GOLF NEÓN</h1>
+    <p>Nueve hoyos. Arrastra hacia atrás y suelta: mientras más lejos arrastres, más fuerte sale la pelota. La arena frena y los bloques se mueven. Gana quien use menos golpes.</p>
+    <button id="empezar">JUGAR</button>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+const W=cv.width, H=cv.height, R=9;
+const CLAVE="edtu_golf_mejor";   // menos golpes es mejor (0 = sin récord)
+
+function leer(){ try{ return parseInt(localStorage.getItem(CLAVE)||"0",10)||0; }catch(e){ return 0; } }
+function guardar(v){ try{ localStorage.setItem(CLAVE,String(v)); }catch(e){} }
+
+let audio=null;
+function tono(f,d,tipo,vol,subida){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
+  const o=audio.createOscillator(), g=audio.createGain(); o.type=tipo||"square"; const t=audio.currentTime;
+  o.frequency.setValueAtTime(f,t); if(subida) o.frequency.exponentialRampToValueAtTime(f*subida,t+d);
+  g.gain.setValueAtTime(vol||0.07,t); g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t+d); }catch(e){} }
+
+/* los 9 hoyos: paredes (p), arena (a), bloques que se mueven (m: eje, min, max, velocidad) */
+const HOYOS=[
+  { par:2, ini:[240,570], hoyo:[240,110], p:[], a:[], m:[] },
+  { par:3, ini:[240,570], hoyo:[380,110], p:[{x:120,y:300,w:360,h:20}], a:[], m:[] },
+  { par:3, ini:[400,580], hoyo:[80,100],  p:[{x:0,y:430,w:330,h:20},{x:150,y:240,w:330,h:20}], a:[], m:[] },
+  { par:3, ini:[240,580], hoyo:[240,90],  p:[{x:180,y:270,w:120,h:120}], a:[{x:0,y:150,w:480,h:60}], m:[] },
+  { par:3, ini:[240,580], hoyo:[240,100], p:[], a:[], m:[{x:0,y:310,w:150,h:24,eje:"x",min:0,max:330,v:2.2}] },
+  { par:4, ini:[420,590], hoyo:[60,90],   p:[{x:0,y:480,w:380,h:20},{x:100,y:340,w:380,h:20},{x:0,y:200,w:380,h:20}], a:[], m:[] },
+  { par:3, ini:[240,580], hoyo:[240,140], p:[{x:200,y:330,w:80,h:20}], a:[{x:130,y:60,w:220,h:40},{x:130,y:180,w:220,h:40}], m:[] },
+  { par:3, ini:[240,590], hoyo:[240,80],  p:[], a:[], m:[{x:0,y:430,w:130,h:22,eje:"x",min:0,max:350,v:2.6},{x:350,y:250,w:130,h:22,eje:"x",min:0,max:350,v:-3.2}] },
+  { par:4, ini:[240,590], hoyo:[240,120], p:[{x:160,y:60,w:20,h:160},{x:300,y:60,w:20,h:160},{x:160,y:200,w:60,h:20},{x:260,y:200,w:60,h:20}],
+    a:[{x:0,y:380,w:200,h:50}], m:[{x:140,y:300,w:200,h:20,eje:"x",min:40,max:240,v:1.8}] }
+];
+
+let n=0, golpes=0, total=0, tarjeta=[], b={x:0,y:0,vx:0,vy:0}, apunta=null, estado="menu", raf=null, partes=[], dentro=0, mov=[];
+
+function empezar(){
+  $("menu").style.display="none";
+  n=0; total=0; tarjeta=[]; cargar();
+  estado="jugando";
+  cancelAnimationFrame(raf); raf=requestAnimationFrame(paso);
+}
+function cargar(){
+  const h=HOYOS[n];
+  b={x:h.ini[0],y:h.ini[1],vx:0,vy:0}; golpes=0; apunta=null; dentro=0;
+  mov=h.m.map(o=>Object.assign({},o));
+  pintaHud();
+}
+function pintaHud(){
+  $("hoyoT").textContent="HOYO "+(n+1)+"/9";
+  $("golpesT").textContent=golpes+(golpes===1?" golpe":" golpes");
+  $("parT").textContent="PAR "+HOYOS[n].par;
+}
+
+function quieta(){ return Math.hypot(b.vx,b.vy)<0.06; }
+
+function rebota(r){
+  // circulo contra rectangulo: punto mas cercano, empujar y reflejar
+  const cx=Math.max(r.x,Math.min(b.x,r.x+r.w)), cy=Math.max(r.y,Math.min(b.y,r.y+r.h));
+  const dx=b.x-cx, dy=b.y-cy, d=Math.hypot(dx,dy);
+  if(d>=R) return false;
+  let nx,ny;
+  if(d>0.0001){ nx=dx/d; ny=dy/d; }
+  else { // el centro quedo adentro: salir por el lado mas cercano
+    const izq=b.x-r.x, der=r.x+r.w-b.x, arr=b.y-r.y, aba=r.y+r.h-b.y, m=Math.min(izq,der,arr,aba);
+    nx = m===izq?-1:m===der?1:0; ny = m===arr?-1:m===aba?1:0;
+  }
+  b.x=cx+nx*R; b.y=cy+ny*R;
+  if(d<=0.0001){ b.x+=nx*R; b.y+=ny*R; }
+  const vn=b.vx*nx+b.vy*ny;
+  if(vn<0){ b.vx-=1.75*vn*nx; b.vy-=1.75*vn*ny; tono(320+Math.min(400,Math.abs(vn)*40),0.05,"triangle",0.05); }
+  return true;
+}
+
+function paso(){
+  raf=requestAnimationFrame(paso);
+  const h=HOYOS[n];
+  mov.forEach(o=>{ o[o.eje]+=o.v; if(o[o.eje]<o.min){ o[o.eje]=o.min; o.v=-o.v; } if(o[o.eje]>o.max){ o[o.eje]=o.max; o.v=-o.v; } });
+  if(estado==="jugando"){
+    const sub=4;   // pasos chicos para que no atraviese paredes
+    for(let s=0;s<sub;s++){
+      b.x+=b.vx/sub; b.y+=b.vy/sub;
+      if(b.x<R){ b.x=R; b.vx=Math.abs(b.vx)*0.75; } if(b.x>W-R){ b.x=W-R; b.vx=-Math.abs(b.vx)*0.75; }
+      if(b.y<R+40){ b.y=R+40; b.vy=Math.abs(b.vy)*0.75; } if(b.y>H-R){ b.y=H-R; b.vy=-Math.abs(b.vy)*0.75; }
+      h.p.forEach(rebota); mov.forEach(rebota);
+    }
+    const enArena=h.a.some(r=>b.x>r.x&&b.x<r.x+r.w&&b.y>r.y&&b.y<r.y+r.h);
+    const f=enArena?0.93:0.986;
+    b.vx*=f; b.vy*=f;
+    if(quieta()){ b.vx=0; b.vy=0; }
+    // el hoyo atrae un poco cuando pasas cerca y despacio
+    const dx=h.hoyo[0]-b.x, dy=h.hoyo[1]-b.y, d=Math.hypot(dx,dy), v=Math.hypot(b.vx,b.vy);
+    if(d<22 && v<9){ b.vx+=dx*0.03; b.vy+=dy*0.03; }
+    if(d<11 && v<6.5){ embocar(); }
+  } else if(estado==="dentro"){
+    dentro++;
+    if(dentro>70){ siguiente(); }
+  }
+  partes.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=0.12; p.vida--; });
+  partes=partes.filter(p=>p.vida>0);
+  dibujar();
+}
+
+function embocar(){
+  estado="dentro"; dentro=0; b.vx=0; b.vy=0;
+  const h=HOYOS[n]; b.x=h.hoyo[0]; b.y=h.hoyo[1];
+  tarjeta.push(golpes); total+=golpes;
+  for(let i=0;i<40;i++) partes.push({x:b.x,y:b.y,vx:(Math.random()-0.5)*7,vy:(Math.random()-1)*6,vida:50,color:["#b6ff00","#ffd12e","#0cf","#fff"][i%4]});
+  [660,880,1180].forEach((f,i)=>setTimeout(()=>tono(f,0.14,"sine",0.08),i*90));
+}
+function siguiente(){
+  n++;
+  if(n>=HOYOS.length){ fin(); return; }
+  cargar(); estado="jugando";
+}
+function fin(){
+  estado="fin";
+  const mejor=leer(), nuevo=!mejor||total<mejor;
+  if(nuevo) guardar(total);
+  pintarFin(nuevo);
+}
+
+function nombreGolpe(g,par){
+  if(g===1) return "¡HOYO EN UNO!";
+  const d=g-par;
+  return d<=-2?"ÁGUILA":d===-1?"BIRDIE":d===0?"PAR":d===1?"BOGEY":"+"+d;
+}
+
+function dibujar(){
+  const h=HOYOS[n];
+  ctx.fillStyle="#02030a"; ctx.fillRect(0,0,W,H);
+  // pasto de rayas
+  for(let y=40;y<H;y+=40){ ctx.fillStyle=(y/40)%2?"#03100a":"#041409"; ctx.fillRect(0,y,W,40); }
+  ctx.strokeStyle="#b6ff00"; ctx.lineWidth=2; ctx.shadowColor="#b6ff00"; ctx.shadowBlur=10; ctx.strokeRect(1,41,W-2,H-42); ctx.shadowBlur=0;
+  // arena
+  h.a.forEach(r=>{ ctx.fillStyle="rgba(255,209,46,.16)"; ctx.fillRect(r.x,r.y,r.w,r.h); ctx.strokeStyle="rgba(255,209,46,.6)"; ctx.setLineDash([5,5]); ctx.strokeRect(r.x+1,r.y+1,r.w-2,r.h-2); ctx.setLineDash([]); });
+  // paredes
+  const pared=(r,col)=>{ ctx.fillStyle="#061a26"; ctx.fillRect(r.x,r.y,r.w,r.h); ctx.strokeStyle=col; ctx.lineWidth=2; ctx.shadowColor=col; ctx.shadowBlur=12; ctx.strokeRect(r.x+1,r.y+1,r.w-2,r.h-2); ctx.shadowBlur=0; };
+  h.p.forEach(r=>pared(r,"#0cf"));
+  mov.forEach(r=>pared(r,"#ff3bd4"));
+  // hoyo con bandera
+  ctx.fillStyle="#000"; ctx.beginPath(); ctx.arc(h.hoyo[0],h.hoyo[1],13,0,7); ctx.fill();
+  ctx.strokeStyle="#b6ff00"; ctx.lineWidth=2; ctx.shadowColor="#b6ff00"; ctx.shadowBlur=14; ctx.stroke(); ctx.shadowBlur=0;
+  ctx.strokeStyle="#eaf6ff"; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(h.hoyo[0]+3,h.hoyo[1]); ctx.lineTo(h.hoyo[0]+3,h.hoyo[1]-44); ctx.stroke();
+  ctx.fillStyle="#ff3b5c"; ctx.beginPath(); ctx.moveTo(h.hoyo[0]+3,h.hoyo[1]-44); ctx.lineTo(h.hoyo[0]+27,h.hoyo[1]-36); ctx.lineTo(h.hoyo[0]+3,h.hoyo[1]-28); ctx.fill();
+  // linea de tiro
+  if(apunta && estado==="jugando"){
+    const f=fuerza();
+    const largo=f.p*9;
+    ctx.strokeStyle=f.p>13?"#ff3b5c":f.p>8?"#ffd12e":"#b6ff00"; ctx.lineWidth=3; ctx.setLineDash([6,8]);
+    ctx.beginPath(); ctx.moveTo(b.x,b.y); ctx.lineTo(b.x+f.dx*largo,b.y+f.dy*largo); ctx.stroke(); ctx.setLineDash([]);
+    // barra de fuerza
+    ctx.fillStyle="rgba(255,255,255,.12)"; ctx.fillRect(W-30,60,14,140);
+    ctx.fillStyle=ctx.strokeStyle; const alto=140*f.p/16; ctx.fillRect(W-30,200-alto,14,alto);
+  }
+  // pelota
+  if(estado!=="dentro"){
+    ctx.fillStyle="#fff"; ctx.shadowColor="#fff"; ctx.shadowBlur=16; ctx.beginPath(); ctx.arc(b.x,b.y,R,0,7); ctx.fill(); ctx.shadowBlur=0;
+  }
+  partes.forEach(p=>{ ctx.globalAlpha=Math.max(0,p.vida/50); ctx.fillStyle=p.color; ctx.fillRect(p.x-3,p.y-3,6,6); });
+  ctx.globalAlpha=1;
+  if(estado==="dentro"){
+    ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.font="900 34px Segoe UI,sans-serif";
+    ctx.fillStyle="#fff"; ctx.shadowColor="#b6ff00"; ctx.shadowBlur=20;
+    ctx.fillText(nombreGolpe(golpes,h.par),W/2,H/2); ctx.shadowBlur=0;
+  }
+  if(estado==="fin") pintarFin(false,true);
+}
+
+let ultimoNuevo=false;
+function pintarFin(nuevo,repinta){
+  if(!repinta) ultimoNuevo=nuevo;
+  ctx.fillStyle="rgba(0,0,0,.75)"; ctx.fillRect(0,0,W,H);
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  ctx.fillStyle="#fff"; ctx.font="900 34px Segoe UI,sans-serif"; ctx.shadowColor="#b6ff00"; ctx.shadowBlur=18;
+  ctx.fillText("¡RECORRIDO TERMINADO!",W/2,120); ctx.shadowBlur=0;
+  const parTot=HOYOS.reduce((s,h)=>s+h.par,0);
+  ctx.font="700 16px Segoe UI,sans-serif";
+  tarjeta.forEach((g,i)=>{
+    const y=170+i*30;
+    ctx.fillStyle="#7fc8e8"; ctx.textAlign="left"; ctx.fillText("Hoyo "+(i+1)+"  ·  par "+HOYOS[i].par,110,y);
+    ctx.textAlign="right"; ctx.fillStyle=g<HOYOS[i].par?"#b6ff00":g===HOYOS[i].par?"#fff":"#ff8fa0"; ctx.fillText(g+"",370,y);
+  });
+  ctx.textAlign="center";
+  const dif=total-parTot;
+  ctx.fillStyle="#ffd12e"; ctx.font="900 26px Segoe UI,sans-serif";
+  ctx.fillText(total+" golpes  ("+(dif>0?"+":"")+dif+")",W/2,470);
+  ctx.fillStyle=ultimoNuevo?"#b6ff00":"#7fc8e8"; ctx.font="700 16px Segoe UI,sans-serif";
+  ctx.fillText(ultimoNuevo?"¡NUEVO RÉCORD!":"Récord: "+leer()+" golpes",W/2,508);
+  ctx.fillStyle="#7fc8e8"; ctx.font="600 15px Segoe UI,sans-serif";
+  ctx.fillText("toca para volver a jugar",W/2,560);
+}
+
+/* ---------- controles: arrastrar hacia atras (como una honda) ---------- */
+function punto(e){ const r=cv.getBoundingClientRect(); return { x:(e.clientX-r.left)*(W/r.width), y:(e.clientY-r.top)*(H/r.height) }; }
+function fuerza(){
+  const dx=apunta.x0-apunta.x, dy=apunta.y0-apunta.y, d=Math.hypot(dx,dy);
+  const p=Math.min(16,d/9);
+  return { dx:d?dx/d:0, dy:d?dy/d:0, p };
+}
+cv.addEventListener("pointerdown",e=>{
+  if(estado==="fin"){ empezar(); return; }
+  if(estado!=="jugando"||!quieta()) return;
+  const q=punto(e); apunta={x0:q.x,y0:q.y,x:q.x,y:q.y};
+  try{ cv.setPointerCapture(e.pointerId); }catch(x){}
+});
+cv.addEventListener("pointermove",e=>{ if(!apunta) return; const q=punto(e); apunta.x=q.x; apunta.y=q.y; });
+cv.addEventListener("pointerup",()=>{
+  if(!apunta) return;
+  const f=fuerza(); apunta=null;
+  if(f.p<0.8) return;            // arrastre muy corto: no cuenta
+  b.vx=f.dx*f.p; b.vy=f.dy*f.p; golpes++; pintaHud();
+  tono(240+f.p*30,0.08,"square",0.06);
+});
+cv.addEventListener("pointercancel",()=>{ apunta=null; });
+$("empezar").onclick=empezar;
+
+function pintarMenu(){ const m=leer(); $("stats").innerHTML=m?"Récord: "+m+" golpes":"Todavía no hay récord"; }
+pintarMenu(); dibujar();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>

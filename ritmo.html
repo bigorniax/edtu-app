@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Ritmo Neón</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;background:#02030a;color:#eaf6ff}
+  #wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{display:block;max-width:100%;max-height:100%;border-radius:12px;touch-action:none;
+    box-shadow:0 0 28px rgba(255,59,212,.28),inset 0 0 40px rgba(255,59,212,.08)}
+  #hud{position:absolute;top:10px;left:0;right:0;display:flex;justify-content:space-between;padding:0 16px;
+    font-weight:900;font-size:17px;pointer-events:none;text-shadow:0 0 8px #ff3bd4}
+  #hud span:nth-child(2){color:#ffd12e;text-shadow:0 0 8px #ffd12e}
+  #menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(2,3,10,.92);text-align:center;padding:20px}
+  #menu h1{font-size:40px;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #fff,0 0 18px #ff3bd4,0 0 40px #ff3bd4}
+  #menu p{margin:14px 0 22px;color:#f0a8e4;line-height:1.6;font-size:16px;max-width:460px}
+  #menu button{cursor:pointer;padding:16px 42px;border-radius:14px;border:2px solid #ff3bd4;background:rgba(0,0,0,.6);
+    color:#fff;font-size:20px;font-weight:900;letter-spacing:2px;box-shadow:0 0 14px #ff3bd4;text-shadow:0 0 8px #ff3bd4}
+  #menu button:hover{transform:scale(1.05)}
+  #menu .stats{margin-top:18px;color:#ffd12e;font-weight:800;text-shadow:0 0 8px #ffd12e;line-height:1.7}
+  #menu .teclas{margin-top:10px;color:#9aa;font-size:13px}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="480" height="640"></canvas>
+  <div id="hud"><span id="comboT">combo 0</span><span id="puntos">0</span><span id="tiempoT">60 s</span></div>
+  <div id="menu">
+    <h1>RITMO NEÓN</h1>
+    <p>Las notas bajan por cuatro carriles. Tócalas justo cuando pasan por la línea. Cada nota que aciertas suena: tú vas tocando la canción. Si fallas muchas seguidas, se apaga la energía.</p>
+    <button id="empezar">JUGAR</button>
+    <div class="teclas">teclas D F J K (o las flechas) · en el celular toca el carril</div>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+const W=cv.width, H=cv.height;
+const CLAVE="edtu_ritmo_mejor";
+const CARRILES=4, ANCHO=W/CARRILES, LINEA=560, DURACION=60000;
+const COLORES=["#ff3bd4","#0cf","#b6ff00","#ffd12e"];
+const TECLAS={ d:0, f:1, j:2, k:3, arrowleft:0, arrowdown:1, arrowup:2, arrowright:3 };
+
+function leer(){ try{ return parseInt(localStorage.getItem(CLAVE)||"0",10)||0; }catch(e){ return 0; } }
+function guardar(v){ try{ localStorage.setItem(CLAVE,String(v)); }catch(e){} }
+
+let audio=null;
+function ac(){ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)(); return audio; }
+function nota(f,d,vol){ try{ const a=ac(), t=a.currentTime;
+  [["triangle",1],["sine",2]].forEach(([tipo,m],i)=>{ const o=a.createOscillator(), g=a.createGain(); o.type=tipo; o.frequency.value=f*m;
+    g.gain.setValueAtTime((vol||0.09)/(i+1),t); g.gain.exponentialRampToValueAtTime(0.0001,t+d); o.connect(g); g.connect(a.destination); o.start(t); o.stop(t+d); }); }catch(e){} }
+function bombo(){ try{ const a=ac(), t=a.currentTime, o=a.createOscillator(), g=a.createGain(); o.type="sine";
+  o.frequency.setValueAtTime(140,t); o.frequency.exponentialRampToValueAtTime(40,t+0.12);
+  g.gain.setValueAtTime(0.12,t); g.gain.exponentialRampToValueAtTime(0.0001,t+0.15); o.connect(g); g.connect(a.destination); o.start(t); o.stop(t+0.16); }catch(e){} }
+function error(){ try{ const a=ac(), t=a.currentTime, o=a.createOscillator(), g=a.createGain(); o.type="sawtooth"; o.frequency.value=110;
+  g.gain.setValueAtTime(0.04,t); g.gain.exponentialRampToValueAtTime(0.0001,t+0.12); o.connect(g); g.connect(a.destination); o.start(t); o.stop(t+0.13); }catch(e){} }
+
+/* escala pentatonica (siempre suena bonito, toques lo que toques) */
+const ESCALA=[261.6,293.7,329.6,392.0,440.0,523.3,587.3,659.3,784.0];
+
+/* arma la cancion: una melodia que sube y baja, cada vez mas tupida */
+function armaCancion(){
+  const notas=[]; let t=2000, paso=0, alto=2;
+  while(t<DURACION-1500){
+    const prog=t/DURACION;                       // 0 al principio, 1 al final
+    const bpm=100+prog*50, corchea=60000/bpm/2;
+    const prob=0.45+prog*0.4;
+    if(Math.random()<prob || paso%4===0){
+      alto=Math.max(0,Math.min(ESCALA.length-1, alto+[-2,-1,1,2,0][Math.floor(Math.random()*5)]));
+      const carril=alto%CARRILES;
+      notas.push({t, carril, f:ESCALA[alto], hecho:false});
+      if(prog>0.45 && Math.random()<0.18){        // acordes: dos notas a la vez
+        const otro=(carril+2)%CARRILES;
+        notas.push({t, carril:otro, f:ESCALA[Math.min(ESCALA.length-1,alto+2)], hecho:false});
+      }
+    }
+    t+=corchea; paso++;
+  }
+  return notas;
+}
+
+let notas=[], t0=0, vivo=false, raf=null, puntos=0, combo=0, mejorCombo=0, energia=1, aciertos=0, falladas=0, perfectas=0;
+let textos=[], brillo=[0,0,0,0], ultimoBeat=0, velocidad=0.32, apretado=[false,false,false,false];
+
+function empezar(){
+  $("menu").style.display="none";
+  ac(); notas=armaCancion(); t0=performance.now()+300;
+  puntos=0; combo=0; mejorCombo=0; energia=1; aciertos=0; falladas=0; perfectas=0; textos=[]; ultimoBeat=0;
+  vivo=true; cancelAnimationFrame(raf); raf=requestAnimationFrame(paso);
+}
+function ahora(){ return performance.now()-t0; }
+
+function paso(){
+  raf=requestAnimationFrame(paso);
+  if(!vivo) return;
+  const t=ahora();
+  // bombo a cada pulso para llevar el ritmo
+  const prog=Math.max(0,t)/DURACION, pulso=60000/(100+prog*50);
+  if(t>0 && t-ultimoBeat>=pulso){ ultimoBeat=t; bombo(); }
+  // notas que se pasaron sin tocar
+  notas.forEach(n=>{ if(!n.hecho && t-n.t>150){ n.hecho=true; n.fallo=true; fallar(n.carril); } });
+  if(energia<=0){ fin(false); return; }
+  if(t>=DURACION){ fin(true); return; }
+  textos.forEach(x=>{ x.y-=0.8; x.vida--; }); textos=textos.filter(x=>x.vida>0);
+  for(let i=0;i<4;i++) brillo[i]*=0.88;
+  dibujar(t);
+  $("puntos").textContent=puntos;
+  $("comboT").textContent="combo "+combo;
+  $("tiempoT").textContent=Math.max(0,Math.ceil((DURACION-t)/1000))+" s";
+}
+
+function tocar(c){
+  if(!vivo) return;
+  apretado[c]=true; setTimeout(()=>apretado[c]=false,90);
+  const t=ahora();
+  let mejor=null, md=1e9;
+  notas.forEach(n=>{ if(!n.hecho && n.carril===c){ const d=Math.abs(n.t-t); if(d<md){ md=d; mejor=n; } } });
+  if(!mejor || md>150){ combo=0; energia=Math.max(0,energia-0.012); error(); return; }
+  mejor.hecho=true;
+  let nombre, base;
+  if(md<50){ nombre="¡PERFECTO!"; base=100; perfectas++; }
+  else if(md<100){ nombre="BIEN"; base=60; }
+  else { nombre="OK"; base=30; }
+  combo++; mejorCombo=Math.max(mejorCombo,combo); aciertos++;
+  const mult=Math.min(4,1+Math.floor(combo/10));
+  puntos+=base*mult;
+  energia=Math.min(1,energia+0.025);
+  brillo[c]=1;
+  nota(mejor.f,0.35);
+  textos.push({x:c*ANCHO+ANCHO/2, y:LINEA-40, texto:nombre+(mult>1?" x"+mult:""), color:COLORES[c], vida:34});
+}
+function fallar(c){
+  combo=0; falladas++; energia=Math.max(0,energia-0.09); error();
+  textos.push({x:c*ANCHO+ANCHO/2, y:LINEA-40, texto:"fallo", color:"#ff5b6e", vida:26});
+}
+
+function fin(completo){
+  vivo=false; cancelAnimationFrame(raf);
+  const mejor=leer(), nuevo=puntos>mejor; if(nuevo) guardar(puntos);
+  dibujar(ahora());
+  ctx.fillStyle="rgba(0,0,0,.72)"; ctx.fillRect(0,0,W,H);
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  ctx.fillStyle="#fff"; ctx.font="900 34px Segoe UI,sans-serif"; ctx.shadowColor="#ff3bd4"; ctx.shadowBlur=18;
+  ctx.fillText(completo?"¡CANCIÓN COMPLETA!":"SE APAGÓ LA ENERGÍA",W/2,H/2-110); ctx.shadowBlur=0;
+  ctx.fillStyle="#ffd12e"; ctx.font="800 28px Segoe UI,sans-serif"; ctx.fillText(puntos+" puntos",W/2,H/2-56);
+  const total=aciertos+falladas, prec=total?Math.round(aciertos*100/total):0;
+  ctx.fillStyle="#eaf6ff"; ctx.font="700 17px Segoe UI,sans-serif";
+  ctx.fillText("precisión "+prec+"%  ·  perfectos "+perfectas,W/2,H/2-12);
+  ctx.fillText("mejor combo "+mejorCombo,W/2,H/2+16);
+  ctx.fillStyle=nuevo?"#b6ff00":"#7fc8e8"; ctx.fillText(nuevo?"¡NUEVO RÉCORD!":"Récord: "+leer(),W/2,H/2+52);
+  ctx.fillStyle="#7fc8e8"; ctx.font="600 15px Segoe UI,sans-serif"; ctx.fillText("toca para volver a jugar",W/2,H/2+96);
+  setTimeout(()=>{ esperandoOtra=true; },600);
+}
+let esperandoOtra=false;
+
+function dibujar(t){
+  ctx.fillStyle="#02030a"; ctx.fillRect(0,0,W,H);
+  for(let c=0;c<CARRILES;c++){
+    const x=c*ANCHO, col=COLORES[c];
+    ctx.fillStyle=apretado[c]?"rgba(255,255,255,.06)":"rgba(255,255,255,.02)"; ctx.fillRect(x+4,40,ANCHO-8,H-40);
+    ctx.globalAlpha=0.35+brillo[c]*0.65;
+    const g=ctx.createLinearGradient(0,LINEA-160,0,LINEA); g.addColorStop(0,"rgba(0,0,0,0)"); g.addColorStop(1,col);
+    ctx.fillStyle=g; ctx.fillRect(x+4,LINEA-160,ANCHO-8,160*(0.3+brillo[c]*0.7));
+    ctx.globalAlpha=1;
+    // botón del carril
+    ctx.strokeStyle=col; ctx.lineWidth=3; ctx.shadowColor=col; ctx.shadowBlur=apretado[c]?24:10;
+    ctx.beginPath(); ctx.arc(x+ANCHO/2,LINEA,30,0,7); ctx.stroke(); ctx.shadowBlur=0;
+    ctx.fillStyle="#7a8597"; ctx.font="800 14px Segoe UI,sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText("DFJK"[c],x+ANCHO/2,LINEA+50);
+  }
+  // linea de golpe
+  ctx.strokeStyle="rgba(255,255,255,.35)"; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(0,LINEA); ctx.lineTo(W,LINEA); ctx.stroke();
+  // notas
+  notas.forEach(n=>{
+    if(n.hecho) return;
+    const y=LINEA-(n.t-t)*velocidad;
+    if(y<0||y>H+30) return;
+    const x=n.carril*ANCHO+ANCHO/2, col=COLORES[n.carril];
+    ctx.fillStyle=col; ctx.shadowColor=col; ctx.shadowBlur=16;
+    ctx.beginPath(); ctx.arc(x,y,24,0,7); ctx.fill(); ctx.shadowBlur=0;
+    ctx.fillStyle="rgba(255,255,255,.75)"; ctx.beginPath(); ctx.arc(x-7,y-7,7,0,7); ctx.fill();
+  });
+  // textos
+  textos.forEach(x=>{ ctx.globalAlpha=Math.max(0,x.vida/34); ctx.fillStyle=x.color; ctx.font="900 18px Segoe UI,sans-serif"; ctx.textAlign="center"; ctx.fillText(x.texto,x.x,x.y); });
+  ctx.globalAlpha=1;
+  // energia
+  ctx.fillStyle="rgba(255,255,255,.1)"; ctx.fillRect(16,46,W-32,8);
+  ctx.fillStyle=energia>0.5?"#b6ff00":energia>0.25?"#ffd12e":"#ff3b5c"; ctx.fillRect(16,46,(W-32)*energia,8);
+}
+
+/* ---------- controles ---------- */
+addEventListener("keydown",e=>{
+  if(e.repeat) return;
+  const c=TECLAS[e.key.toLowerCase()];
+  if(c!==undefined){ e.preventDefault(); tocar(c); }
+  else if((e.key===" "||e.key==="Enter") && esperandoOtra){ esperandoOtra=false; empezar(); }
+});
+cv.addEventListener("pointerdown",e=>{
+  if(esperandoOtra){ esperandoOtra=false; empezar(); return; }
+  const r=cv.getBoundingClientRect();
+  const x=(e.clientX-r.left)*(W/r.width);
+  tocar(Math.max(0,Math.min(3,Math.floor(x/ANCHO))));
+});
+$("empezar").onclick=()=>{ esperandoOtra=false; empezar(); };
+
+$("stats").innerHTML="Récord de puntos: "+leer();
+dibujar(0);
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>

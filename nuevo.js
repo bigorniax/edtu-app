@@ -137,9 +137,10 @@
   }
   function contadores() {
     document.querySelectorAll("[data-cuenta]").forEach(el => {
-      const fin = +el.dataset.cuenta; let hecho = false;
+      let hecho = false;
       const obs = new IntersectionObserver(es => es.forEach(e => {
         if (!e.isIntersecting || hecho) return; hecho = true;
+        const fin = +el.dataset.cuenta;   // se lee al aparecer: la pagina puede poner el numero real antes
         const t0 = performance.now(), dur = 1400;
         const paso = t => { const k = Math.min(1, (t - t0) / dur); el.textContent = Math.round(fin * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(paso); };
         requestAnimationFrame(paso);

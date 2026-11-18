@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Color Salto</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;background:#02030a;color:#eaf6ff}
+  #wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{display:block;max-width:100%;max-height:100%;border-radius:12px;touch-action:none;
+    box-shadow:0 0 28px rgba(255,209,46,.22),inset 0 0 40px rgba(255,209,46,.06)}
+  #hud{position:absolute;top:10px;left:0;right:0;display:flex;justify-content:center;padding:0 16px;
+    font-weight:900;font-size:26px;pointer-events:none;color:#ffd12e;text-shadow:0 0 10px #ffd12e}
+  #menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(2,3,10,.92);text-align:center;padding:20px}
+  #menu h1{font-size:40px;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #fff,0 0 18px #ffd12e,0 0 40px #ff3bd4}
+  #menu p{margin:14px 0 22px;color:#e8d79a;line-height:1.6;font-size:16px;max-width:440px}
+  #menu button{cursor:pointer;padding:16px 42px;border-radius:14px;border:2px solid #ffd12e;background:rgba(0,0,0,.6);
+    color:#fff;font-size:20px;font-weight:900;letter-spacing:2px;box-shadow:0 0 14px #ffd12e;text-shadow:0 0 8px #ffd12e}
+  #menu button:hover{transform:scale(1.05)}
+  #menu .stats{margin-top:18px;color:#ffd12e;font-weight:800;text-shadow:0 0 8px #ffd12e;line-height:1.7}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="420" height="640"></canvas>
+  <div id="hud"><span id="puntos">0</span></div>
+  <div id="menu">
+    <h1>COLOR SALTO</h1>
+    <p>Toca (o aprieta ESPACIO) para saltar. Solo puedes pasar por la parte que es del mismo color que tu pelota. Los círculos de colores te cambian el color. Cada estrella vale un punto.</p>
+    <button id="empezar">JUGAR</button>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+const W=cv.width, H=cv.height, BR=10, CX=W/2;
+const CLAVE="edtu_colores_mejor";
+const COL=["#ff3bd4","#0cf","#ffd12e","#b6ff00"];
+const CUARTO=Math.PI/2, VUELTA=Math.PI*2;
+
+function leer(){ try{ return parseInt(localStorage.getItem(CLAVE)||"0",10)||0; }catch(e){ return 0; } }
+function guardar(v){ try{ localStorage.setItem(CLAVE,String(v)); }catch(e){} }
+
+let audio=null;
+function tono(f,d,tipo,vol,subida){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
+  const o=audio.createOscillator(), g=audio.createGain(); o.type=tipo||"square"; const t=audio.currentTime;
+  o.frequency.setValueAtTime(f,t); if(subida) o.frequency.exponentialRampToValueAtTime(f*subida,t+d);
+  g.gain.setValueAtTime(vol||0.07,t); g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t+d); }catch(e){} }
+
+let bola, obs=[], cosas=[], camY=0, sigY=0, puntos=0, estado="menu", raf=null, partes=[], cuenta=0, esperandoOtra=false;
+
+const mod=(a,m)=>((a%m)+m)%m;
+
+function crearObstaculo(y){
+  const nivel=cuenta++;
+  const vel=(0.016+Math.min(0.022,nivel*0.0016))*(Math.random()<0.5?1:-1);
+  const r=Math.random();
+  let o;
+  if(nivel<2 || r<0.45) o={tipo:"aro", y, rad:84, grosor:15, rot:Math.random()*VUELTA, vel};
+  else if(r<0.75) o={tipo:"doble", y, rad:96, rad2:66, grosor:13, rot:Math.random()*VUELTA, vel, rot2:Math.random()*VUELTA};
+  else o={tipo:"barra", y, off:Math.random()*560, vel:(1.4+Math.min(2,nivel*0.12))*(Math.random()<0.5?1:-1), grosor:14};
+  obs.push(o);
+  cosas.push({tipo:"estrella", y, viva:true});                 // estrella en el centro del obstaculo
+  cosas.push({tipo:"cambio", y:y-170, viva:true});             // cambiador de color entre obstaculos
+}
+
+function empezar(){
+  $("menu").style.display="none"; esperandoOtra=false;
+  bola={y:520, vy:0, col:Math.floor(Math.random()*4), quieta:true};
+  obs=[]; cosas=[]; partes=[]; camY=0; puntos=0; cuenta=0; sigY=260;
+  while(sigY>camY-700){ crearObstaculo(sigY); sigY-=340; }
+  $("puntos").textContent="0";
+  estado="jugando"; cancelAnimationFrame(raf); raf=requestAnimationFrame(paso);
+}
+
+function saltar(){
+  if(estado!=="jugando") return;
+  bola.quieta=false; bola.vy=-7.2;
+  tono(520,0.06,"sine",0.05,1.3);
+}
+
+function colorDeAro(ang,rot){ return Math.floor(mod(ang-rot,VUELTA)/CUARTO); }
+
+function choca(){
+  for(const o of obs){
+    if(Math.abs(o.y-bola.y)>130) continue;
+    const dy=bola.y-o.y;
+    if(o.tipo==="barra"){
+      if(Math.abs(dy)<o.grosor/2+BR){
+        const seg=Math.floor(mod(CX-o.off,560)/140);
+        if(seg!==bola.col) return true;
+      }
+      continue;
+    }
+    const aros=[[o.rad,o.rot]]; if(o.tipo==="doble") aros.push([o.rad2,o.rot2]);
+    for(const [rad,rot] of aros){
+      const d=Math.abs(dy);
+      if(d>rad-o.grosor/2-BR && d<rad+o.grosor/2+BR){
+        const ang=dy<0?-Math.PI/2:Math.PI/2;
+        if(colorDeAro(ang,rot)!==bola.col) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function morir(){
+  estado="muerto";
+  for(let i=0;i<50;i++){ const a=Math.random()*7, v=Math.random()*6+1; partes.push({x:CX,y:bola.y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,vida:60,col:COL[i%4]}); }
+  tono(160,0.5,"sawtooth",0.09,0.3);
+  const mejor=leer(), nuevo=puntos>mejor; if(nuevo) guardar(puntos);
+  finNuevo=nuevo;
+  setTimeout(()=>{ estado="fin"; esperandoOtra=true; },900);
+}
+let finNuevo=false;
+
+function paso(){
+  raf=requestAnimationFrame(paso);
+  if(estado==="jugando"){
+    if(!bola.quieta){ bola.vy=Math.min(11,bola.vy+0.34); bola.y+=bola.vy; }
+    // la camara sube con la pelota (nunca baja)
+    const meta=bola.y-H*0.55; if(meta<camY) camY=meta;
+    if(bola.y-camY>H+BR){ morir(); }
+    obs.forEach(o=>{ if(o.tipo==="barra") o.off=mod(o.off+o.vel,560); else { o.rot=mod(o.rot+o.vel,VUELTA); if(o.rot2!==undefined) o.rot2=mod(o.rot2-o.vel*1.3,VUELTA); } });
+    if(estado==="jugando" && !bola.quieta && choca()) morir();
+    cosas.forEach(c=>{
+      if(!c.viva || Math.abs(c.y-bola.y)>18) return;
+      c.viva=false;
+      if(c.tipo==="estrella"){ puntos++; $("puntos").textContent=puntos; tono(880,0.1,"triangle",0.07,1.5);
+        for(let i=0;i<12;i++){ const a=Math.random()*7; partes.push({x:CX,y:c.y,vx:Math.cos(a)*3,vy:Math.sin(a)*3,vida:28,col:"#fff"}); } }
+      else { let n; do{ n=Math.floor(Math.random()*4); } while(n===bola.col); bola.col=n; tono(660,0.12,"sine",0.06,1.6); }
+    });
+    // generar mas adelante y borrar lo que quedo muy abajo
+    while(sigY>camY-700){ crearObstaculo(sigY); sigY-=340; }
+    obs=obs.filter(o=>o.y-camY<H+200); cosas=cosas.filter(c=>c.y-camY<H+200);
+  }
+  partes.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=0.12; p.vida--; }); partes=partes.filter(p=>p.vida>0);
+  dibujar();
+}
+
+function dibujaAro(y,rad,rot,grosor){
+  for(let i=0;i<4;i++){
+    ctx.strokeStyle=COL[i]; ctx.shadowColor=COL[i]; ctx.shadowBlur=12; ctx.lineWidth=grosor; ctx.lineCap="butt";
+    ctx.beginPath(); ctx.arc(CX,y,rad,rot+i*CUARTO+0.02,rot+(i+1)*CUARTO-0.02); ctx.stroke();
+  }
+  ctx.shadowBlur=0;
+}
+function estrella(x,y,r){
+  ctx.fillStyle="#fff"; ctx.shadowColor="#fff"; ctx.shadowBlur=12; ctx.beginPath();
+  for(let i=0;i<10;i++){ const a=-Math.PI/2+i*Math.PI/5, rr=i%2?r*0.45:r; ctx.lineTo(x+Math.cos(a)*rr,y+Math.sin(a)*rr); }
+  ctx.closePath(); ctx.fill(); ctx.shadowBlur=0;
+}
+
+function dibujar(){
+  ctx.fillStyle="#02030a"; ctx.fillRect(0,0,W,H);
+  ctx.save(); ctx.translate(0,-camY);
+  obs.forEach(o=>{
+    if(o.tipo==="barra"){
+      for(let k=-1;k<4;k++) for(let i=0;i<4;i++){
+        const x=o.off+k*560+i*140;
+        if(x>W||x+140<0) continue;
+        ctx.fillStyle=COL[i]; ctx.shadowColor=COL[i]; ctx.shadowBlur=10; ctx.fillRect(x+2,o.y-o.grosor/2,136,o.grosor);
+      }
+      ctx.shadowBlur=0;
+    } else {
+      dibujaAro(o.y,o.rad,o.rot,o.grosor);
+      if(o.tipo==="doble") dibujaAro(o.y,o.rad2,o.rot2,o.grosor);
+    }
+  });
+  cosas.forEach(c=>{
+    if(!c.viva) return;
+    if(c.tipo==="estrella") estrella(CX,c.y,13);
+    else { for(let i=0;i<4;i++){ ctx.fillStyle=COL[i]; ctx.beginPath(); ctx.moveTo(CX,c.y); ctx.arc(CX,c.y,13,i*CUARTO,(i+1)*CUARTO); ctx.closePath(); ctx.fill(); } }
+  });
+  if(estado==="jugando" || estado==="menu"){
+    const b=bola||{y:520,col:0};
+    ctx.fillStyle=COL[b.col]; ctx.shadowColor=COL[b.col]; ctx.shadowBlur=18; ctx.beginPath(); ctx.arc(CX,b.y,BR,0,7); ctx.fill(); ctx.shadowBlur=0;
+  }
+  partes.forEach(p=>{ ctx.globalAlpha=Math.max(0,p.vida/60); ctx.fillStyle=p.col; ctx.fillRect(p.x-3,p.y-3,6,6); });
+  ctx.globalAlpha=1; ctx.restore();
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  if(estado==="jugando" && bola.quieta){ ctx.fillStyle="#9aa"; ctx.font="700 16px Segoe UI,sans-serif"; ctx.fillText("toca para saltar",W/2,H-40); }
+  if(estado==="fin"){
+    ctx.fillStyle="rgba(0,0,0,.7)"; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle="#fff"; ctx.font="900 34px Segoe UI,sans-serif"; ctx.shadowColor="#ff3bd4"; ctx.shadowBlur=18;
+    ctx.fillText("¡CHOCASTE!",W/2,H/2-60); ctx.shadowBlur=0;
+    ctx.fillStyle="#ffd12e"; ctx.font="800 26px Segoe UI,sans-serif"; ctx.fillText(puntos+" estrellas",W/2,H/2-12);
+    ctx.fillStyle=finNuevo?"#b6ff00":"#7fc8e8"; ctx.font="700 17px Segoe UI,sans-serif";
+    ctx.fillText(finNuevo?"¡NUEVO RÉCORD!":"Récord: "+leer(),W/2,H/2+24);
+    ctx.fillStyle="#7fc8e8"; ctx.font="600 15px Segoe UI,sans-serif"; ctx.fillText("toca para volver a jugar",W/2,H/2+66);
+  }
+}
+
+/* ---------- controles ---------- */
+function accion(){ if(esperandoOtra){ empezar(); return; } saltar(); }
+cv.addEventListener("pointerdown",accion);
+addEventListener("keydown",e=>{ if(e.key===" "||e.key==="ArrowUp"||e.key==="Enter"){ e.preventDefault(); if(!e.repeat) accion(); } });
+$("empezar").onclick=empezar;
+
+$("stats").innerHTML="Récord de estrellas: "+leer();
+dibujar();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>

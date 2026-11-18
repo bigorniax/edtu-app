@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Tanques Neón</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;background:#02030a;color:#eaf6ff}
+  #wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{display:block;max-width:100%;max-height:100%;border-radius:12px;touch-action:none;cursor:crosshair;
+    box-shadow:0 0 28px rgba(0,204,255,.25),inset 0 0 40px rgba(0,204,255,.06)}
+  #menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(2,3,10,.92);text-align:center;padding:20px}
+  #menu h1{font-size:40px;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #fff,0 0 18px #b6ff00,0 0 40px #0cf}
+  #menu p{margin:14px 0 22px;color:#bfe6c0;line-height:1.6;font-size:16px;max-width:480px}
+  #menu button{cursor:pointer;padding:16px 42px;border-radius:14px;border:2px solid #b6ff00;background:rgba(0,0,0,.6);
+    color:#fff;font-size:20px;font-weight:900;letter-spacing:2px;box-shadow:0 0 14px #b6ff00;text-shadow:0 0 8px #b6ff00}
+  #menu button:hover{transform:scale(1.05)}
+  #menu .stats{margin-top:18px;color:#ffd12e;font-weight:800;text-shadow:0 0 8px #ffd12e;line-height:1.7}
+  #menu .teclas{margin-top:10px;color:#9aa;font-size:13px}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="720" height="480"></canvas>
+  <div id="menu">
+    <h1>TANQUES NEÓN</h1>
+    <p>Duelo contra la compu, por turnos. Arrastra desde tu tanque para apuntar: la dirección es el ángulo y el largo es la fuerza. Ojo con el viento. Cada ronda que ganas, la compu apunta mejor.</p>
+    <button id="empezar">JUGAR</button>
+    <div class="teclas">también con teclado: ◄ ► ángulo · ▲ ▼ fuerza · ESPACIO dispara</div>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+const W=cv.width, H=cv.height, G=0.16, RADIO=30;
+const CLAVE="edtu_tanques_mejor";
+
+function leer(){ try{ return parseInt(localStorage.getItem(CLAVE)||"0",10)||0; }catch(e){ return 0; } }
+function guardar(v){ try{ localStorage.setItem(CLAVE,String(v)); }catch(e){} }
+
+let audio=null;
+function tono(f,d,tipo,vol,subida){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
+  const o=audio.createOscillator(), g=audio.createGain(); o.type=tipo||"square"; const t=audio.currentTime;
+  o.frequency.setValueAtTime(f,t); if(subida) o.frequency.exponentialRampToValueAtTime(f*subida,t+d);
+  g.gain.setValueAtTime(vol||0.07,t); g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t+d); }catch(e){} }
+
+let suelo=[], yo, cpu, turno="yo", bala=null, viento=0, ronda=0, ganadas=0, estado="menu", raf=null, partes=[], mensaje="", tMensaje=0, apunta=null, esperandoOtra=false, finNuevo=false;
+
+function terreno(){
+  suelo=new Array(W+1);
+  const a1=Math.random()*6, a2=Math.random()*6, a3=Math.random()*6;
+  for(let x=0;x<=W;x++){
+    suelo[x]=H*0.66 + Math.sin(x/110+a1)*38 + Math.sin(x/47+a2)*16 + Math.sin(x/230+a3)*30;
+  }
+  // un cerro en el medio para que no sea tan facil
+  for(let x=0;x<=W;x++){ const d=(x-W/2)/120; suelo[x]-=Math.exp(-d*d)*(60+Math.random()*10); }
+  // zonas planas donde van los tanques
+  [[60,110],[W-110,W-60]].forEach(([a,b])=>{ const m=(suelo[a]+suelo[b])/2; for(let x=a;x<=b;x++) suelo[x]=m; });
+}
+function alturaEn(x){ return suelo[Math.max(0,Math.min(W,Math.round(x)))]; }
+
+function nuevaRonda(){
+  ronda++;
+  terreno();
+  yo ={x:85, y:0, vida:100, ang:-0.6, pot:6.5, col:"#b6ff00"};
+  cpu={x:W-85, y:0, vida:100, ang:-Math.PI+0.8, pot:9, col:"#ff3bd4"};
+  [yo,cpu].forEach(t=>t.y=alturaEn(t.x));
+  turno="yo"; bala=null; nuevoViento();
+  avisar("RONDA "+ronda);
+}
+function nuevoViento(){ viento=(Math.random()-0.5)*0.07; }
+function avisar(t){ mensaje=t; tMensaje=90; }
+
+function empezar(){
+  $("menu").style.display="none"; esperandoOtra=false;
+  ronda=0; ganadas=0; partes=[]; nuevaRonda();
+  estado="jugando"; cancelAnimationFrame(raf); raf=requestAnimationFrame(paso);
+}
+
+function disparar(t){
+  const x=t.x+Math.cos(t.ang)*18, y=t.y-12+Math.sin(t.ang)*18;
+  bala={x,y,vx:Math.cos(t.ang)*t.pot,vy:Math.sin(t.ang)*t.pot,de:t,estela:[]};
+  tono(150,0.25,"sawtooth",0.08,0.5);
+}
+
+/* la compu prueba muchos tiros en su cabeza y elige el mejor, con un error que se achica en cada ronda */
+function simula(ang,pot){
+  let x=cpu.x+Math.cos(ang)*18, y=cpu.y-12+Math.sin(ang)*18, vx=Math.cos(ang)*pot, vy=Math.sin(ang)*pot;
+  for(let i=0;i<900;i++){
+    vx+=viento; vy+=G; x+=vx; y+=vy;
+    if(x<0||x>W) return 1e9;
+    if(y>=alturaEn(x) || Math.hypot(x-yo.x,y-(yo.y-8))<14) return Math.hypot(x-yo.x,y-yo.y);
+  }
+  return 1e9;
+}
+function piensaCpu(){
+  let mejor={d:1e9,ang:-2.3,pot:9};
+  for(let a=-Math.PI+0.25;a<-Math.PI/2+0.05;a+=0.04)
+    for(let p=5;p<=13.5;p+=0.25){ const d=simula(a,p); if(d<mejor.d) mejor={d,ang:a,pot:p}; }
+  const error=Math.max(0.32,1.7-ronda*0.3);   // ronda 1: falla harto; cada ronda apunta mejor
+  cpu.ang=mejor.ang+(Math.random()-0.5)*0.22*error;
+  cpu.pot=mejor.pot+(Math.random()-0.5)*2.2*error;
+}
+
+function explotar(x,y){
+  for(let dx=-RADIO;dx<=RADIO;dx++){
+    const xx=Math.round(x+dx); if(xx<0||xx>W) continue;
+    const h=Math.sqrt(RADIO*RADIO-dx*dx), fondo=y+h;
+    if(suelo[xx]<fondo && suelo[xx]>y-h) suelo[xx]=fondo;
+    else if(suelo[xx]<=y-h) suelo[xx]=Math.max(suelo[xx],Math.min(fondo,suelo[xx]+2*h));
+    if(suelo[xx]>H-4) suelo[xx]=H-4;
+  }
+  for(let i=0;i<40;i++){ const a=Math.random()*7, v=Math.random()*5+1; partes.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v-1,vida:40,col:i%2?"#ffd12e":"#ff7a1a"}); }
+  tono(70,0.6,"sawtooth",0.12,0.4);
+  [yo,cpu].forEach(t=>{
+    const d=Math.hypot(t.x-x,(t.y-8)-y);
+    if(d<RADIO+14){ const dano=Math.round(40*(1-d/(RADIO+14))+8); t.vida=Math.max(0,t.vida-dano); avisar("-"+dano); }
+  });
+}
+
+let pausa=0;
+function paso(){
+  raf=requestAnimationFrame(paso);
+  if(estado!=="jugando") { dibujar(); return; }
+  // tanques caen si se les rompio el suelo
+  [yo,cpu].forEach(t=>{ const s=alturaEn(t.x); if(t.y<s) t.y=Math.min(s,t.y+3); else t.y=s; });
+  if(bala){
+    for(let k=0;k<2;k++){
+      if(!bala) break;
+      bala.vx+=viento; bala.vy+=G; bala.x+=bala.vx; bala.y+=bala.vy;
+      bala.estela.push([bala.x,bala.y]); if(bala.estela.length>30) bala.estela.shift();
+      const otro=bala.de===yo?cpu:yo;
+      if(bala.x<-20||bala.x>W+20||bala.y>H){ bala=null; avisar("¡afuera!"); terminaTurno(); break; }
+      if(bala.y>=alturaEn(bala.x) || Math.hypot(bala.x-otro.x,bala.y-(otro.y-8))<13){
+        explotar(bala.x,bala.y); bala=null; terminaTurno(); break;
+      }
+    }
+  } else if(turno==="cpu" && pausa>0){ pausa--; if(pausa===0){ piensaCpu(); disparar(cpu); } }
+  partes.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=0.15; p.vida--; }); partes=partes.filter(p=>p.vida>0);
+  if(tMensaje>0) tMensaje--;
+  dibujar();
+}
+
+function terminaTurno(){
+  if(cpu.vida<=0){ ganadas++; avisar("¡GANASTE LA RONDA!"); tono(523,0.2,"triangle",0.08); setTimeout(()=>tono(784,0.3,"triangle",0.08),150);
+    estado="pausa"; setTimeout(()=>{ nuevaRonda(); estado="jugando"; },1800); return; }
+  if(yo.vida<=0){ estado="pausa"; setTimeout(fin,1500); return; }
+  nuevoViento();
+  if(turno==="yo"){ turno="cpu"; pausa=50; }
+  else turno="yo";
+}
+
+function fin(){
+  estado="fin"; tMensaje=0; const mejor=leer(); finNuevo=ganadas>mejor; if(finNuevo) guardar(ganadas);
+  setTimeout(()=>{ esperandoOtra=true; },600);
+}
+
+function dibujaTanque(t,activo){
+  ctx.save(); ctx.translate(t.x,t.y);
+  ctx.strokeStyle=t.col; ctx.fillStyle="rgba(0,0,0,.6)"; ctx.lineWidth=2.5; ctx.shadowColor=t.col; ctx.shadowBlur=activo?18:8;
+  ctx.beginPath(); ctx.moveTo(-18,0); ctx.lineTo(18,0); ctx.lineTo(14,-9); ctx.lineTo(-14,-9); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(0,-11,8,Math.PI,0); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0,-12); ctx.lineTo(Math.cos(t.ang)*20,-12+Math.sin(t.ang)*20); ctx.stroke();
+  ctx.restore(); ctx.shadowBlur=0;
+  // vida
+  ctx.fillStyle="rgba(255,255,255,.12)"; ctx.fillRect(t.x-22,t.y-34,44,5);
+  ctx.fillStyle=t.vida>50?"#b6ff00":t.vida>25?"#ffd12e":"#ff3b5c"; ctx.fillRect(t.x-22,t.y-34,44*t.vida/100,5);
+}
+
+function dibujar(){
+  ctx.fillStyle="#02030a"; ctx.fillRect(0,0,W,H);
+  if(!suelo.length) return;
+  // terreno
+  ctx.beginPath(); ctx.moveTo(0,H); for(let x=0;x<=W;x+=2) ctx.lineTo(x,suelo[x]); ctx.lineTo(W,H); ctx.closePath();
+  const g=ctx.createLinearGradient(0,H*0.4,0,H); g.addColorStop(0,"rgba(0,204,255,.14)"); g.addColorStop(1,"rgba(0,204,255,.02)");
+  ctx.fillStyle=g; ctx.fill();
+  ctx.beginPath(); for(let x=0;x<=W;x+=2) x?ctx.lineTo(x,suelo[x]):ctx.moveTo(x,suelo[x]);
+  ctx.strokeStyle="#0cf"; ctx.lineWidth=2; ctx.shadowColor="#0cf"; ctx.shadowBlur=10; ctx.stroke(); ctx.shadowBlur=0;
+  if(!yo) return;
+  dibujaTanque(yo,turno==="yo"&&!bala); dibujaTanque(cpu,turno==="cpu"&&!bala);
+  // mira del jugador
+  if(turno==="yo" && !bala && estado==="jugando"){
+    ctx.setLineDash([4,7]); ctx.strokeStyle="rgba(182,255,0,.7)"; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(yo.x,yo.y-12); ctx.lineTo(yo.x+Math.cos(yo.ang)*yo.pot*9,yo.y-12+Math.sin(yo.ang)*yo.pot*9); ctx.stroke(); ctx.setLineDash([]);
+  }
+  // bala
+  if(bala){
+    bala.estela.forEach(([x,y],i)=>{ ctx.globalAlpha=i/bala.estela.length*0.6; ctx.fillStyle="#ffd12e"; ctx.fillRect(x-1.5,y-1.5,3,3); });
+    ctx.globalAlpha=1; ctx.fillStyle="#fff"; ctx.shadowColor="#ffd12e"; ctx.shadowBlur=14; ctx.beginPath(); ctx.arc(bala.x,bala.y,4,0,7); ctx.fill(); ctx.shadowBlur=0;
+  }
+  partes.forEach(p=>{ ctx.globalAlpha=Math.max(0,p.vida/40); ctx.fillStyle=p.col; ctx.fillRect(p.x-2,p.y-2,4,4); }); ctx.globalAlpha=1;
+  // barra de arriba: ronda, viento, angulo y fuerza
+  ctx.textBaseline="middle"; ctx.font="800 15px Segoe UI,sans-serif";
+  ctx.textAlign="left"; ctx.fillStyle="#b6ff00"; ctx.fillText("TÚ  "+yo.vida,16,22);
+  ctx.textAlign="right"; ctx.fillStyle="#ff3bd4"; ctx.fillText(cpu.vida+"  COMPU",W-16,22);
+  ctx.textAlign="center"; ctx.fillStyle="#ffd12e"; ctx.fillText("RONDA "+ronda+" · ganadas "+ganadas,W/2,22);
+  const vv=Math.round(viento*1000);
+  ctx.fillStyle="#eaf6ff"; ctx.font="700 13px Segoe UI,sans-serif";
+  ctx.fillText("viento "+(vv===0?"0":(vv<0?"◄ ":"")+Math.abs(vv)+(vv>0?" ►":"")),W/2,44);
+  if(turno==="yo"){
+    const grados=Math.round(-yo.ang*180/Math.PI);
+    ctx.fillText("ángulo "+grados+"°  ·  fuerza "+Math.round(yo.pot*10),W/2,64);
+  } else ctx.fillText("turno de la compu…",W/2,64);
+  if(tMensaje>0){ ctx.globalAlpha=Math.min(1,tMensaje/30); ctx.font="900 28px Segoe UI,sans-serif"; ctx.fillStyle="#fff"; ctx.shadowColor="#0cf"; ctx.shadowBlur=16; ctx.fillText(mensaje,W/2,H*0.32); ctx.shadowBlur=0; ctx.globalAlpha=1; }
+  if(estado==="fin"){
+    ctx.fillStyle="rgba(0,0,0,.72)"; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle="#fff"; ctx.font="900 34px Segoe UI,sans-serif"; ctx.shadowColor="#ff3bd4"; ctx.shadowBlur=18;
+    ctx.fillText("TU TANQUE CAYÓ",W/2,H/2-60); ctx.shadowBlur=0;
+    ctx.fillStyle="#ffd12e"; ctx.font="800 24px Segoe UI,sans-serif"; ctx.fillText(ganadas+(ganadas===1?" ronda ganada":" rondas ganadas"),W/2,H/2-14);
+    ctx.fillStyle=finNuevo?"#b6ff00":"#7fc8e8"; ctx.font="700 17px Segoe UI,sans-serif"; ctx.fillText(finNuevo?"¡NUEVO RÉCORD!":"Récord: "+leer(),W/2,H/2+22);
+    ctx.fillStyle="#7fc8e8"; ctx.font="600 15px Segoe UI,sans-serif"; ctx.fillText("toca para volver a jugar",W/2,H/2+62);
+  }
+}
+
+/* ---------- controles ---------- */
+function puedoApuntar(){ return estado==="jugando" && turno==="yo" && !bala; }
+function punto(e){ const r=cv.getBoundingClientRect(); return { x:(e.clientX-r.left)*(W/r.width), y:(e.clientY-r.top)*(H/r.height) }; }
+function apuntaHacia(q){
+  const dx=q.x-yo.x, dy=q.y-(yo.y-12);
+  let a=Math.atan2(dy,dx); a=Math.max(-Math.PI+0.05,Math.min(-0.05,a));
+  yo.ang=a; yo.pot=Math.max(4,Math.min(14,Math.hypot(dx,dy)/12));
+}
+cv.addEventListener("pointerdown",e=>{
+  if(esperandoOtra){ empezar(); return; }
+  if(!puedoApuntar()) return;
+  apunta=true; apuntaHacia(punto(e)); try{ cv.setPointerCapture(e.pointerId); }catch(x){}
+});
+cv.addEventListener("pointermove",e=>{ if(apunta && puedoApuntar()) apuntaHacia(punto(e)); });
+cv.addEventListener("pointerup",()=>{ if(apunta && puedoApuntar()){ apunta=false; disparar(yo); } apunta=false; });
+addEventListener("keydown",e=>{
+  if(esperandoOtra && (e.key===" "||e.key==="Enter")){ e.preventDefault(); empezar(); return; }
+  if(!puedoApuntar()) return;
+  const k=e.key;
+  if(k==="ArrowLeft"){ yo.ang=Math.max(-Math.PI+0.05,yo.ang-0.03); e.preventDefault(); }
+  else if(k==="ArrowRight"){ yo.ang=Math.min(-0.05,yo.ang+0.03); e.preventDefault(); }
+  else if(k==="ArrowUp"){ yo.pot=Math.min(14,yo.pot+0.2); e.preventDefault(); }
+  else if(k==="ArrowDown"){ yo.pot=Math.max(4,yo.pot-0.2); e.preventDefault(); }
+  else if(k===" "){ e.preventDefault(); if(!e.repeat) disparar(yo); }
+});
+$("empezar").onclick=empezar;
+
+$("stats").innerHTML="Récord: "+leer()+" rondas ganadas seguidas";
+dibujar();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>

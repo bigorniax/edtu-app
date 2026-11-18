@@ -227,8 +227,8 @@
     <h2>Un montón de juegos</h2>
   </div>
   <div class="cifras">
-    <div class="cifra revela d1"><b data-cuenta="205">0</b><span>juegos</span></div>
-    <div class="cifra revela d2"><b data-cuenta="13">0</b><span>categorías</span></div>
+    <div class="cifra revela d1"><b data-cuenta="205" id="cuentaJuegos">0</b><span>juegos</span></div>
+    <div class="cifra revela d2"><b data-cuenta="13" id="cuentaCats">0</b><span>categorías</span></div>
     <div class="cifra revela d3"><b data-cuenta="1">0</b><span>clic para empezar a jugar</span></div>
     <div class="cifra revela d4"><b data-cuenta="0">0</b><span>pesos para jugar</span></div>
   </div>
@@ -261,6 +261,14 @@
 
 <script src="nuevo.js"></script>
 <script src="juegos-datos.js"></script>
+<script>
+/* "Un montón de juegos": los números se cuentan solos desde el selector (juegos-datos.js),
+   así cada juego nuevo que se agrega ya sale sumado aquí */
+try {
+  document.getElementById("cuentaJuegos").dataset.cuenta = JUEGOS.length;
+  document.getElementById("cuentaCats").dataset.cuenta = new Set(JUEGOS.map(j => j.pack)).size;
+} catch (e) {}
+</script>
 <script>
 /* estrellitas de fondo */
 (function () {
