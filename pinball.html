@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Pinball Neón</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;background:#02030a;color:#eaf6ff}
+  #wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{display:block;max-width:100%;max-height:100%;border-radius:12px;touch-action:none;
+    box-shadow:0 0 28px rgba(255,59,212,.25),inset 0 0 40px rgba(255,59,212,.05)}
+  #menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(2,3,10,.92);text-align:center;padding:20px}
+  #menu h1{font-size:40px;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #fff,0 0 18px #ff3bd4,0 0 40px #0cf}
+  #menu p{margin:14px 0 22px;color:#f0b4e6;line-height:1.6;font-size:16px;max-width:460px}
+  #menu button{cursor:pointer;padding:16px 42px;border-radius:14px;border:2px solid #ff3bd4;background:rgba(0,0,0,.6);
+    color:#fff;font-size:20px;font-weight:900;letter-spacing:2px;box-shadow:0 0 14px #ff3bd4;text-shadow:0 0 8px #ff3bd4}
+  #menu button:hover{transform:scale(1.05)}
+  #menu .stats{margin-top:18px;color:#ffd12e;font-weight:800;text-shadow:0 0 8px #ffd12e;line-height:1.7}
+  #menu .teclas{margin-top:10px;color:#9aa;font-size:13px;line-height:1.6}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="420" height="680"></canvas>
+  <div id="menu">
+    <h1>PINBALL NEÓN</h1>
+    <p>Tienes 3 bolas. Mantén apretado para cargar el lanzador y suelta. Usa los flippers para que la bola no se caiga. Pasa por los 3 carriles de arriba para subir el multiplicador.</p>
+    <button id="empezar">JUGAR</button>
+    <div class="teclas">◄ o Z flipper izquierdo · ► o M flipper derecho · ESPACIO o ▼ lanzador<br>en el celular: toca la mitad izquierda o derecha · mantén apretado abajo a la derecha para lanzar</div>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+const W=cv.width, H=cv.height, R=9, G=0.16, SUB=8;
+const CLAVE="edtu_pinball_mejor";
+
+function leer(){ try{ return parseInt(localStorage.getItem(CLAVE)||"0",10)||0; }catch(e){ return 0; } }
+function guardar(v){ try{ localStorage.setItem(CLAVE,String(v)); }catch(e){} }
+
+let audio=null;
+function tono(f,d,tipo,vol,subida){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
+  const o=audio.createOscillator(), g=audio.createGain(); o.type=tipo||"square"; const t=audio.currentTime;
+  o.frequency.setValueAtTime(f,t); if(subida) o.frequency.exponentialRampToValueAtTime(f*subida,t+d);
+  g.gain.setValueAtTime(vol||0.07,t); g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t+d); }catch(e){} }
+
+/* ---------- la mesa ---------- */
+const PAREDES=[];   // segmentos {a:[x,y], b:[x,y], rebote, patada, col}
+function pared(x1,y1,x2,y2,extra){ PAREDES.push(Object.assign({a:[x1,y1],b:[x2,y2],rebote:0.55,patada:0,col:"#0cf"},extra||{})); }
+// arco de arriba
+const AC=[210,195], AR=190;
+for(let i=0;i<24;i++){ const a1=Math.PI+i/24*Math.PI, a2=Math.PI+(i+1)/24*Math.PI; pared(AC[0]+Math.cos(a1)*AR,AC[1]+Math.sin(a1)*AR,AC[0]+Math.cos(a2)*AR,AC[1]+Math.sin(a2)*AR); }
+pared(20,195,20,500);                 // pared izquierda
+pared(20,500,112,590);                // bajada izquierda hacia el flipper
+pared(400,195,400,660);               // pared de afuera del lanzador
+pared(370,660,400,660,{rebote:0.1});  // piso del lanzador
+pared(370,232,370,500);               // pared derecha de la mesa (separa el lanzador)
+pared(370,500,278,590);               // bajada derecha
+pared(370,232,390,214,{unaVia:true,col:"#ff3bd4"});   // compuerta: solo choca si la bola viene de la mesa
+pared(370,500,370,660);               // el lanzador por abajo
+// slingshots (patean)
+pared(62,430,62,500,{col:"#ff3bd4"}); pared(62,500,100,536,{col:"#ff3bd4"}); pared(62,430,100,536,{patada:5.5,col:"#ff3bd4",sling:true});
+pared(328,430,328,500,{col:"#ff3bd4"}); pared(328,500,290,536,{col:"#ff3bd4"}); pared(328,430,290,536,{patada:5.5,col:"#ff3bd4",sling:true});
+
+const BUMPERS=[{x:135,y:235,r:24,luz:0},{x:255,y:235,r:24,luz:0},{x:195,y:315,r:24,luz:0}];
+const POSTES=[{x:128,y:118,r:5},{x:172,y:118,r:5},{x:218,y:118,r:5},{x:262,y:118,r:5}];
+const CARRILES=[{x:150,y:118,on:false},{x:195,y:118,on:false},{x:240,y:118,on:false}];
+
+const LARGO=62, REPOSO=0.5, ARRIBA=-0.45;
+const FLIP=[{px:112,py:592,lado:1,ang:REPOSO,w:0,aprieta:false},{px:278,py:592,lado:-1,ang:REPOSO,w:0,aprieta:false}];
+function puntaFlipper(f){ const a=f.ang; return [f.px+Math.cos(a)*LARGO*f.lado, f.py+Math.sin(a)*LARGO]; }
+
+let bola=null, bolas=3, puntos=0, multi=1, carga=0, cargando=false, salvar=0, estado="menu", raf=null, partes=[], textos=[], esperandoOtra=false, finNuevo=false;
+
+function nuevaBola(){ bola={x:385,y:650-R,vx:0,vy:0,enLanzador:true}; salvar=0; }
+function empezar(){
+  $("menu").style.display="none"; esperandoOtra=false;
+  bolas=3; puntos=0; multi=1; CARRILES.forEach(c=>c.on=false); partes=[]; textos=[];
+  nuevaBola(); estado="jugando";
+  cancelAnimationFrame(raf); raf=requestAnimationFrame(paso);
+}
+function sumar(p,x,y){ const v=p*multi; puntos+=v; if(x!==undefined) textos.push({x,y,t:"+"+v,vida:40}); }
+
+/* choque bola contra segmento (con velocidad de superficie para los flippers) */
+function chocaSegmento(ax,ay,bx,by,grosor,rebote,vsup){
+  const dx=bx-ax, dy=by-ay, L2=dx*dx+dy*dy;
+  let t=((bola.x-ax)*dx+(bola.y-ay)*dy)/L2; t=Math.max(0,Math.min(1,t));
+  const cx=ax+dx*t, cy=ay+dy*t; let nx=bola.x-cx, ny=bola.y-cy; const d=Math.hypot(nx,ny);
+  if(d>=R+grosor||d===0) return false;
+  nx/=d; ny/=d;
+  bola.x=cx+nx*(R+grosor); bola.y=cy+ny*(R+grosor);
+  let sx=0, sy=0; if(vsup){ [sx,sy]=vsup(cx,cy); }
+  const rvx=bola.vx-sx, rvy=bola.vy-sy, vn=rvx*nx+rvy*ny;
+  if(vn<0){ bola.vx-=(1+rebote)*vn*nx; bola.vy-=(1+rebote)*vn*ny; }
+  return {nx,ny,vn};
+}
+
+function fisica(){
+  const dt=1/SUB;
+  // flippers
+  FLIP.forEach(f=>{
+    const meta=f.aprieta?ARRIBA:REPOSO, antes=f.ang, velAng=0.32*dt;
+    if(f.ang>meta) f.ang=Math.max(meta,f.ang-velAng); else if(f.ang<meta) f.ang=Math.min(meta,f.ang+velAng*0.6);
+    f.w=(f.ang-antes)/dt;     // radianes por cuadro
+  });
+  bola.vy+=G*dt;
+  const v=Math.hypot(bola.vx,bola.vy); if(v>24){ bola.vx*=24/v; bola.vy*=24/v; }
+  bola.x+=bola.vx*dt; bola.y+=bola.vy*dt;
+  // paredes
+  for(const p of PAREDES){
+    if(p.unaVia && bola.x>371) continue;
+    const h=chocaSegmento(p.a[0],p.a[1],p.b[0],p.b[1],2,p.rebote);
+    if(h && p.patada && -h.vn>1){ bola.vx+=h.nx*p.patada; bola.vy+=h.ny*p.patada; p.luz=8; sumar(10,bola.x,bola.y); tono(700,0.06,"square",0.05); }
+    else if(h && -h.vn>3) tono(180+Math.min(300,-h.vn*30),0.03,"triangle",0.025);
+  }
+  // postes y bumpers
+  POSTES.forEach(o=>{ const dx=bola.x-o.x, dy=bola.y-o.y, d=Math.hypot(dx,dy); if(d<R+o.r){ const nx=dx/d, ny=dy/d; bola.x=o.x+nx*(R+o.r); bola.y=o.y+ny*(R+o.r); const vn=bola.vx*nx+bola.vy*ny; if(vn<0){ bola.vx-=1.5*vn*nx; bola.vy-=1.5*vn*ny; } } });
+  BUMPERS.forEach(o=>{ const dx=bola.x-o.x, dy=bola.y-o.y, d=Math.hypot(dx,dy); if(d<R+o.r){ const nx=dx/d, ny=dy/d; bola.x=o.x+nx*(R+o.r); bola.y=o.y+ny*(R+o.r);
+    const vn=bola.vx*nx+bola.vy*ny; if(vn<0){ bola.vx-=1.6*vn*nx; bola.vy-=1.6*vn*ny; } bola.vx+=nx*5; bola.vy+=ny*5; o.luz=10; sumar(100,o.x,o.y-30);
+    tono(440+Math.random()*200,0.08,"square",0.06,1.6); for(let i=0;i<6;i++) partes.push({x:bola.x,y:bola.y,vx:nx*3+(Math.random()-0.5)*3,vy:ny*3+(Math.random()-0.5)*3,vida:20,col:"#ffd12e"}); } });
+  // flippers (cápsulas que giran)
+  FLIP.forEach(f=>{
+    const [tx,ty]=puntaFlipper(f);
+    const h=chocaSegmento(f.px,f.py,tx,ty,7,0.35,(cx,cy)=>{ const rx=cx-f.px, ry=cy-f.py; const om=f.w*f.lado; return [-om*ry,om*rx]; });
+    if(h && Math.abs(f.w)>0.01) tono(260,0.04,"square",0.03);
+  });
+  // carriles de arriba
+  CARRILES.forEach(c=>{ if(!c.on && Math.abs(bola.x-c.x)<12 && Math.abs(bola.y-c.y)<10){ c.on=true; sumar(50,c.x,c.y+20); tono(990,0.08,"sine",0.06);
+    if(CARRILES.every(k=>k.on)){ multi=Math.min(5,multi+1); sumar(1000,W/2,170); CARRILES.forEach(k=>k.on=false); textos.push({x:W/2,y:200,t:"MULTIPLICADOR x"+multi,vida:80});
+      [523,659,784,1047].forEach((fq,i)=>setTimeout(()=>tono(fq,0.12,"triangle",0.07),i*80)); } } });
+  if(bola.x<371) bola.enLanzador=false;
+}
+
+function paso(){
+  raf=requestAnimationFrame(paso);
+  if(estado==="jugando" && bola){
+    if(bola.x>371 && bola.y>600) bola.enLanzador=true;   // si vuelve a caer al carril, se puede lanzar otra vez
+    if(bola.enLanzador && bola.x>371 && bola.y>600){
+      // la bola espera en el lanzador
+      if(cargando) carga=Math.min(1,carga+0.022);
+    }
+    for(let s=0;s<SUB;s++) fisica();
+    if(salvar>0) salvar--;
+    if(bola.y>H+20){
+      if(salvar>0){ textos.push({x:W/2,y:H/2,t:"¡BOLA SALVADA!",vida:70}); nuevaBola(); }
+      else { bolas--; tono(160,0.5,"sawtooth",0.08,0.4);
+        if(bolas<=0){ estado="fin"; finNuevo=puntos>leer(); if(finNuevo) guardar(puntos); setTimeout(()=>esperandoOtra=true,700); }
+        else { textos.push({x:W/2,y:H/2,t:"BOLA "+(4-bolas),vida:60}); multi=1; nuevaBola(); } }
+    }
+  }
+  BUMPERS.forEach(b=>{ if(b.luz>0) b.luz--; }); PAREDES.forEach(p=>{ if(p.luz>0) p.luz--; });
+  partes.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.vida--; }); partes=partes.filter(p=>p.vida>0);
+  textos.forEach(t=>{ t.y-=0.6; t.vida--; }); textos=textos.filter(t=>t.vida>0);
+  dibujar();
+}
+function soltarLanzador(){
+  if(bola && bola.enLanzador && bola.x>371 && bola.y>600){ bola.vy=-(9+carga*14); salvar=60*6; tono(200,0.2,"sawtooth",0.06,3); }
+  carga=0; cargando=false;
+}
+
+function linea(a,b,col,anch){ ctx.strokeStyle=col; ctx.lineWidth=anch||3; ctx.shadowColor=col; ctx.shadowBlur=10; ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.stroke(); ctx.shadowBlur=0; }
+function dibujar(){
+  ctx.fillStyle="#02030a"; ctx.fillRect(0,0,W,H);
+  // fondo de la mesa
+  const g=ctx.createRadialGradient(W/2,H*0.45,40,W/2,H*0.45,H*0.6); g.addColorStop(0,"#0b0820"); g.addColorStop(1,"#02030a"); ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  PAREDES.forEach(p=>linea(p.a,p.b,p.luz>0?"#fff":p.col,p.sling?4:3));
+  // carriles y postes
+  CARRILES.forEach(c=>{ ctx.fillStyle=c.on?"#ffd12e":"rgba(255,209,46,.15)"; ctx.shadowColor="#ffd12e"; ctx.shadowBlur=c.on?14:0; ctx.beginPath(); ctx.arc(c.x,c.y+26,6,0,7); ctx.fill(); ctx.shadowBlur=0; });
+  POSTES.forEach(o=>{ ctx.fillStyle="#0cf"; ctx.beginPath(); ctx.arc(o.x,o.y,o.r,0,7); ctx.fill(); });
+  // bumpers
+  BUMPERS.forEach(b=>{ const col=b.luz>0?"#fff":"#ff3bd4"; ctx.strokeStyle=col; ctx.lineWidth=4; ctx.shadowColor="#ff3bd4"; ctx.shadowBlur=b.luz>0?28:14; ctx.fillStyle="rgba(255,59,212,.14)";
+    ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,7); ctx.fill(); ctx.stroke(); ctx.shadowBlur=0; ctx.fillStyle=col; ctx.beginPath(); ctx.arc(b.x,b.y,b.r*0.35,0,7); ctx.fill(); });
+  // flippers
+  FLIP.forEach(f=>{ const [tx,ty]=puntaFlipper(f); ctx.strokeStyle="#b6ff00"; ctx.lineCap="round"; ctx.lineWidth=14; ctx.shadowColor="#b6ff00"; ctx.shadowBlur=14;
+    ctx.beginPath(); ctx.moveTo(f.px,f.py); ctx.lineTo(tx,ty); ctx.stroke(); ctx.shadowBlur=0; ctx.lineCap="butt"; ctx.fillStyle="#02030a"; ctx.beginPath(); ctx.arc(f.px,f.py,3,0,7); ctx.fill(); });
+  // lanzador
+  const cy=660-carga*40; ctx.fillStyle="#ff8a1a"; ctx.fillRect(375,cy,20,8); ctx.fillStyle="rgba(255,138,26,.25)"; ctx.fillRect(375,cy+8,20,672-cy-8);
+  // bola
+  if(bola && estado!=="fin"){ ctx.fillStyle="#eaf6ff"; ctx.shadowColor="#fff"; ctx.shadowBlur=14; ctx.beginPath(); ctx.arc(bola.x,bola.y,R,0,7); ctx.fill(); ctx.shadowBlur=0;
+    ctx.fillStyle="rgba(255,255,255,.9)"; ctx.beginPath(); ctx.arc(bola.x-3,bola.y-3,3,0,7); ctx.fill(); }
+  partes.forEach(p=>{ ctx.globalAlpha=Math.max(0,p.vida/20); ctx.fillStyle=p.col; ctx.fillRect(p.x-2,p.y-2,4,4); }); ctx.globalAlpha=1;
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  textos.forEach(t=>{ ctx.globalAlpha=Math.min(1,t.vida/20); ctx.fillStyle="#ffd12e"; ctx.font="900 15px Segoe UI,sans-serif"; ctx.fillText(t.t,t.x,t.y); }); ctx.globalAlpha=1;
+  // marcador
+  ctx.font="900 24px Segoe UI,sans-serif"; ctx.fillStyle="#fff"; ctx.shadowColor="#ff3bd4"; ctx.shadowBlur=12; ctx.fillText(String(puntos),W/2,30); ctx.shadowBlur=0;
+  ctx.font="800 13px Segoe UI,sans-serif"; ctx.textAlign="left"; ctx.fillStyle="#7fc8e8"; ctx.fillText("BOLAS "+"●".repeat(Math.max(0,bolas)),14,30);
+  ctx.textAlign="right"; ctx.fillStyle="#ffd12e"; ctx.fillText("x"+multi,W-14,30);
+  if(salvar>0 && estado==="jugando" && bola && !bola.enLanzador){ ctx.textAlign="center"; ctx.fillStyle="rgba(182,255,0,.8)"; ctx.font="800 11px Segoe UI,sans-serif"; ctx.fillText("BOLA PROTEGIDA",195,660); }
+  if(bola && bola.enLanzador && bola.x>371 && estado==="jugando"){ ctx.textAlign="center"; ctx.fillStyle="#ff8a1a"; ctx.font="800 12px Segoe UI,sans-serif"; ctx.fillText("mantén y suelta para lanzar",195,650); }
+  if(estado==="fin"){
+    ctx.fillStyle="rgba(0,0,0,.72)"; ctx.fillRect(0,0,W,H); ctx.textAlign="center";
+    ctx.fillStyle="#fff"; ctx.font="900 34px Segoe UI,sans-serif"; ctx.shadowColor="#ff3bd4"; ctx.shadowBlur=18; ctx.fillText("FIN DEL JUEGO",W/2,H/2-60); ctx.shadowBlur=0;
+    ctx.fillStyle="#ffd12e"; ctx.font="800 26px Segoe UI,sans-serif"; ctx.fillText(puntos+" puntos",W/2,H/2-14);
+    ctx.fillStyle=finNuevo?"#b6ff00":"#7fc8e8"; ctx.font="700 17px Segoe UI,sans-serif"; ctx.fillText(finNuevo?"¡NUEVO RÉCORD!":"Récord: "+leer(),W/2,H/2+22);
+    ctx.fillStyle="#7fc8e8"; ctx.font="600 15px Segoe UI,sans-serif"; ctx.fillText("toca o aprieta ESPACIO para volver a jugar",W/2,H/2+62);
+  }
+}
+
+/* ---------- controles ---------- */
+addEventListener("keydown",e=>{
+  const k=e.key.toLowerCase();
+  if(esperandoOtra && (k===" "||k==="enter")){ e.preventDefault(); empezar(); return; }
+  if(k==="arrowleft"||k==="z"||k==="a"){ e.preventDefault(); if(!FLIP[0].aprieta) tono(150,0.04,"square",0.03); FLIP[0].aprieta=true; }
+  else if(k==="arrowright"||k==="m"||k==="l"){ e.preventDefault(); if(!FLIP[1].aprieta) tono(150,0.04,"square",0.03); FLIP[1].aprieta=true; }
+  else if(k===" "||k==="arrowdown"){ e.preventDefault(); cargando=true; }
+});
+addEventListener("keyup",e=>{
+  const k=e.key.toLowerCase();
+  if(k==="arrowleft"||k==="z"||k==="a") FLIP[0].aprieta=false;
+  else if(k==="arrowright"||k==="m"||k==="l") FLIP[1].aprieta=false;
+  else if(k===" "||k==="arrowdown") soltarLanzador();
+});
+const dedos=new Map();
+function zona(e){ const r=cv.getBoundingClientRect(), x=(e.clientX-r.left)*(W/r.width), y=(e.clientY-r.top)*(H/r.height);
+  if(bola && bola.enLanzador && bola.x>371 && x>300 && y>520) return "lanzar"; return x<W/2?"izq":"der"; }
+function recalcula(){ FLIP[0].aprieta=false; FLIP[1].aprieta=false; let lanza=false; dedos.forEach(z=>{ if(z==="izq") FLIP[0].aprieta=true; if(z==="der") FLIP[1].aprieta=true; if(z==="lanzar") lanza=true; });
+  if(lanza) cargando=true; else if(cargando) soltarLanzador(); }
+cv.addEventListener("pointerdown",e=>{ if(esperandoOtra){ empezar(); return; } dedos.set(e.pointerId,zona(e)); recalcula(); try{ cv.setPointerCapture(e.pointerId); }catch(x){} });
+["pointerup","pointercancel"].forEach(t=>cv.addEventListener(t,e=>{ dedos.delete(e.pointerId); recalcula(); }));
+$("empezar").onclick=empezar;
+
+$("stats").innerHTML="Récord de puntos: "+leer();
+dibujar();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>

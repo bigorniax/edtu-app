@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Plataformas Neón</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;background:#02030a;color:#eaf6ff}
+  #wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{display:block;max-width:100%;max-height:100%;border-radius:12px;touch-action:none;
+    box-shadow:0 0 28px rgba(0,204,255,.25),inset 0 0 40px rgba(0,204,255,.05)}
+  #menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(2,3,10,.92);text-align:center;padding:20px}
+  #menu h1{font-size:38px;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #fff,0 0 18px #0cf,0 0 40px #b6ff00}
+  #menu p{margin:14px 0 22px;color:#a8dcef;line-height:1.6;font-size:16px;max-width:480px}
+  #menu button{cursor:pointer;padding:16px 42px;border-radius:14px;border:2px solid #0cf;background:rgba(0,0,0,.6);
+    color:#fff;font-size:20px;font-weight:900;letter-spacing:2px;box-shadow:0 0 14px #0cf;text-shadow:0 0 8px #0cf}
+  #menu button:hover{transform:scale(1.05)}
+  #menu .stats{margin-top:18px;color:#ffd12e;font-weight:800;text-shadow:0 0 8px #ffd12e;line-height:1.7}
+  #menu .teclas{margin-top:10px;color:#9aa;font-size:13px}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="640" height="480"></canvas>
+  <div id="menu">
+    <h1>PLATAFORMAS NEÓN</h1>
+    <p>Corre y salta hasta la bandera. Junta monedas, salta sobre los bichos para aplastarlos y no toques los pinchos. Tienes 3 corazones. Cada nivel es más largo y más difícil.</p>
+    <button id="empezar">JUGAR</button>
+    <div class="teclas">◄ ► o A D para correr · ESPACIO, ▲ o W para saltar (más rato apretado = más alto) · en el celular, botones en pantalla</div>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+const W=cv.width, H=cv.height, T=32, FILAS=15;
+const CLAVE="edtu_plataformas_mejor";
+const GRAV=0.6, SALTO=-11.2, VEL=4.2;
+
+function leer(){ try{ return parseInt(localStorage.getItem(CLAVE)||"0",10)||0; }catch(e){ return 0; } }
+function guardar(v){ try{ localStorage.setItem(CLAVE,String(v)); }catch(e){} }
+
+let audio=null;
+function tono(f,d,tipo,vol,subida){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
+  const o=audio.createOscillator(), g=audio.createGain(); o.type=tipo||"square"; const t=audio.currentTime;
+  o.frequency.setValueAtTime(f,t); if(subida) o.frequency.exponentialRampToValueAtTime(f*subida,t+d);
+  g.gain.setValueAtTime(vol||0.07,t); g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t+d); }catch(e){} }
+
+/* ---------- armar niveles con pedazos que siempre se pueden pasar ----------
+   el salto sube ~3 bloques y avanza ~4,5: los hoyos miden 3 como maximo y los escalones 2 */
+function armaNivel(num){
+  let semilla=num*104729+7;
+  const rnd=()=>{ semilla=(semilla*1103515245+12345)&0x7fffffff; return semilla/0x7fffffff; };
+  const ent=(a,b)=>a+Math.floor(rnd()*(b-a+1));
+  const cols=[], cosas=[];  // cosas: enemigos y plataformas moviles
+  let g=11;                 // fila donde empieza el suelo
+  const col=(gg,extra)=>{ const c=[]; for(let r=0;r<FILAS;r++) c.push(gg!==null&&r>=gg?"#":" "); if(extra) for(const k in extra) c[k]=extra[k]; cols.push(c); };
+  const plano=(n,monedas,bichos)=>{ for(let i=0;i<n;i++){ const ex={}; if(monedas&&i%2===1) ex[g-2]="o"; col(g,ex); }
+    for(let b=0;b<bichos;b++) cosas.push({tipo:"bicho",c:cols.length-1-Math.floor(n*(b+1)/(bichos+1)),f:g-1}); };
+  plano(6,false,0);
+  const inicio=1;
+  const largo=10+num*3, dif=Math.min(1,(num-1)/8);
+  for(let s=0;s<largo;s++){
+    const r=rnd();
+    if(r<0.16){ plano(ent(3,6),true,rnd()<0.25+dif*0.5?1:0); }
+    else if(r<0.30){ const w=ent(2,dif>0.4?3:2); for(let i=0;i<w;i++) col(null,{[g-3]:i===Math.floor(w/2)?"o":" "}); plano(3,false,0); }
+    else if(r<0.42){ const sube=ent(1,2); g=Math.max(6,g-sube); plano(ent(2,4),true,0); }
+    else if(r<0.52){ const baja=ent(1,2); g=Math.min(12,g+baja); plano(ent(2,4),false,0); }
+    else if(r<0.62){ plano(1,false,0); const n=ent(1,dif>0.3?3:2); for(let i=0;i<n;i++) col(g,{[g-1]:"^",[g-4]:"o"}); plano(3,false,0); }
+    else if(r<0.72){ // hoyo ancho con plataforma flotante al medio
+      plano(1,false,0); const alto=g-ent(1,2);
+      col(null); col(null); col(null,{[alto]:"=",[alto-1]:"o"}); col(null,{[alto]:"="}); col(null); col(null); plano(3,false,0); }
+    else if(r<0.80 && num>=2){ // plataforma que se mueve sobre un hoyo largo
+      plano(1,false,0); const desde=cols.length; for(let i=0;i<8;i++) col(null,{[g-3]:i===4?"o":" "});
+      cosas.push({tipo:"movil",c0:desde,c1:desde+6,f:g,vel:1+dif*0.8}); plano(3,false,0); }
+    else if(r<0.90){ plano(ent(5,8),true,ent(1,1+Math.round(dif*2))); }
+    else { // escalera de bloques flotantes para monedas altas
+      plano(2,false,0); col(g,{[g-3]:"=",[g-4]:"o"}); col(g,{[g-3]:"="}); col(g); plano(1,false,0); }
+  }
+  plano(3,false,0); const meta=cols.length; col(g,{[g-1]:"F"}); plano(5,false,0);
+  for(let i=0;i<2;i++){ const c=[]; for(let r=0;r<FILAS;r++) c.push("#"); cols.push(c); }   // pared al final
+  return {cols, cosas, meta, inicio, g0:11};
+}
+
+let nivel=1, mundo, ancho, jug, bichos=[], moviles=[], monedas=0, vidas=3, camX=0, estado="menu", raf=null, partes=[], esperandoOtra=false, finNuevo=false, tMsg=0, msg="";
+const tecla={izq:false,der:false,salto:false};
+
+function solido(c,f){ if(c<0) return true; if(c>=ancho||f<0) return false; if(f>=FILAS) return false; const ch=mundo.cols[c][f]; return ch==="#"||ch==="="; }
+function cargar(n){
+  nivel=n; mundo=armaNivel(n); ancho=mundo.cols.length;
+  let fy=0; for(let r=0;r<FILAS;r++) if(mundo.cols[mundo.inicio][r]==="#"){ fy=r; break; }
+  jug={x:mundo.inicio*T+5, y:fy*T-28, w:22, h:28, vx:0, vy:0, suelo:false, coyote:0, buffer:0, mira:1, inv:0, sobre:null};
+  bichos=mundo.cosas.filter(o=>o.tipo==="bicho").map(o=>({x:o.c*T+4,y:o.f*T+8,w:24,h:24,vx:(0.9+Math.min(1,n*0.08))*(Math.random()<0.5?1:-1),vivo:true,aplastado:0}));
+  moviles=mundo.cosas.filter(o=>o.tipo==="movil").map(o=>({x:o.c0*T,y:o.f*T,w:T*2,h:12,min:o.c0*T,max:o.c1*T,v:o.vel,dx:0}));
+  camX=0; msg="NIVEL "+n; tMsg=90;
+}
+function empezar(){
+  $("menu").style.display="none"; esperandoOtra=false;
+  monedas=0; vidas=3; partes=[];
+  cargar(1); estado="jugando";
+  cancelAnimationFrame(raf); raf=requestAnimationFrame(paso);
+}
+
+function chocaMapa(o){
+  const c0=Math.floor(o.x/T), c1=Math.floor((o.x+o.w-0.001)/T), f0=Math.floor(o.y/T), f1=Math.floor((o.y+o.h-0.001)/T);
+  for(let c=c0;c<=c1;c++) for(let f=f0;f<=f1;f++) if(solido(c,f)) return {c,f};
+  return null;
+}
+function moverEje(o,dx,dy){
+  o.x+=dx;
+  let h=chocaMapa(o);
+  if(h){ if(dx>0) o.x=h.c*T-o.w; else if(dx<0) o.x=(h.c+1)*T; return "x"; }
+  o.y+=dy;
+  h=chocaMapa(o);
+  if(h){ if(dy>0) o.y=h.f*T-o.h; else if(dy<0) o.y=(h.f+1)*T; return dy>0?"suelo":"techo"; }
+  return null;
+}
+
+function morir(){
+  if(estado!=="jugando") return;
+  vidas--; estado="muerto";
+  for(let i=0;i<30;i++){ const a=Math.random()*7, v=Math.random()*5+1; partes.push({x:jug.x+11,y:jug.y+14,vx:Math.cos(a)*v,vy:Math.sin(a)*v,vida:45,col:"#0cf"}); }
+  tono(220,0.5,"sawtooth",0.08,0.3);
+  setTimeout(()=>{ if(vidas<=0){ estado="fin"; finNuevo=nivel-1>leer(); if(finNuevo) guardar(nivel-1); setTimeout(()=>esperandoOtra=true,500); } else { cargar(nivel); estado="jugando"; } },1100);
+}
+
+function paso(){
+  raf=requestAnimationFrame(paso);
+  if(estado==="jugando"){
+    // plataformas moviles
+    moviles.forEach(m=>{ const antes=m.x; m.x+=m.v; if(m.x<m.min||m.x>m.max){ m.v=-m.v; m.x=Math.max(m.min,Math.min(m.max,m.x)); } m.dx=m.x-antes; });
+    // jugador
+    const quiere=(tecla.der?1:0)-(tecla.izq?1:0);
+    if(quiere) jug.mira=quiere;
+    jug.vx += (quiere*VEL - jug.vx)*(jug.suelo?0.35:0.18);
+    if(tecla.salto) jug.buffer=7; else if(jug.buffer>0) jug.buffer--;
+    if(jug.suelo) jug.coyote=7; else if(jug.coyote>0) jug.coyote--;
+    if(jug.buffer>0 && jug.coyote>0){ jug.vy=SALTO; jug.buffer=0; jug.coyote=0; jug.suelo=false; jug.sobre=null; tono(520,0.08,"square",0.04,1.6); }
+    if(!tecla.salto && jug.vy<-4) jug.vy=-4;   // soltar el boton corta el salto
+    jug.vy=Math.min(13,jug.vy+GRAV);
+    if(jug.sobre){ jug.x+=jug.sobre.dx; }
+    const antesAbajo=jug.y+jug.h;
+    moverEje(jug,jug.vx,0);
+    const r=moverEje(jug,0,jug.vy);
+    jug.suelo = r==="suelo"; if(r) jug.vy= r==="suelo"?0:Math.max(0,jug.vy);
+    if(r==="techo") jug.vy=1;
+    // aterrizar en una plataforma movil (solo desde arriba)
+    jug.sobre=null;
+    moviles.forEach(m=>{
+      const abajo=jug.y+jug.h;
+      if(jug.vy>=0 && antesAbajo<=m.y+2 && abajo>=m.y && jug.x+jug.w>m.x && jug.x<m.x+m.w){ jug.y=m.y-jug.h; jug.vy=0; jug.suelo=true; jug.sobre=m; }
+    });
+    if(jug.x<0) jug.x=0;
+    if(jug.y>H+40) morir();
+    // monedas, pinchos y bandera
+    const c0=Math.floor(jug.x/T), c1=Math.floor((jug.x+jug.w-1)/T), f0=Math.floor(jug.y/T), f1=Math.floor((jug.y+jug.h-1)/T);
+    for(let c=c0;c<=c1;c++) for(let f=f0;f<=f1;f++){
+      if(c<0||c>=ancho||f<0||f>=FILAS) continue;
+      const ch=mundo.cols[c][f];
+      if(ch==="o"){ mundo.cols[c][f]=" "; monedas++; tono(990,0.08,"triangle",0.06,1.5); for(let i=0;i<8;i++) partes.push({x:c*T+16,y:f*T+16,vx:(Math.random()-0.5)*4,vy:-Math.random()*3,vida:24,col:"#ffd12e"}); }
+      else if(ch==="^" && jug.y+jug.h>f*T+20 && jug.x+jug.w-5>c*T && jug.x+5<(c+1)*T) morir();   // zona de daño un poco mas chica: es mas justo
+    }
+    if(estado==="jugando" && jug.x+jug.w>mundo.meta*T+6) ganarNivel();   // la bandera cuenta en toda su columna
+    // bichos
+    bichos.forEach(b=>{
+      if(!b.vivo){ b.aplastado--; return; }
+      b.x+=b.vx;
+      const delante=b.vx>0?Math.floor((b.x+b.w)/T):Math.floor((b.x-1)/T), pie=Math.floor((b.y+b.h+2)/T), cuerpo=Math.floor((b.y+b.h/2)/T);
+      if(solido(delante,cuerpo) || !solido(delante,pie)) b.vx=-b.vx;
+      if(estado==="jugando" && jug.x+jug.w>b.x && jug.x<b.x+b.w && jug.y+jug.h>b.y && jug.y<b.y+b.h){
+        if(jug.vy>1 && antesAbajo<=b.y+10){ b.vivo=false; b.aplastado=30; jug.vy=-8; monedas+=2; tono(300,0.12,"square",0.06,2.2); }
+        else morir();
+      }
+    });
+    bichos=bichos.filter(b=>b.vivo||b.aplastado>0);
+    // camara
+    const meta=jug.x-W*0.4; camX+= (Math.max(0,Math.min(ancho*T-W,meta))-camX)*0.15;
+  }
+  if(tMsg>0) tMsg--;
+  partes.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=0.2; p.vida--; }); partes=partes.filter(p=>p.vida>0);
+  dibujar();
+}
+function ganarNivel(){
+  estado="ganado"; [523,659,784,1047].forEach((f,i)=>setTimeout(()=>tono(f,0.14,"triangle",0.07),i*90));
+  if(nivel>leer()) guardar(nivel);
+  msg="¡NIVEL "+nivel+" LISTO!"; tMsg=100;
+  setTimeout(()=>{ cargar(nivel+1); estado="jugando"; },1700);
+}
+
+function dibujar(){
+  ctx.fillStyle="#02030a"; ctx.fillRect(0,0,W,H);
+  // fondo con cuadricula lejana (parallax)
+  ctx.strokeStyle="rgba(0,204,255,.05)"; ctx.lineWidth=1;
+  const off=-(camX*0.3)%64;
+  for(let x=off;x<W;x+=64){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for(let y=0;y<H;y+=64){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+  if(!mundo) return;
+  ctx.save(); ctx.translate(-Math.round(camX),0);
+  const c0=Math.max(0,Math.floor(camX/T)-1), c1=Math.min(ancho-1,Math.ceil((camX+W)/T)+1);
+  for(let c=c0;c<=c1;c++) for(let f=0;f<FILAS;f++){
+    const ch=mundo.cols[c][f], x=c*T, y=f*T;
+    if(ch==="#"){
+      ctx.fillStyle="#071422"; ctx.fillRect(x,y,T,T);
+      if(!solido(c,f-1)||mundo.cols[c][f-1]==="="){ ctx.fillStyle="#0cf"; ctx.shadowColor="#0cf"; ctx.shadowBlur=10; ctx.fillRect(x,y,T,3); ctx.shadowBlur=0; }
+      else { ctx.strokeStyle="rgba(0,204,255,.08)"; ctx.strokeRect(x+0.5,y+0.5,T-1,T-1); }
+    } else if(ch==="="){
+      ctx.fillStyle="rgba(255,59,212,.15)"; ctx.fillRect(x,y,T,T*0.5); ctx.strokeStyle="#ff3bd4"; ctx.lineWidth=2; ctx.shadowColor="#ff3bd4"; ctx.shadowBlur=10; ctx.strokeRect(x+1,y+1,T-2,T*0.5-2); ctx.shadowBlur=0;
+    } else if(ch==="^"){
+      ctx.fillStyle="#ff3b5c"; ctx.shadowColor="#ff3b5c"; ctx.shadowBlur=10;
+      for(let k=0;k<3;k++){ ctx.beginPath(); ctx.moveTo(x+k*T/3,y+T); ctx.lineTo(x+k*T/3+T/6,y+T*0.45); ctx.lineTo(x+(k+1)*T/3,y+T); ctx.fill(); }
+      ctx.shadowBlur=0;
+    } else if(ch==="o"){
+      const s=Math.abs(Math.sin(performance.now()/300+c));
+      ctx.fillStyle="#ffd12e"; ctx.shadowColor="#ffd12e"; ctx.shadowBlur=12; ctx.beginPath(); ctx.ellipse(x+T/2,y+T/2,7*(0.4+s*0.6),8,0,0,7); ctx.fill(); ctx.shadowBlur=0;
+    } else if(ch==="F"){
+      ctx.strokeStyle="#eaf6ff"; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(x+8,y+T); ctx.lineTo(x+8,y-T*2.2); ctx.stroke();
+      ctx.fillStyle="#b6ff00"; ctx.shadowColor="#b6ff00"; ctx.shadowBlur=16; ctx.beginPath(); ctx.moveTo(x+8,y-T*2.2); ctx.lineTo(x+40,y-T*1.8); ctx.lineTo(x+8,y-T*1.4); ctx.fill(); ctx.shadowBlur=0;
+    }
+  }
+  moviles.forEach(m=>{ ctx.fillStyle="rgba(182,255,0,.15)"; ctx.fillRect(m.x,m.y,m.w,m.h); ctx.strokeStyle="#b6ff00"; ctx.lineWidth=2; ctx.shadowColor="#b6ff00"; ctx.shadowBlur=12; ctx.strokeRect(m.x+1,m.y+1,m.w-2,m.h-2); ctx.shadowBlur=0; });
+  bichos.forEach(b=>{
+    if(!b.vivo){ ctx.fillStyle="#b46bff"; ctx.globalAlpha=b.aplastado/30; ctx.fillRect(b.x,b.y+b.h-6,b.w,6); ctx.globalAlpha=1; return; }
+    const sal=Math.abs(Math.sin(performance.now()/120+b.x))*3;
+    ctx.fillStyle="#b46bff"; ctx.shadowColor="#b46bff"; ctx.shadowBlur=12;
+    ctx.beginPath(); ctx.arc(b.x+b.w/2,b.y+b.h/2+2-sal,b.w/2,Math.PI,0); ctx.lineTo(b.x+b.w,b.y+b.h); ctx.lineTo(b.x,b.y+b.h); ctx.closePath(); ctx.fill(); ctx.shadowBlur=0;
+    const ojo=b.vx>0?3:-3; ctx.fillStyle="#fff"; ctx.fillRect(b.x+6+ojo,b.y+8-sal,4,5); ctx.fillRect(b.x+14+ojo,b.y+8-sal,4,5);
+  });
+  if(estado==="jugando"||estado==="ganado"){
+    const j=jug; ctx.fillStyle="#0cf"; ctx.shadowColor="#0cf"; ctx.shadowBlur=16;
+    ctx.beginPath(); if(ctx.roundRect) ctx.roundRect(j.x,j.y,j.w,j.h,6); else ctx.rect(j.x,j.y,j.w,j.h); ctx.fill(); ctx.shadowBlur=0;
+    ctx.fillStyle="#02030a"; const ox=j.mira>0?4:-4; ctx.fillRect(j.x+5+ox,j.y+7,4,6); ctx.fillRect(j.x+13+ox,j.y+7,4,6);
+    ctx.fillStyle="#ff3bd4"; ctx.fillRect(j.x-2,j.y+2,j.w+4,4);   // bandana
+  }
+  partes.forEach(p=>{ ctx.globalAlpha=Math.max(0,p.vida/45); ctx.fillStyle=p.col; ctx.fillRect(p.x-2,p.y-2,4,4); }); ctx.globalAlpha=1;
+  ctx.restore();
+  // barra
+  ctx.textBaseline="middle"; ctx.font="900 17px Segoe UI,sans-serif";
+  ctx.textAlign="left"; ctx.fillStyle="#ff3b5c"; ctx.fillText("♥".repeat(Math.max(0,vidas)),14,22);
+  ctx.fillStyle="#ffd12e"; ctx.fillText("● "+monedas,80,22);
+  ctx.textAlign="right"; ctx.fillStyle="#0cf"; ctx.fillText("NIVEL "+nivel,W-14,22);
+  // avance
+  if(jug && mundo){ const k=Math.min(1,jug.x/(mundo.meta*T)); ctx.fillStyle="rgba(255,255,255,.1)"; ctx.fillRect(W/2-90,18,180,6); ctx.fillStyle="#b6ff00"; ctx.fillRect(W/2-90,18,180*k,6); }
+  if(tMsg>0){ ctx.globalAlpha=Math.min(1,tMsg/25); ctx.textAlign="center"; ctx.fillStyle="#fff"; ctx.font="900 32px Segoe UI,sans-serif"; ctx.shadowColor="#0cf"; ctx.shadowBlur=18; ctx.fillText(msg,W/2,H*0.3); ctx.shadowBlur=0; ctx.globalAlpha=1; }
+  // botones tactiles
+  if(tactil && estado==="jugando"){
+    BOTONES.forEach(b=>{ ctx.globalAlpha=tecla[b.id]?0.5:0.22; ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,7); ctx.fill(); ctx.globalAlpha=1;
+      ctx.fillStyle="#02030a"; ctx.font="900 20px Segoe UI,sans-serif"; ctx.textAlign="center"; ctx.fillText(b.txt,b.x,b.y+1); });
+  }
+  if(estado==="fin"){
+    ctx.fillStyle="rgba(0,0,0,.72)"; ctx.fillRect(0,0,W,H); ctx.textAlign="center";
+    ctx.fillStyle="#fff"; ctx.font="900 34px Segoe UI,sans-serif"; ctx.shadowColor="#ff3b5c"; ctx.shadowBlur=18; ctx.fillText("SIN CORAZONES",W/2,H/2-60); ctx.shadowBlur=0;
+    ctx.fillStyle="#ffd12e"; ctx.font="800 24px Segoe UI,sans-serif"; ctx.fillText("llegaste al nivel "+nivel+" · "+monedas+" monedas",W/2,H/2-14);
+    ctx.fillStyle=finNuevo?"#b6ff00":"#7fc8e8"; ctx.font="700 17px Segoe UI,sans-serif"; ctx.fillText(finNuevo?"¡NUEVO RÉCORD!":"Récord: nivel "+leer()+" terminado",W/2,H/2+22);
+    ctx.fillStyle="#7fc8e8"; ctx.font="600 15px Segoe UI,sans-serif"; ctx.fillText("toca o aprieta ESPACIO para volver a jugar",W/2,H/2+62);
+  }
+}
+
+/* ---------- controles ---------- */
+const MAPA={arrowleft:"izq",a:"izq",arrowright:"der",d:"der",arrowup:"salto",w:"salto"," ":"salto"};
+addEventListener("keydown",e=>{
+  const k=e.key.toLowerCase();
+  if(esperandoOtra && (k===" "||k==="enter")){ e.preventDefault(); empezar(); return; }
+  if(MAPA[k]){ e.preventDefault(); tecla[MAPA[k]]=true; }
+});
+addEventListener("keyup",e=>{ const k=MAPA[e.key.toLowerCase()]; if(k) tecla[k]=false; });
+let tactil=false;
+const BOTONES=[{id:"izq",x:60,y:H-60,r:38,txt:"◄"},{id:"der",x:150,y:H-60,r:38,txt:"►"},{id:"salto",x:W-70,y:H-60,r:46,txt:"▲"}];
+const dedos=new Map();
+function botonEn(e){ const r=cv.getBoundingClientRect(), x=(e.clientX-r.left)*(W/r.width), y=(e.clientY-r.top)*(H/r.height);
+  const b=BOTONES.find(b=>Math.hypot(x-b.x,y-b.y)<b.r+18); return b?b.id:null; }
+function recalcula(){ tecla.izq=tecla.der=tecla.salto=false; dedos.forEach(id=>{ if(id) tecla[id]=true; }); }
+cv.addEventListener("pointerdown",e=>{
+  if(esperandoOtra){ empezar(); return; }
+  if(e.pointerType!=="mouse") tactil=true;
+  dedos.set(e.pointerId,botonEn(e)); recalcula(); try{ cv.setPointerCapture(e.pointerId); }catch(x){}
+});
+cv.addEventListener("pointermove",e=>{ if(dedos.has(e.pointerId)){ dedos.set(e.pointerId,botonEn(e)); recalcula(); } });
+["pointerup","pointercancel"].forEach(t=>cv.addEventListener(t,e=>{ dedos.delete(e.pointerId); recalcula(); }));
+$("empezar").onclick=empezar;
+
+$("stats").innerHTML=leer()?"Récord: nivel "+leer()+" terminado":"Todavía no hay récord";
+dibujar();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>
