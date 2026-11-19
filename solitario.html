@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Solitario Neón</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;background:#02030a;color:#eaf6ff}
+  #wrap{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px}
+  canvas{display:block;max-width:100%;max-height:calc(100% - 56px);border-radius:12px;touch-action:none;
+    box-shadow:0 0 28px rgba(0,204,255,.2),inset 0 0 40px rgba(0,204,255,.05)}
+  #botones{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  #botones button{cursor:pointer;padding:9px 16px;border-radius:10px;border:1.5px solid #0cf;background:rgba(0,0,0,.6);color:#fff;font-weight:800;font-size:13px;letter-spacing:1px}
+  #botones button:hover{box-shadow:0 0 12px #0cf}
+  #bTerminar{display:none;border-color:#b6ff00!important}
+  #menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(2,3,10,.94);text-align:center;padding:20px;z-index:5}
+  #menu h1{font-size:40px;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #fff,0 0 18px #0cf,0 0 40px #ff3b5c}
+  #menu p{margin:14px 0 22px;color:#a8dcef;line-height:1.6;font-size:16px;max-width:470px}
+  #menu button{cursor:pointer;padding:16px 42px;border-radius:14px;border:2px solid #0cf;background:rgba(0,0,0,.6);color:#fff;font-size:20px;font-weight:900;letter-spacing:2px;box-shadow:0 0 14px #0cf}
+  #menu .stats{margin-top:18px;color:#ffd12e;font-weight:800;line-height:1.7}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="560" height="700"></canvas>
+  <div id="botones"><button id="bDeshacer">DESHACER</button><button id="bNueva">NUEVA PARTIDA</button><button id="bTerminar">TERMINAR SOLO ★</button></div>
+  <div id="menu">
+    <h1>SOLITARIO NEÓN</h1>
+    <p>Ordena las cartas en las cuatro pilas de arriba, del As al Rey y del mismo palo. Abajo se apilan bajando de a uno y alternando rojo y celeste. Arrastra las cartas o tócalas para que se muevan solas.</p>
+    <button id="empezar">JUGAR</button>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+const W=cv.width, H=cv.height;
+const CW=72, CH=100, GAP=(W-7*CW)/8, TOP=56, FILA2=TOP+CH+26;
+const CLAVE="edtu_solitario_mejor";   // partidas ganadas
+const CLAVE_T="edtu_solitario_tiempo";
+const PALOS=["♥","♦","♣","♠"], ROJO=s=>s<2, NUM=["","A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+
+function leer(k){ try{ return parseInt(localStorage.getItem(k||CLAVE)||"0",10)||0; }catch(e){ return 0; } }
+function guardar(v,k){ try{ localStorage.setItem(k||CLAVE,String(v)); }catch(e){} }
+
+let audio=null;
+function tono(f,d,tipo,vol,subida){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
+  const o=audio.createOscillator(), g=audio.createGain(); o.type=tipo||"square"; const t=audio.currentTime;
+  o.frequency.setValueAtTime(f,t); if(subida) o.frequency.exponentialRampToValueAtTime(f*subida,t+d);
+  g.gain.setValueAtTime(vol||0.07,t); g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t+d); }catch(e){} }
+
+let mesa, historia=[], movs=0, t0=0, ganado=false, arrastre=null, raf=null, autom=null, fuegos=[];
+
+function colX(i){ return GAP+i*(CW+GAP); }
+function nueva(){
+  const mazo=[]; for(let s=0;s<4;s++) for(let r=1;r<=13;r++) mazo.push({r,s,up:false});
+  for(let i=mazo.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [mazo[i],mazo[j]]=[mazo[j],mazo[i]]; }
+  mesa={tab:[[],[],[],[],[],[],[]], fund:[[],[],[],[]], stock:[], waste:[]};
+  for(let i=0;i<7;i++) for(let k=0;k<=i;k++){ const c=mazo.pop(); c.up=(k===i); mesa.tab[i].push(c); }
+  mesa.stock=mazo;
+  historia=[]; movs=0; t0=performance.now(); ganado=false; autom=null; fuegos=[];
+  $("bTerminar").style.display="none";
+}
+function foto(){ historia.push(JSON.stringify(mesa)); if(historia.length>200) historia.shift(); }
+function deshacer(){ if(ganado||autom) return; const h=historia.pop(); if(h){ mesa=JSON.parse(h); movs++; tono(330,0.05,"sine",0.04); revisaTerminar(); } }
+
+function separacion(pila){
+  // si la pila es muy alta, se aprietan las cartas para que quepa
+  let alto=0; pila.forEach((c,i)=>{ if(i<pila.length-1) alto+=c.up?26:10; });
+  const max=H-FILA2-CH-10; return alto>max?max/alto:1;
+}
+function posTab(i,k){ const p=mesa.tab[i], f=separacion(p); let y=FILA2; for(let j=0;j<k;j++) y+=(p[j].up?26:10)*f; return [colX(i),y]; }
+
+function puedeFund(c,f){ const p=mesa.fund[f]; if(!p.length) return c.r===1; const t=p[p.length-1]; return t.s===c.s && c.r===t.r+1; }
+function puedeTab(c,i){ const p=mesa.tab[i]; if(!p.length) return c.r===13; const t=p[p.length-1]; return t.up && ROJO(t.s)!==ROJO(c.s) && c.r===t.r-1; }
+
+function sacarOrigen(o){
+  if(o.tipo==="waste") return [mesa.waste.pop()];
+  if(o.tipo==="fund") return [mesa.fund[o.i].pop()];
+  return mesa.tab[o.i].splice(o.k);
+}
+function voltear(){ mesa.tab.forEach(p=>{ if(p.length&&!p[p.length-1].up){ p[p.length-1].up=true; } }); }
+function mover(o,destino,i){
+  foto();
+  const cartas=sacarOrigen(o);
+  if(destino==="fund") mesa.fund[i].push(cartas[0]); else mesa.tab[i].push(...cartas);
+  voltear(); movs++;
+  tono(destino==="fund"?880:520,0.06,destino==="fund"?"sine":"triangle",0.05);
+  revisaGanado(); revisaTerminar();
+}
+function cartasDe(o){ if(o.tipo==="waste") return [mesa.waste[mesa.waste.length-1]]; if(o.tipo==="fund") return [mesa.fund[o.i][mesa.fund[o.i].length-1]]; return mesa.tab[o.i].slice(o.k); }
+
+function automatico(o){
+  const cs=cartasDe(o);
+  if(cs.length===1) for(let f=0;f<4;f++) if(puedeFund(cs[0],f)){ mover(o,"fund",f); return true; }
+  for(let i=0;i<7;i++){ if(o.tipo==="tab"&&o.i===i) continue; if(puedeTab(cs[0],i)){ if(cs[0].r===13 && o.tipo==="tab" && o.k===0) continue; mover(o,"tab",i); return true; } }
+  tono(150,0.06,"square",0.03); return false;
+}
+function robar(){
+  foto();
+  if(mesa.stock.length){ const c=mesa.stock.pop(); c.up=true; mesa.waste.push(c); tono(400,0.04,"triangle",0.03); }
+  else if(mesa.waste.length){ mesa.stock=mesa.waste.reverse().map(c=>({...c,up:false})); mesa.waste=[]; tono(250,0.08,"sine",0.04); }
+  else historia.pop();
+  movs++; revisaTerminar();
+}
+function revisaGanado(){
+  if(mesa.fund.every(p=>p.length===13) && !ganado){
+    ganado=true; autom=null; $("bTerminar").style.display="none";
+    guardar(leer()+1);
+    const seg=Math.round((performance.now()-t0)/1000), mejor=leer(CLAVE_T); if(!mejor||seg<mejor) guardar(seg,CLAVE_T);
+    [523,659,784,1047,1319].forEach((f,i)=>setTimeout(()=>tono(f,0.15,"triangle",0.07),i*100));
+    for(let i=0;i<120;i++){ const a=Math.random()*7, v=Math.random()*6+2; fuegos.push({x:W/2,y:H/2,vx:Math.cos(a)*v,vy:Math.sin(a)*v-2,vida:90,col:["#0cf","#ff3b5c","#ffd12e","#b6ff00"][i%4]}); }
+  }
+}
+function revisaTerminar(){
+  const listo=!mesa.stock.length && !mesa.waste.length && mesa.tab.every(p=>p.every(c=>c.up)) && !ganado;
+  $("bTerminar").style.display=listo?"inline-block":"none";
+}
+function terminarSolo(){
+  if(autom||ganado) return;
+  autom=setInterval(()=>{
+    let hecho=false;
+    for(let i=0;i<7&&!hecho;i++){ const p=mesa.tab[i]; if(!p.length) continue; const c=p[p.length-1];
+      for(let f=0;f<4;f++) if(puedeFund(c,f)){ mover({tipo:"tab",i,k:p.length-1},"fund",f); hecho=true; break; } }
+    if(!hecho||ganado){ clearInterval(autom); autom=null; }
+  },90);
+}
+
+/* ---------- dibujo ---------- */
+function rect(x,y,w,h,r){ ctx.beginPath(); if(ctx.roundRect) ctx.roundRect(x,y,w,h,r); else ctx.rect(x,y,w,h); }
+function carta(c,x,y,brillo){
+  if(!c.up){
+    ctx.fillStyle="#0a1530"; rect(x,y,CW,CH,8); ctx.fill(); ctx.strokeStyle="rgba(0,204,255,.5)"; ctx.lineWidth=1.5; ctx.stroke();
+    ctx.strokeStyle="rgba(0,204,255,.18)"; rect(x+6,y+6,CW-12,CH-12,5); ctx.stroke();
+    ctx.fillStyle="rgba(0,204,255,.35)"; ctx.font="900 18px Segoe UI,sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("E",x+CW/2,y+CH/2);
+    return;
+  }
+  const col=ROJO(c.s)?"#ff3b5c":"#0cf";
+  ctx.fillStyle="#0b0c14"; rect(x,y,CW,CH,8); ctx.fill();
+  ctx.strokeStyle=brillo?"#ffd12e":col; ctx.lineWidth=brillo?2.5:1.8; ctx.shadowColor=brillo?"#ffd12e":col; ctx.shadowBlur=brillo?16:6; ctx.stroke(); ctx.shadowBlur=0;
+  ctx.fillStyle=col; ctx.textAlign="left"; ctx.textBaseline="top"; ctx.font="900 17px Segoe UI,sans-serif";
+  ctx.fillText(NUM[c.r],x+6,y+5); ctx.font="700 15px Segoe UI,sans-serif"; ctx.fillText(PALOS[c.s],x+6,y+24);
+  ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.font="900 34px Segoe UI,sans-serif"; ctx.shadowColor=col; ctx.shadowBlur=10; ctx.fillText(PALOS[c.s],x+CW/2+6,y+CH/2+12); ctx.shadowBlur=0;
+}
+function hueco(x,y,txt){ ctx.strokeStyle="rgba(255,255,255,.14)"; ctx.lineWidth=1.5; ctx.setLineDash([5,5]); rect(x,y,CW,CH,8); ctx.stroke(); ctx.setLineDash([]);
+  if(txt){ ctx.fillStyle="rgba(255,255,255,.18)"; ctx.font="900 26px Segoe UI,sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(txt,x+CW/2,y+CH/2); } }
+
+function dibujar(){
+  ctx.fillStyle="#02030a"; ctx.fillRect(0,0,W,H);
+  if(!mesa) return;
+  // barra
+  const seg=ganado?0:Math.floor((performance.now()-t0)/1000);
+  ctx.textBaseline="middle"; ctx.font="800 14px Segoe UI,sans-serif"; ctx.textAlign="left"; ctx.fillStyle="#7fc8e8";
+  ctx.fillText("movidas "+movs,GAP,24); ctx.textAlign="right"; ctx.fillText(ganado?"":Math.floor(seg/60)+":"+String(seg%60).padStart(2,"0"),W-GAP,24);
+  ctx.textAlign="center"; ctx.fillStyle="#ffd12e"; ctx.fillText("ganadas "+leer(),W/2,24);
+  // mazo y descarte
+  if(mesa.stock.length) carta({up:false},colX(0),TOP); else hueco(colX(0),TOP,"↻");
+  const arrastrando=arrastre&&arrastre.movio?arrastre.o:null;
+  const wTop=mesa.waste.length-(arrastrando&&arrastrando.tipo==="waste"?2:1);
+  if(wTop>=0) carta(mesa.waste[wTop],colX(1),TOP); else hueco(colX(1),TOP);
+  for(let f=0;f<4;f++){ const p=mesa.fund[f]; const n=p.length-(arrastrando&&arrastrando.tipo==="fund"&&arrastrando.i===f?2:1);
+    if(n>=0) carta(p[n],colX(3+f),TOP); else hueco(colX(3+f),TOP,"A"); }
+  // columnas
+  for(let i=0;i<7;i++){
+    const p=mesa.tab[i]; if(!p.length) hueco(colX(i),FILA2,"K");
+    p.forEach((c,k)=>{ if(arrastrando&&arrastrando.tipo==="tab"&&arrastrando.i===i&&k>=arrastrando.k) return; const [x,y]=posTab(i,k); carta(c,x,y); });
+  }
+  // cartas que se arrastran
+  if(arrastrando){ cartasDe(arrastrando).forEach((c,j)=>carta(c,arrastre.x-arrastre.dx,arrastre.y-arrastre.dy+j*26,true)); }
+  fuegos.forEach(p=>{ ctx.globalAlpha=Math.max(0,p.vida/90); ctx.fillStyle=p.col; ctx.fillRect(p.x-3,p.y-3,6,6); }); ctx.globalAlpha=1;
+  if(ganado){
+    ctx.fillStyle="rgba(0,0,0,.55)"; ctx.fillRect(0,H/2-80,W,160); ctx.textAlign="center";
+    ctx.fillStyle="#fff"; ctx.font="900 36px Segoe UI,sans-serif"; ctx.shadowColor="#0cf"; ctx.shadowBlur=18; ctx.fillText("¡GANASTE!",W/2,H/2-30); ctx.shadowBlur=0;
+    ctx.fillStyle="#ffd12e"; ctx.font="700 17px Segoe UI,sans-serif"; ctx.fillText(movs+" movidas · mejor tiempo "+Math.floor(leer(CLAVE_T)/60)+":"+String(leer(CLAVE_T)%60).padStart(2,"0"),W/2,H/2+8);
+    ctx.fillStyle="#7fc8e8"; ctx.font="600 15px Segoe UI,sans-serif"; ctx.fillText("toca para jugar otra",W/2,H/2+44);
+  }
+}
+function paso(){ raf=requestAnimationFrame(paso); fuegos.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=0.12; p.vida--; }); fuegos=fuegos.filter(p=>p.vida>0); dibujar(); }
+
+/* ---------- tocar y arrastrar ---------- */
+function punto(e){ const r=cv.getBoundingClientRect(); return {x:(e.clientX-r.left)*(W/r.width), y:(e.clientY-r.top)*(H/r.height)}; }
+const dentro=(px,py,x,y)=>px>=x&&px<=x+CW&&py>=y&&py<=y+CH;
+function queHay(px,py){
+  if(dentro(px,py,colX(0),TOP)) return {tipo:"stock"};
+  if(mesa.waste.length && dentro(px,py,colX(1),TOP)) return {tipo:"waste",x:colX(1),y:TOP};
+  for(let f=0;f<4;f++) if(mesa.fund[f].length && dentro(px,py,colX(3+f),TOP)) return {tipo:"fund",i:f,x:colX(3+f),y:TOP};
+  for(let i=0;i<7;i++){ const p=mesa.tab[i];
+    for(let k=p.length-1;k>=0;k--){ const [x,y]=posTab(i,k); if(dentro(px,py,x,y)){ if(!p[k].up) return null; return {tipo:"tab",i,k,x,y}; } } }
+  return null;
+}
+function destinoEn(px,py){
+  for(let f=0;f<4;f++) if(px>=colX(3+f)-GAP/2&&px<=colX(3+f)+CW+GAP/2&&py>=TOP-10&&py<=TOP+CH+10) return {tipo:"fund",i:f};
+  if(py>FILA2-20) for(let i=0;i<7;i++) if(px>=colX(i)-GAP/2&&px<=colX(i)+CW+GAP/2) return {tipo:"tab",i};
+  return null;
+}
+cv.addEventListener("pointerdown",e=>{
+  if(!mesa||autom) return;
+  if(ganado){ nueva(); return; }
+  const q=punto(e), o=queHay(q.x,q.y);
+  if(!o) return;
+  if(o.tipo==="stock"){ robar(); return; }
+  arrastre={o,x:q.x,y:q.y,dx:q.x-o.x,dy:q.y-o.y,sx:q.x,sy:q.y,movio:false};
+  try{ cv.setPointerCapture(e.pointerId); }catch(x){}
+});
+cv.addEventListener("pointermove",e=>{ if(!arrastre) return; const q=punto(e); arrastre.x=q.x; arrastre.y=q.y; if(Math.hypot(q.x-arrastre.sx,q.y-arrastre.sy)>6) arrastre.movio=true; });
+cv.addEventListener("pointerup",e=>{
+  if(!arrastre) return;
+  const a=arrastre; arrastre=null;
+  if(!a.movio){ automatico(a.o); return; }
+  const cs=cartasDe(a.o), cx=a.x-a.dx+CW/2, cy=a.y-a.dy+20, d=destinoEn(cx,cy);
+  if(!d){ return; }
+  if(d.tipo==="fund" && cs.length===1 && puedeFund(cs[0],d.i) && !(a.o.tipo==="fund"&&a.o.i===d.i)) mover(a.o,"fund",d.i);
+  else if(d.tipo==="tab" && !(a.o.tipo==="tab"&&a.o.i===d.i) && puedeTab(cs[0],d.i)) mover(a.o,"tab",d.i);
+  else tono(150,0.06,"square",0.03);
+});
+cv.addEventListener("pointercancel",()=>{ arrastre=null; });
+$("bDeshacer").onclick=deshacer;
+$("bNueva").onclick=()=>{ if(autom) return; nueva(); };
+$("bTerminar").onclick=terminarSolo;
+addEventListener("keydown",e=>{ if((e.ctrlKey&&e.key.toLowerCase()==="z")||e.key.toLowerCase()==="z"){ e.preventDefault(); deshacer(); } });
+$("empezar").onclick=()=>{ $("menu").style.display="none"; nueva(); cancelAnimationFrame(raf); raf=requestAnimationFrame(paso); };
+$("stats").innerHTML="Partidas ganadas: "+leer()+(leer(CLAVE_T)?" · mejor tiempo "+Math.floor(leer(CLAVE_T)/60)+":"+String(leer(CLAVE_T)%60).padStart(2,"0"):"");
+dibujar();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>

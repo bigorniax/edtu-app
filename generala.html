@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Generala Neón</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;background:#02030a;color:#eaf6ff}
+  body{overflow-y:auto}
+  #juego{max-width:560px;margin:0 auto;padding:14px 12px 30px}
+  .arriba{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  .arriba h2{font-size:20px;letter-spacing:3px;color:#fff;text-shadow:0 0 10px #b46bff}
+  #turno{font-weight:800;font-size:14px;letter-spacing:1px}
+  #dados{display:flex;justify-content:center;gap:10px;margin:8px 0 6px}
+  .dado{width:62px;height:62px;border-radius:12px;border:2px solid #b46bff;background:#0c0718;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);
+    padding:8px;cursor:pointer;box-shadow:0 0 12px rgba(180,107,255,.4);transition:transform .15s}
+  .dado.guardado{border-color:#ffd12e;box-shadow:0 0 18px rgba(255,209,46,.7);transform:translateY(-6px)}
+  .dado.gira{animation:gira .35s ease}
+  @keyframes gira{0%{transform:rotate(0) scale(.85)}50%{transform:rotate(180deg) scale(1.08)}100%{transform:rotate(360deg) scale(1)}}
+  .dado i{width:11px;height:11px;border-radius:50%;background:#eaf6ff;box-shadow:0 0 6px #fff;align-self:center;justify-self:center;visibility:hidden}
+  .dado i.on{visibility:visible}
+  .dado.vacio{opacity:.35;cursor:default}
+  #ayudaDados{text-align:center;color:#8f86a8;font-size:12px;min-height:16px}
+  #tirar{display:block;margin:10px auto 14px;cursor:pointer;padding:14px 40px;border-radius:14px;border:2px solid #b46bff;background:rgba(0,0,0,.6);color:#fff;font-size:18px;font-weight:900;letter-spacing:2px;box-shadow:0 0 14px #b46bff}
+  #tirar:disabled{opacity:.35;cursor:default;box-shadow:none}
+  table{width:100%;border-collapse:collapse;font-size:15px}
+  th,td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.08);text-align:center}
+  th{color:#b9a8e6;font-size:12px;letter-spacing:2px}
+  td:first-child{text-align:left;color:#d8d0f0}
+  td.casilla{width:28%;font-weight:800}
+  td.puede{cursor:pointer;color:#7a6f96}
+  td.puede:hover{background:rgba(180,107,255,.18);color:#fff}
+  td.puede.buena{color:#b6ff00}
+  td.hecha{color:#fff}
+  td.tachada{color:#ff5b6e}
+  td.compu{color:#ffd12e}
+  tr.total td{font-size:18px;font-weight:900;color:#fff;border-bottom:none;padding-top:12px}
+  #msg{text-align:center;min-height:24px;font-weight:800;color:#ffd12e;margin:6px 0;text-shadow:0 0 8px rgba(255,209,46,.5)}
+  #menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(2,3,10,.94);text-align:center;padding:20px;z-index:5}
+  #menu h1{font-size:40px;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #fff,0 0 18px #b46bff,0 0 40px #b46bff}
+  #menu p{margin:14px 0 22px;color:#cbbdf0;line-height:1.6;font-size:16px;max-width:470px}
+  #menu button{cursor:pointer;padding:16px 42px;border-radius:14px;border:2px solid #b46bff;background:rgba(0,0,0,.6);color:#fff;font-size:20px;font-weight:900;letter-spacing:2px;box-shadow:0 0 14px #b46bff}
+  #menu .stats{margin-top:18px;color:#ffd12e;font-weight:800;line-height:1.7}
+  #fin{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(2,3,10,.9);text-align:center;z-index:6}
+  #fin h1{font-size:36px;color:#fff;text-shadow:0 0 18px #b46bff;margin-bottom:10px}
+  #fin p{color:#ffd12e;font-size:20px;font-weight:800;margin:6px}
+  #fin button{margin-top:18px;cursor:pointer;padding:14px 36px;border-radius:14px;border:2px solid #b46bff;background:rgba(0,0,0,.6);color:#fff;font-size:18px;font-weight:900}
+</style>
+</head>
+<body>
+<div id="juego">
+  <div class="arriba"><h2>GENERALA</h2><div id="turno"></div></div>
+  <div id="dados"></div>
+  <div id="ayudaDados">toca un dado para guardarlo entre tiros</div>
+  <button id="tirar">TIRAR</button>
+  <div id="msg"></div>
+  <table id="tabla"></table>
+</div>
+<div id="menu">
+  <h1>GENERALA NEÓN</h1>
+  <p>El clásico de dados contra la compu. Tienes 3 tiros por turno: guarda los dados que te sirvan y anota en una casilla. Si sale en el primer tiro es "servida" y vale más. ¡Generala servida gana el partido al tiro!</p>
+  <button id="empezar">JUGAR</button>
+  <div class="stats" id="stats"></div>
+</div>
+<div id="fin"><h1 id="finTitulo"></h1><p id="finPuntos"></p><p id="finRecord" style="font-size:15px;color:#b6ff00"></p><button id="otra">JUGAR OTRA</button></div>
+<script>
+const $=id=>document.getElementById(id);
+const CLAVE="edtu_generala_mejor";   // partidos ganados
+function leer(){ try{ return parseInt(localStorage.getItem(CLAVE)||"0",10)||0; }catch(e){ return 0; } }
+function guardar(v){ try{ localStorage.setItem(CLAVE,String(v)); }catch(e){} }
+
+let audio=null;
+function tono(f,d,tipo,vol,subida){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
+  const o=audio.createOscillator(), g=audio.createGain(); o.type=tipo||"square"; const t=audio.currentTime;
+  o.frequency.setValueAtTime(f,t); if(subida) o.frequency.exponentialRampToValueAtTime(f*subida,t+d);
+  g.gain.setValueAtTime(vol||0.07,t); g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t+d); }catch(e){} }
+
+const CATS=[
+  {id:"1",nom:"Unos"},{id:"2",nom:"Doses"},{id:"3",nom:"Treses"},{id:"4",nom:"Cuatros"},{id:"5",nom:"Cincos"},{id:"6",nom:"Seises"},
+  {id:"E",nom:"Escalera"},{id:"F",nom:"Full"},{id:"P",nom:"Póker"},{id:"G",nom:"Generala"},{id:"D",nom:"Doble generala"}];
+// lo que "vale" normalmente cada casilla (para que la compu sepa qué le conviene tachar)
+const BASE={"1":2,"2":5,"3":8,"4":11,"5":14,"6":17,E:13,F:16,P:12,G:8,D:3};
+
+function cuenta(d){ const c=[0,0,0,0,0,0,0]; d.forEach(v=>c[v]++); return c; }
+function puntaje(cat,d,servida,tabla){
+  const c=cuenta(d), vals=c.slice(1).filter(x=>x).sort((a,b)=>b-a);
+  if("123456".includes(cat)) return c[+cat]*(+cat);
+  if(cat==="E"){ const s=[...new Set(d)].sort().join(""); return (s==="12345"||s==="23456"||s==="13456")?(servida?25:20):0; }
+  if(cat==="F") return (vals[0]===3&&vals[1]===2)?(servida?35:30):0;
+  if(cat==="P") return vals[0]>=4?(servida?45:40):0;
+  if(cat==="G") return vals[0]===5?50:0;
+  if(cat==="D") return (vals[0]===5 && tabla && tabla.G===50)?100:0;
+  return 0;
+}
+
+let dados=[1,1,1,1,1], guardados=[false,false,false,false,false], tiros=0, turnoDe="yo", tablas={yo:{},cpu:{}}, ocupado=false, terminado=false;
+
+function pintaDados(){
+  const caja=$("dados"); caja.innerHTML="";
+  const PIPS={1:[4],2:[0,8],3:[0,4,8],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]};
+  dados.forEach((v,i)=>{
+    const d=document.createElement("div"); d.className="dado"+(guardados[i]?" guardado":"")+(tiros===0?" vacio":"");
+    for(let k=0;k<9;k++){ const p=document.createElement("i"); if(tiros>0&&PIPS[v].includes(k)) p.className="on"; d.appendChild(p); }
+    d.onclick=()=>{ if(turnoDe!=="yo"||tiros===0||tiros>=3||ocupado) return; guardados[i]=!guardados[i]; tono(guardados[i]?660:440,0.05,"triangle",0.04); pintaDados(); };
+    caja.appendChild(d);
+  });
+  $("tirar").disabled = turnoDe!=="yo" || tiros>=3 || ocupado || terminado;
+  $("tirar").textContent = tiros===0?"TIRAR":"TIRAR DE NUEVO ("+(3-tiros)+")";
+}
+function total(t){ return Object.values(t).reduce((s,v)=>s+v,0); }
+function pintaTabla(){
+  let h="<tr><th>JUGADA</th><th>TÚ</th><th>COMPU</th></tr>";
+  CATS.forEach(c=>{
+    const mio=tablas.yo[c.id], suyo=tablas.cpu[c.id];
+    let celdaYo;
+    if(mio!==undefined) celdaYo='<td class="casilla '+(mio===0?"tachada":"hecha")+'">'+(mio===0?"✕":mio)+'</td>';
+    else if(turnoDe==="yo" && tiros>0 && !ocupado && !terminado){ const p=puntaje(c.id,dados,tiros===1,tablas.yo); celdaYo='<td class="casilla puede'+(p>0?" buena":"")+'" data-cat="'+c.id+'">'+(p>0?p:"tachar")+'</td>'; }
+    else celdaYo='<td class="casilla"></td>';
+    const celdaCpu='<td class="casilla compu">'+(suyo===undefined?"":(suyo===0?"✕":suyo))+'</td>';
+    h+="<tr><td>"+c.nom+"</td>"+celdaYo+celdaCpu+"</tr>";
+  });
+  h+='<tr class="total"><td>TOTAL</td><td>'+total(tablas.yo)+'</td><td style="color:#ffd12e">'+total(tablas.cpu)+'</td></tr>';
+  $("tabla").innerHTML=h;
+  $("tabla").querySelectorAll("td.puede").forEach(td=>td.onclick=()=>anotar("yo",td.dataset.cat));
+  $("turno").textContent = terminado?"":(turnoDe==="yo"?"TU TURNO":"TURNO DE LA COMPU");
+  $("turno").style.color = turnoDe==="yo"?"#b6ff00":"#ffd12e";
+}
+function msg(t){ $("msg").textContent=t||""; }
+
+function tirar(){
+  if(tiros>=3) return;
+  tiros++;
+  for(let i=0;i<5;i++) if(!guardados[i]) dados[i]=1+Math.floor(Math.random()*6);
+  tono(300+Math.random()*80,0.08,"square",0.04);
+  pintaDados();
+  document.querySelectorAll(".dado").forEach((d,i)=>{ if(!guardados[i]){ d.classList.remove("gira"); void d.offsetWidth; d.classList.add("gira"); } });
+  if(tiros===1 && puntaje("G",dados)===50){ generalaServida(turnoDe); return; }
+  pintaTabla();
+}
+function generalaServida(quien){
+  terminado=true; pintaTabla();
+  [523,659,784,1047,1319].forEach((f,i)=>setTimeout(()=>tono(f,0.14,"triangle",0.08),i*90));
+  setTimeout(()=>finPartido(quien,"¡GENERALA SERVIDA!"),900);
+}
+
+function anotar(quien,cat){
+  const t=tablas[quien]; if(t[cat]!==undefined) return;
+  const p=puntaje(cat,dados,tiros===1,t);
+  t[cat]=p;
+  tono(p>0?880:200,0.12,p>0?"sine":"sawtooth",0.06);
+  msg((quien==="yo"?"Anotaste ":"La compu anotó ")+(p>0?p+" en "+CATS.find(c=>c.id===cat).nom:"✕ en "+CATS.find(c=>c.id===cat).nom));
+  siguienteTurno();
+}
+function siguienteTurno(){
+  tiros=0; guardados=[false,false,false,false,false];
+  if(Object.keys(tablas.yo).length===CATS.length && Object.keys(tablas.cpu).length===CATS.length){ terminado=true; pintaDados(); pintaTabla();
+    const a=total(tablas.yo), b=total(tablas.cpu); setTimeout(()=>finPartido(a>b?"yo":a<b?"cpu":"empate"),600); return; }
+  turnoDe = turnoDe==="yo"?"cpu":"yo";
+  pintaDados(); pintaTabla();
+  if(turnoDe==="cpu") setTimeout(turnoCpu,900);
+}
+
+/* ---------- la compu: prueba todas las formas de guardar dados y simula ---------- */
+function valorFinal(d,t,servida){
+  let mejor=-1e9;
+  CATS.forEach(c=>{ if(t[c.id]!==undefined) return; const v=puntaje(c.id,d,servida,t)-BASE[c.id]; if(v>mejor) mejor=v; });
+  return mejor;
+}
+function mejorGuardado(d,t,tirosQuedan){
+  let mejor=null, mejorV=-1e9;
+  for(let m=0;m<32;m++){
+    let suma=0; const N=tirosQuedan===2?160:260;
+    for(let s=0;s<N;s++){
+      let x=d.map((v,i)=>(m>>i)&1?v:1+Math.floor(Math.random()*6));
+      if(tirosQuedan===2){ // un segundo tiro simple: guarda el valor que mas se repite
+        const c=cuenta(x); let mas=1; for(let k=1;k<=6;k++) if(c[k]>c[mas]||(c[k]===c[mas]&&k>mas)) mas=k;
+        x=x.map(v=>v===mas?v:1+Math.floor(Math.random()*6));
+      }
+      suma+=valorFinal(x,t,false);
+    }
+    const v=suma/N;
+    if(v>mejorV){ mejorV=v; mejor=m; }
+  }
+  return {m:mejor,v:mejorV};
+}
+function turnoCpu(){
+  if(terminado) return;
+  ocupado=true;
+  const paso=()=>{
+    if(terminado) return;
+    tirar(); if(terminado) return;
+    const t=tablas.cpu, ahora=valorFinal(dados,t,tiros===1);
+    if(tiros<3){
+      const g=mejorGuardado(dados,t,3-tiros);
+      if(g.v>ahora+0.5 && g.m!==31){
+        guardados=dados.map((v,i)=>!!((g.m>>i)&1)); pintaDados();
+        setTimeout(paso,1100); return;
+      }
+    }
+    // anotar en la mejor casilla
+    let mejor=null, mv=-1e9;
+    CATS.forEach(c=>{ if(t[c.id]!==undefined) return; const v=puntaje(c.id,dados,tiros===1,t)-BASE[c.id]; if(v>mv){ mv=v; mejor=c.id; } });
+    setTimeout(()=>{ ocupado=false; anotar("cpu",mejor); },1000);
+  };
+  setTimeout(paso,300);
+}
+
+function finPartido(quien,extra){
+  const ganadas=leer()+(quien==="yo"?1:0); if(quien==="yo") guardar(ganadas);
+  $("finTitulo").textContent=(extra?extra+" ":"")+(quien==="yo"?"¡GANASTE!":quien==="cpu"?"GANÓ LA COMPU":"EMPATE");
+  $("finPuntos").textContent="Tú "+total(tablas.yo)+" · Compu "+total(tablas.cpu);
+  $("finRecord").textContent="Partidos ganados: "+leer();
+  $("fin").style.display="flex";
+}
+
+function empezar(){
+  $("menu").style.display="none"; $("fin").style.display="none";
+  tablas={yo:{},cpu:{}}; tiros=0; guardados=[false,false,false,false,false]; terminado=false; ocupado=false; turnoDe="yo"; msg("");
+  pintaDados(); pintaTabla();
+}
+$("tirar").onclick=()=>{ if(turnoDe==="yo"&&!ocupado) tirar(); };
+$("empezar").onclick=empezar; $("otra").onclick=empezar;
+addEventListener("keydown",e=>{ if((e.key===" "||e.key==="Enter") && turnoDe==="yo" && !terminado && $("menu").style.display==="none"){ e.preventDefault(); if(tiros<3) tirar(); }
+  if("12345".includes(e.key) && e.key.length===1 && turnoDe==="yo" && tiros>0 && tiros<3){ const i=+e.key-1; guardados[i]=!guardados[i]; pintaDados(); } });
+$("stats").innerHTML="Partidos ganados: "+leer();
+pintaDados(); pintaTabla();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>
