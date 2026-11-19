@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Cajas Neón</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;background:#02030a;color:#eaf6ff}
+  #wrap{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
+  canvas{display:block;max-width:100%;max-height:calc(100% - 64px);border-radius:12px;touch-action:none;
+    box-shadow:0 0 28px rgba(255,138,26,.22),inset 0 0 40px rgba(255,138,26,.05)}
+  #botones{display:flex;gap:10px}
+  #botones button{cursor:pointer;padding:10px 18px;border-radius:10px;border:1.5px solid #ff8a1a;background:rgba(0,0,0,.6);color:#fff;font-weight:800;font-size:14px;letter-spacing:1px}
+  #botones button:hover{box-shadow:0 0 12px #ff8a1a}
+  #menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(2,3,10,.94);text-align:center;padding:20px;z-index:5}
+  #menu h1{font-size:40px;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #fff,0 0 18px #ff8a1a,0 0 40px #ff8a1a}
+  #menu p{margin:14px 0 22px;color:#f3c79c;line-height:1.6;font-size:16px;max-width:460px}
+  #menu button{cursor:pointer;padding:16px 42px;border-radius:14px;border:2px solid #ff8a1a;background:rgba(0,0,0,.6);
+    color:#fff;font-size:20px;font-weight:900;letter-spacing:2px;box-shadow:0 0 14px #ff8a1a;text-shadow:0 0 8px #ff8a1a}
+  #menu button:hover{transform:scale(1.05)}
+  #menu .stats{margin-top:18px;color:#ffd12e;font-weight:800;text-shadow:0 0 8px #ffd12e;line-height:1.7}
+  #menu .teclas{margin-top:10px;color:#9aa;font-size:13px}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="480" height="560"></canvas>
+  <div id="botones"><button id="bAnt">◄ NIVEL</button><button id="bDeshacer">DESHACER (Z)</button><button id="bReiniciar">REINICIAR (R)</button><button id="bSig">NIVEL ►</button></div>
+  <div id="menu">
+    <h1>CAJAS NEÓN</h1>
+    <p>Empuja todas las cajas hasta las metas. Solo puedes empujar, nunca tirar, así que piensa antes de moverte: si una caja queda en una esquina, no sale más. Todos los niveles tienen solución.</p>
+    <button id="empezar">JUGAR</button>
+    <div class="teclas">flechas o WASD · Z deshace · R reinicia · en el celular desliza el dedo</div>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+const W=cv.width, H=cv.height, TOP=50;
+const CLAVE="edtu_cajas_mejor";   // nivel mas alto terminado
+
+function leer(){ try{ return parseInt(localStorage.getItem(CLAVE)||"0",10)||0; }catch(e){ return 0; } }
+function guardar(v){ try{ localStorage.setItem(CLAVE,String(v)); }catch(e){} }
+
+let audio=null;
+function tono(f,d,tipo,vol,subida){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
+  const o=audio.createOscillator(), g=audio.createGain(); o.type=tipo||"square"; const t=audio.currentTime;
+  o.frequency.setValueAtTime(f,t); if(subida) o.frequency.exponentialRampToValueAtTime(f*subida,t+d);
+  g.gain.setValueAtTime(vol||0.07,t); g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t+d); }catch(e){} }
+
+/* los primeros 7 niveles: verificados con un resolvedor (el numero es el minimo de empujones) */
+const FIJOS=[
+ {min:5, m:["######","#  # #","#  $@#","#  .##","# $ .#","######"]},
+ {min:6, m:["######","#+   #","# $  #","##$  #","## . #","######"]},
+ {min:6, m:["#######","#    ##","#. $ .#","# $   #","##@#  #","#######"]},
+ {min:6, m:["#######","#..   #","# #@$ #","# $   #","#    ##","#######"]},
+ {min:10,m:["#######","#    .#","## # .#","# $   #","#@$   #","# #   #","#######"]},
+ {min:11,m:["#######","#.   .#","#$ #$@#","#  # $#","#   # #","#.    #","#######"]},
+ {min:12,m:["#######","#.. $ #","#.# # #","#   $@#","#   $ #","#   # #","#######"]}
+];
+
+/* del nivel 8 en adelante: se arman jugando AL REVES desde la solucion (cajas en las metas,
+   el jugador las va tirando). Asi cada nivel tiene solucion segura. La semilla es el numero
+   del nivel: el nivel 12 es siempre el mismo nivel 12. */
+const D4=[[1,0],[-1,0],[0,1],[0,-1]];
+function candidato(num,k){
+  let semilla=num*7919+13+k*101;
+  const rnd=()=>{ semilla=(semilla*1103515245+12345)&0x7fffffff; return semilla/0x7fffffff; };
+  const extra=num-8;
+  const w=Math.min(11,7+Math.floor(extra/3)), h=Math.min(11,7+Math.floor((extra+1)/3));
+  const nCajas=Math.min(5,2+Math.floor((extra+2)/4));
+  for(let intento=0;intento<500;intento++){
+    const g=Array.from({length:h},(_,y)=>Array.from({length:w},(_,x)=>(x===0||y===0||x===w-1||y===h-1)?"#":" "));
+    const n=Math.floor((w-2)*(h-2)*(0.12+rnd()*0.1));
+    for(let i=0;i<n;i++) g[1+Math.floor(rnd()*(h-2))][1+Math.floor(rnd()*(w-2))]="#";
+    const libres=[]; g.forEach((r,y)=>r.forEach((c,x)=>{ if(c===" ") libres.push([x,y]); }));
+    if(libres.length<nCajas+8) continue;
+    // todo el piso tiene que estar conectado
+    const vist=new Set([libres[0].join()]), cola=[libres[0]];
+    while(cola.length){ const [x,y]=cola.pop(); for(const [dx,dy] of D4){ const k=(x+dx)+","+(y+dy); if(g[y+dy][x+dx]===" "&&!vist.has(k)){ vist.add(k); cola.push([x+dx,y+dy]); } } }
+    if(vist.size!==libres.length) continue;
+    const mezcla=libres.slice().sort(()=>rnd()-0.5);
+    const metas=mezcla.slice(0,nCajas).map(p=>p.join());
+    const cajas=new Set(metas); let jug=mezcla[nCajas], tirones=0;
+    const libre=(x,y)=>g[y][x]===" "&&!cajas.has(x+","+y);
+    for(let i=0;i<700+extra*60;i++){
+      const [dx,dy]=D4[Math.floor(rnd()*4)], [px,py]=jug;
+      if(!libre(px+dx,py+dy)) continue;
+      const atras=(px-dx)+","+(py-dy);
+      if(cajas.has(atras) && rnd()<0.7){ cajas.delete(atras); cajas.add(px+","+py); tirones++; }
+      jug=[px+dx,py+dy];
+    }
+    if([...cajas].some(c=>metas.includes(c)) || tirones<nCajas*4) continue;
+    const filas=g.map(r=>r.slice());
+    metas.forEach(m=>{ const [x,y]=m.split(",").map(Number); filas[y][x]="."; });
+    cajas.forEach(c=>{ const [x,y]=c.split(",").map(Number); filas[y][x]=filas[y][x]==="."?"*":"$"; });
+    filas[jug[1]][jug[0]]=filas[jug[1]][jug[0]]==="."?"+":"@";
+    return {min:null, m:filas.map(r=>r.join(""))};
+  }
+  return null;
+}
+/* resolvedor chico: cuenta los empujones minimos (BFS). Si el nivel es muy grande para
+   revisarlo rapido devuelve -1 (igual tiene solucion, porque se armo al reves). */
+function minimoEmpujes(m,tope){
+  const g=m.map(r=>r.split("")), metas=new Set(), ini=[]; let jug;
+  m.forEach((r,y)=>r.split("").forEach((c,x)=>{ if(".*+".includes(c)) metas.add(x+","+y); if("$*".includes(c)) ini.push(x+","+y); if("@+".includes(c)) jug=[x,y]; }));
+  const piso=(x,y)=>g[y]&&g[y][x]!==undefined&&g[y][x]!=="#";
+  const muerta=new Set();
+  g.forEach((r,y)=>r.forEach((c,x)=>{ if(!piso(x,y)||metas.has(x+","+y)) return; const p=(a,b)=>!piso(a,b);
+    if((p(x-1,y)||p(x+1,y))&&(p(x,y-1)||p(x,y+1))) muerta.add(x+","+y); }));
+  const zona=(j,cs)=>{ const vist=new Set([j.join()]), cola=[j]; let min=j.join();
+    while(cola.length){ const [x,y]=cola.pop(); for(const [dx,dy] of D4){ const k=(x+dx)+","+(y+dy); if(piso(x+dx,y+dy)&&!cs.has(k)&&!vist.has(k)){ vist.add(k); cola.push([x+dx,y+dy]); if(k<min) min=k; } } }
+    return {vist,min}; };
+  const clave=(cs,min)=>cs.slice().sort().join("|")+"@"+min;
+  let frontera=[{cajas:ini,jug}]; const vistos=new Set([clave(ini,zona(jug,new Set(ini)).min)]);
+  for(let e=0;e<=80&&frontera.length;e++){
+    const sig=[];
+    for(const s of frontera){
+      if(s.cajas.every(c=>metas.has(c))) return e;
+      const cs=new Set(s.cajas), {vist}=zona(s.jug,cs);
+      for(const c of s.cajas){ const [x,y]=c.split(",").map(Number);
+        for(const [dx,dy] of D4){
+          if(!vist.has((x-dx)+","+(y-dy))) continue;
+          const nk=(x+dx)+","+(y+dy);
+          if(!piso(x+dx,y+dy)||cs.has(nk)||muerta.has(nk)) continue;
+          const nuevas=s.cajas.map(b=>b===c?nk:b), k=clave(nuevas,zona([x,y],new Set(nuevas)).min);
+          if(vistos.has(k)) continue; vistos.add(k); sig.push({cajas:nuevas,jug:[x,y]});
+          if(vistos.size>tope) return -1;
+        } }
+    }
+    frontera=sig;
+  }
+  return -1;
+}
+const CACHE_NIVELES={};
+function generado(num){
+  if(CACHE_NIVELES[num]) return CACHE_NIVELES[num];
+  const meta=Math.min(22,8+(num-8));     // cada nivel pide mas empujones minimos
+  let mejor=null;
+  for(let k=0;k<14;k++){
+    const c=candidato(num,k); if(!c) continue;
+    const e=minimoEmpujes(c.m,22000);
+    if(e===-1){ mejor={min:null,m:c.m}; break; }                 // muy grande para medir: es dificil
+    if(e>=meta){ mejor={min:e,m:c.m}; break; }
+    if(!mejor||e>mejor.min) mejor={min:e,m:c.m};
+  }
+  return CACHE_NIVELES[num]=mejor||FIJOS[num%FIJOS.length];
+}
+function nivelN(num){ return num<=FIJOS.length ? FIJOS[num-1] : generado(num); }
+
+let nivel=1, mapa, metas, cajas, jug, historia=[], movs=0, empujes=0, ganado=false, partes=[], T=48, OX=0, OY=TOP, raf=null, anim=0;
+
+function cargar(num){
+  nivel=Math.max(1,num);
+  const n=nivelN(nivel);
+  mapa=n.m.map(r=>r.split("")); metas=new Set(); cajas=new Set(); jug=null;
+  mapa.forEach((r,y)=>r.forEach((c,x)=>{
+    if(c==="."||c==="*"||c==="+") metas.add(x+","+y);
+    if(c==="$"||c==="*") cajas.add(x+","+y);
+    if(c==="@"||c==="+") jug=[x,y];
+    if(c!=="#") r[x]=" ";
+  }));
+  const ancho=Math.max(...n.m.map(r=>r.length)), alto=n.m.length;
+  T=Math.floor(Math.min((W-20)/ancho,(H-TOP-20)/alto,56));
+  OX=Math.floor((W-ancho*T)/2); OY=TOP+Math.floor((H-TOP-alto*T)/2);
+  historia=[]; movs=0; empujes=0; ganado=false; partes=[];
+  minimo=n.min;
+}
+let minimo=null;
+
+function empezar(){
+  $("menu").style.display="none";
+  cargar(Math.min(leer()+1, 999));
+  cancelAnimationFrame(raf); raf=requestAnimationFrame(paso);
+}
+
+function mover(dx,dy){
+  if(ganado||!jug) return;
+  const nx=jug[0]+dx, ny=jug[1]+dy, k=nx+","+ny;
+  if(mapa[ny][nx]==="#") return;
+  if(cajas.has(k)){
+    const bx=nx+dx, by=ny+dy, bk=bx+","+by;
+    if(mapa[by][bx]==="#"||cajas.has(bk)){ tono(140,0.05,"square",0.03); return; }
+    historia.push({jug:jug.slice(),cajas:new Set(cajas),movs,empujes});
+    cajas.delete(k); cajas.add(bk); empujes++;
+    tono(metas.has(bk)?880:260,0.07,metas.has(bk)?"sine":"triangle",0.06);
+  } else {
+    historia.push({jug:jug.slice(),cajas:new Set(cajas),movs,empujes});
+    tono(420,0.025,"square",0.015);
+  }
+  jug=[nx,ny]; movs++; anim=1;
+  if([...cajas].every(c=>metas.has(c))) ganar();
+}
+function deshacer(){ if(ganado) return; const h=historia.pop(); if(!h) return; jug=h.jug; cajas=h.cajas; movs=h.movs; empujes=h.empujes; tono(330,0.04,"sine",0.03); }
+function ganar(){
+  ganado=true;
+  if(nivel>leer()) guardar(nivel);
+  setTimeout(()=>{ try{ nivelN(nivel+1); }catch(e){} },350);   // armar el siguiente mientras celebras
+  [523,659,784,1047].forEach((f,i)=>setTimeout(()=>tono(f,0.14,"triangle",0.07),i*90));
+  cajas.forEach(c=>{ const [x,y]=c.split(",").map(Number); for(let i=0;i<14;i++){ const a=Math.random()*7; partes.push({x:OX+x*T+T/2,y:OY+y*T+T/2,vx:Math.cos(a)*3,vy:Math.sin(a)*3-1,vida:50,col:["#ff8a1a","#ffd12e","#b6ff00"][i%3]}); } });
+}
+
+function paso(){
+  raf=requestAnimationFrame(paso);
+  anim*=0.8;
+  partes.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=0.1; p.vida--; }); partes=partes.filter(p=>p.vida>0);
+  dibujar();
+}
+
+function rect(x,y,w,h,r){ ctx.beginPath(); if(ctx.roundRect) ctx.roundRect(x,y,w,h,r); else ctx.rect(x,y,w,h); }
+function dibujar(){
+  ctx.fillStyle="#02030a"; ctx.fillRect(0,0,W,H);
+  if(!mapa) return;
+  // piso y paredes
+  mapa.forEach((r,y)=>r.forEach((c,x)=>{
+    const px=OX+x*T, py=OY+y*T;
+    if(c==="#"){ ctx.fillStyle="#0a1222"; ctx.fillRect(px,py,T,T); ctx.strokeStyle="rgba(59,123,255,.55)"; ctx.lineWidth=1.5; ctx.strokeRect(px+2,py+2,T-4,T-4); }
+    else { ctx.fillStyle=(x+y)%2?"#060812":"#070a16"; ctx.fillRect(px,py,T,T); }
+  }));
+  // metas
+  metas.forEach(m=>{ const [x,y]=m.split(",").map(Number); const cx=OX+x*T+T/2, cy=OY+y*T+T/2;
+    ctx.strokeStyle="#b6ff00"; ctx.lineWidth=2.5; ctx.shadowColor="#b6ff00"; ctx.shadowBlur=10; ctx.beginPath(); ctx.arc(cx,cy,T*0.22,0,7); ctx.stroke(); ctx.shadowBlur=0; });
+  // cajas
+  cajas.forEach(c=>{ const [x,y]=c.split(",").map(Number); const px=OX+x*T, py=OY+y*T, en=metas.has(c), col=en?"#b6ff00":"#ff8a1a";
+    ctx.fillStyle=en?"rgba(182,255,0,.16)":"rgba(255,138,26,.14)"; ctx.strokeStyle=col; ctx.lineWidth=2.5; ctx.shadowColor=col; ctx.shadowBlur=14;
+    rect(px+T*0.12,py+T*0.12,T*0.76,T*0.76,6); ctx.fill(); ctx.stroke(); ctx.shadowBlur=0;
+    ctx.beginPath(); ctx.moveTo(px+T*0.24,py+T*0.24); ctx.lineTo(px+T*0.76,py+T*0.76); ctx.moveTo(px+T*0.76,py+T*0.24); ctx.lineTo(px+T*0.24,py+T*0.76); ctx.lineWidth=1.5; ctx.stroke(); });
+  // jugador
+  if(jug){ const cx=OX+jug[0]*T+T/2, cy=OY+jug[1]*T+T/2, r=T*0.32*(1+anim*0.12);
+    ctx.fillStyle="#0cf"; ctx.shadowColor="#0cf"; ctx.shadowBlur=16; ctx.beginPath(); ctx.arc(cx,cy,r,0,7); ctx.fill(); ctx.shadowBlur=0;
+    ctx.fillStyle="#02030a"; ctx.fillRect(cx-r*0.45,cy-r*0.25,r*0.25,r*0.3); ctx.fillRect(cx+r*0.2,cy-r*0.25,r*0.25,r*0.3);
+    if(metas.has(jug.join())){ ctx.strokeStyle="#b6ff00"; ctx.lineWidth=2.5; ctx.shadowColor="#b6ff00"; ctx.shadowBlur=10; ctx.beginPath(); ctx.arc(cx,cy,T*0.43,0,7); ctx.stroke(); ctx.shadowBlur=0; } }   // si esta parado en una meta, que se vea
+  partes.forEach(p=>{ ctx.globalAlpha=Math.max(0,p.vida/50); ctx.fillStyle=p.col; ctx.fillRect(p.x-3,p.y-3,6,6); }); ctx.globalAlpha=1;
+  // barra
+  ctx.textBaseline="middle"; ctx.font="900 18px Segoe UI,sans-serif";
+  ctx.textAlign="left"; ctx.fillStyle="#ff8a1a"; ctx.fillText("NIVEL "+nivel,14,24);
+  ctx.textAlign="right"; ctx.fillStyle="#eaf6ff"; ctx.font="700 14px Segoe UI,sans-serif";
+  ctx.fillText("pasos "+movs+" · empujes "+empujes+(minimo?" (mínimo "+minimo+")":""),W-14,24);
+  if(ganado){
+    ctx.fillStyle="rgba(0,0,0,.62)"; ctx.fillRect(0,H/2-70,W,140);
+    ctx.textAlign="center"; ctx.fillStyle="#fff"; ctx.font="900 32px Segoe UI,sans-serif"; ctx.shadowColor="#b6ff00"; ctx.shadowBlur=18;
+    ctx.fillText("¡NIVEL "+nivel+" LISTO!",W/2,H/2-22); ctx.shadowBlur=0;
+    ctx.fillStyle=minimo&&empujes<=minimo?"#b6ff00":"#ffd12e"; ctx.font="700 16px Segoe UI,sans-serif";
+    ctx.fillText(minimo&&empujes<=minimo?"¡con el mínimo de empujes! ★":"toca o aprieta ESPACIO para el siguiente",W/2,H/2+14);
+    if(minimo&&empujes<=minimo){ ctx.fillStyle="#7fc8e8"; ctx.fillText("toca o aprieta ESPACIO para el siguiente",W/2,H/2+42); }
+  }
+}
+
+/* ---------- controles ---------- */
+const DIR={arrowleft:[-1,0],a:[-1,0],arrowright:[1,0],d:[1,0],arrowup:[0,-1],w:[0,-1],arrowdown:[0,1],s:[0,1]};
+addEventListener("keydown",e=>{
+  if(!mapa) return;
+  const k=e.key.toLowerCase();
+  if(ganado && (k===" "||k==="enter")){ e.preventDefault(); cargar(nivel+1); return; }
+  if(DIR[k]){ e.preventDefault(); mover(...DIR[k]); }
+  else if(k==="z"){ e.preventDefault(); deshacer(); }
+  else if(k==="r"){ e.preventDefault(); cargar(nivel); }
+});
+let dedo=null;
+cv.addEventListener("pointerdown",e=>{ if(ganado){ cargar(nivel+1); return; } dedo={x:e.clientX,y:e.clientY}; try{ cv.setPointerCapture(e.pointerId); }catch(x){} });
+cv.addEventListener("pointermove",e=>{
+  if(!dedo) return;
+  const dx=e.clientX-dedo.x, dy=e.clientY-dedo.y, r=cv.getBoundingClientRect(), paso=Math.max(18,T*(r.width/W)*0.8);
+  if(Math.abs(dx)>paso||Math.abs(dy)>paso){ if(Math.abs(dx)>Math.abs(dy)) mover(dx>0?1:-1,0); else mover(0,dy>0?1:-1); dedo={x:e.clientX,y:e.clientY}; }
+});
+["pointerup","pointercancel"].forEach(t=>cv.addEventListener(t,()=>{ dedo=null; }));
+$("bDeshacer").onclick=deshacer;
+$("bReiniciar").onclick=()=>cargar(nivel);
+$("bAnt").onclick=()=>{ if(nivel>1) cargar(nivel-1); };
+$("bSig").onclick=()=>{ if(nivel<=leer()) cargar(nivel+1); else tono(150,0.08,"square",0.04); };   // solo niveles ya ganados
+$("empezar").onclick=empezar;
+
+$("stats").innerHTML=leer()?"Llegaste al nivel "+leer()+" · sigues en el "+(leer()+1):"Empieza en el nivel 1";
+dibujar();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Bloques Neón</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;background:#02030a;color:#eaf6ff}
+  #wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{display:block;max-width:100%;max-height:100%;border-radius:12px;touch-action:none;
+    box-shadow:0 0 28px rgba(0,204,255,.25),inset 0 0 40px rgba(0,204,255,.06)}
+  #menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(2,3,10,.92);text-align:center;padding:20px}
+  #menu h1{font-size:40px;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #fff,0 0 18px #0cf,0 0 40px #ff3bd4}
+  #menu p{margin:14px 0 22px;color:#9fd3ea;line-height:1.6;font-size:16px;max-width:460px}
+  #menu button{cursor:pointer;padding:16px 42px;border-radius:14px;border:2px solid #0cf;background:rgba(0,0,0,.6);
+    color:#fff;font-size:20px;font-weight:900;letter-spacing:2px;box-shadow:0 0 14px #0cf;text-shadow:0 0 8px #0cf}
+  #menu button:hover{transform:scale(1.05)}
+  #menu .stats{margin-top:18px;color:#ffd12e;font-weight:800;text-shadow:0 0 8px #ffd12e;line-height:1.7}
+  #menu .teclas{margin-top:10px;color:#9aa;font-size:13px;line-height:1.6}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="470" height="620"></canvas>
+  <div id="menu">
+    <h1>BLOQUES NEÓN</h1>
+    <p>Acomoda las piezas que caen. Cada línea completa desaparece. Mientras más líneas juntas borres, más puntos. Cada 10 líneas sube el nivel y caen más rápido.</p>
+    <button id="empezar">JUGAR</button>
+    <div class="teclas">◄ ► mover · ▲ girar · ▼ bajar · ESPACIO soltar de una · C guardar pieza<br>en el celular: desliza para mover, toca para girar, desliza rápido hacia abajo para soltar</div>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+const W=cv.width, H=cv.height;
+const COLS=10, FILAS=20, C=28, OX=20, OY=40;   // el tablero va a la izquierda, el panel a la derecha
+const CLAVE="edtu_bloques_mejor";
+
+function leer(){ try{ return parseInt(localStorage.getItem(CLAVE)||"0",10)||0; }catch(e){ return 0; } }
+function guardar(v){ try{ localStorage.setItem(CLAVE,String(v)); }catch(e){} }
+
+let audio=null;
+function tono(f,d,tipo,vol,subida){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
+  const o=audio.createOscillator(), g=audio.createGain(); o.type=tipo||"square"; const t=audio.currentTime;
+  o.frequency.setValueAtTime(f,t); if(subida) o.frequency.exponentialRampToValueAtTime(f*subida,t+d);
+  g.gain.setValueAtTime(vol||0.07,t); g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t+d); }catch(e){} }
+
+const PIEZAS={
+  I:{col:"#0cf",   f:[[0,1],[1,1],[2,1],[3,1]], tam:4},
+  O:{col:"#ffd12e",f:[[1,0],[2,0],[1,1],[2,1]], tam:4},
+  T:{col:"#b46bff",f:[[1,0],[0,1],[1,1],[2,1]], tam:3},
+  S:{col:"#b6ff00",f:[[1,0],[2,0],[0,1],[1,1]], tam:3},
+  Z:{col:"#ff3b5c",f:[[0,0],[1,0],[1,1],[2,1]], tam:3},
+  J:{col:"#3b7bff",f:[[0,0],[0,1],[1,1],[2,1]], tam:3},
+  L:{col:"#ff8a1a",f:[[2,0],[0,1],[1,1],[2,1]], tam:3}
+};
+function girar(celdas,tam){ return celdas.map(([x,y])=>[tam-1-y,x]); }   // 90° a la derecha
+
+let tablero, pieza, siguientes, bolsa, guardada, yaGuarde, puntos, lineas, nivel, vivo=false, raf=null, ultimaCaida=0, apoyo=0, borrando=null, esperandoOtra=false, finNuevo=false, partes=[];
+
+function sacarDeBolsa(){ if(!bolsa.length){ bolsa=Object.keys(PIEZAS); for(let i=bolsa.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [bolsa[i],bolsa[j]]=[bolsa[j],bolsa[i]]; } } return bolsa.pop(); }
+function nuevaPieza(tipo){
+  const p=PIEZAS[tipo];
+  return {tipo, col:p.col, tam:p.tam, celdas:p.f.map(c=>c.slice()), x:Math.floor((COLS-p.tam)/2), y:-1};
+}
+function cabe(celdas,x,y){
+  return celdas.every(([cx,cy])=>{ const X=x+cx, Y=y+cy; return X>=0&&X<COLS&&Y<FILAS&&(Y<0||!tablero[Y][X]); });
+}
+function empezar(){
+  $("menu").style.display="none"; esperandoOtra=false;
+  tablero=Array.from({length:FILAS},()=>Array(COLS).fill(null));
+  bolsa=[]; siguientes=[sacarDeBolsa(),sacarDeBolsa(),sacarDeBolsa()];
+  guardada=null; yaGuarde=false; puntos=0; lineas=0; nivel=1; borrando=null; partes=[];
+  sacarSiguiente();
+  vivo=true; ultimaCaida=performance.now();
+  cancelAnimationFrame(raf); raf=requestAnimationFrame(paso);
+}
+function sacarSiguiente(){
+  pieza=nuevaPieza(siguientes.shift()); siguientes.push(sacarDeBolsa()); yaGuarde=false; apoyo=0;
+  if(!cabe(pieza.celdas,pieza.x,pieza.y)){ pieza.y--; if(!cabe(pieza.celdas,pieza.x,pieza.y)) fin(); }
+}
+function velocidad(){ return Math.max(60, 800*Math.pow(0.82,nivel-1)); }
+
+function mover(dx){ if(!vivo||borrando) return; if(cabe(pieza.celdas,pieza.x+dx,pieza.y)){ pieza.x+=dx; apoyo=0; tono(300,0.03,"square",0.025); } }
+function rotar(){
+  if(!vivo||borrando||pieza.tipo==="O") return;
+  const nuevas=girar(pieza.celdas,pieza.tam);
+  for(const [dx,dy] of [[0,0],[-1,0],[1,0],[-2,0],[2,0],[0,-1]]){
+    if(cabe(nuevas,pieza.x+dx,pieza.y+dy)){ pieza.celdas=nuevas; pieza.x+=dx; pieza.y+=dy; apoyo=0; tono(520,0.04,"triangle",0.04); return; }
+  }
+}
+function bajar(){ if(!vivo||borrando) return false; if(cabe(pieza.celdas,pieza.x,pieza.y+1)){ pieza.y++; return true; } return false; }
+function soltar(){
+  if(!vivo||borrando) return;
+  let n=0; while(bajar()) n++;
+  puntos+=n*2; fijar();
+}
+function guardarPieza(){
+  if(!vivo||borrando||yaGuarde) return;
+  const t=pieza.tipo;
+  if(guardada){ pieza=nuevaPieza(guardada); } else { sacarSiguiente(); }
+  guardada=t; yaGuarde=true; tono(440,0.06,"sine",0.05);
+}
+function fantasma(){ let y=pieza.y; while(cabe(pieza.celdas,pieza.x,y+1)) y++; return y; }
+
+function fijar(){
+  let arriba=false;
+  pieza.celdas.forEach(([cx,cy])=>{ const X=pieza.x+cx, Y=pieza.y+cy; if(Y<0) arriba=true; else tablero[Y][X]=pieza.col; });
+  tono(180,0.06,"square",0.04);
+  if(arriba){ fin(); return; }
+  const llenas=[]; for(let y=0;y<FILAS;y++) if(tablero[y].every(c=>c)) llenas.push(y);
+  if(llenas.length){
+    borrando={filas:llenas,t:0};
+    llenas.forEach(y=>{ for(let x=0;x<COLS;x++) for(let k=0;k<3;k++) partes.push({x:OX+x*C+C/2,y:OY+y*C+C/2,vx:(Math.random()-0.5)*6,vy:(Math.random()-0.8)*5,vida:36,col:tablero[y][x]}); });
+    const base=[0,100,300,500,800][llenas.length];
+    puntos+=base*nivel; lineas+=llenas.length;
+    if(Math.floor(lineas/10)+1>nivel){ nivel=Math.floor(lineas/10)+1; [523,659,784,1047].forEach((f,i)=>setTimeout(()=>tono(f,0.12,"triangle",0.07),i*80)); }
+    [660,880,1100,1320].slice(0,llenas.length).forEach((f,i)=>setTimeout(()=>tono(f,0.1,"sine",0.07),i*60));
+  } else sacarSiguiente();
+}
+
+function paso(t){
+  raf=requestAnimationFrame(paso);
+  if(vivo){
+    if(borrando){
+      borrando.t++;
+      if(borrando.t>14){
+        borrando.filas.forEach(y=>{ tablero.splice(y,1); tablero.unshift(Array(COLS).fill(null)); });
+        borrando=null; sacarSiguiente();
+      }
+    } else {
+      const tocaSuelo=!cabe(pieza.celdas,pieza.x,pieza.y+1);
+      if(tocaSuelo){ apoyo+=16; if(apoyo>500){ fijar(); ultimaCaida=t; } }
+      else if(t-ultimaCaida>velocidad()){ pieza.y++; ultimaCaida=t; }
+    }
+  }
+  partes.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=0.2; p.vida--; }); partes=partes.filter(p=>p.vida>0);
+  dibujar();
+}
+
+function fin(){
+  vivo=false; const mejor=leer(); finNuevo=puntos>mejor; if(finNuevo) guardar(puntos);
+  tono(140,0.6,"sawtooth",0.08,0.3);
+  setTimeout(()=>{ esperandoOtra=true; },700);
+}
+
+function celda(x,y,col,alfa){
+  ctx.globalAlpha=alfa||1;
+  ctx.fillStyle=col; ctx.shadowColor=col; ctx.shadowBlur=10;
+  ctx.fillRect(x+2,y+2,C-4,C-4);
+  ctx.shadowBlur=0; ctx.fillStyle="rgba(255,255,255,.28)"; ctx.fillRect(x+4,y+4,C-8,5);
+  ctx.globalAlpha=1;
+}
+function mini(tipo,x,y,esc){
+  if(!tipo) return;
+  const p=PIEZAS[tipo], s=C*esc;
+  p.f.forEach(([cx,cy])=>{ ctx.fillStyle=p.col; ctx.shadowColor=p.col; ctx.shadowBlur=8; ctx.fillRect(x+cx*s+1,y+cy*s+1,s-2,s-2); });
+  ctx.shadowBlur=0;
+}
+function dibujar(){
+  ctx.fillStyle="#02030a"; ctx.fillRect(0,0,W,H);
+  // tablero
+  ctx.fillStyle="#050915"; ctx.fillRect(OX,OY,COLS*C,FILAS*C);
+  ctx.strokeStyle="rgba(0,204,255,.07)"; ctx.lineWidth=1;
+  for(let x=1;x<COLS;x++){ ctx.beginPath(); ctx.moveTo(OX+x*C,OY); ctx.lineTo(OX+x*C,OY+FILAS*C); ctx.stroke(); }
+  for(let y=1;y<FILAS;y++){ ctx.beginPath(); ctx.moveTo(OX,OY+y*C); ctx.lineTo(OX+COLS*C,OY+y*C); ctx.stroke(); }
+  ctx.strokeStyle="#0cf"; ctx.lineWidth=2; ctx.shadowColor="#0cf"; ctx.shadowBlur=12; ctx.strokeRect(OX-1,OY-1,COLS*C+2,FILAS*C+2); ctx.shadowBlur=0;
+  if(tablero){
+    for(let y=0;y<FILAS;y++) for(let x=0;x<COLS;x++){
+      const c=tablero[y][x]; if(!c) continue;
+      const parpadea=borrando && borrando.filas.includes(y);
+      celda(OX+x*C,OY+y*C,parpadea?(borrando.t%4<2?"#fff":c):c);
+    }
+    if(vivo && !borrando){
+      const fy=fantasma();
+      pieza.celdas.forEach(([cx,cy])=>{ if(fy+cy>=0){ ctx.strokeStyle=pieza.col; ctx.globalAlpha=0.45; ctx.lineWidth=2; ctx.strokeRect(OX+(pieza.x+cx)*C+3,OY+(fy+cy)*C+3,C-6,C-6); ctx.globalAlpha=1; } });
+      pieza.celdas.forEach(([cx,cy])=>{ if(pieza.y+cy>=0) celda(OX+(pieza.x+cx)*C,OY+(pieza.y+cy)*C,pieza.col); });
+    }
+  }
+  partes.forEach(p=>{ ctx.globalAlpha=Math.max(0,p.vida/36); ctx.fillStyle=p.col; ctx.fillRect(p.x-2,p.y-2,4,4); }); ctx.globalAlpha=1;
+  // panel derecho
+  const PX=OX+COLS*C+24;
+  ctx.textAlign="left"; ctx.textBaseline="top";
+  const titulo=(t,y)=>{ ctx.fillStyle="#7fc8e8"; ctx.font="800 13px Segoe UI,sans-serif"; ctx.fillText(t,PX,y); };
+  const valor=(t,y,col)=>{ ctx.fillStyle=col||"#fff"; ctx.font="900 22px Segoe UI,sans-serif"; ctx.fillText(t,PX,y); };
+  titulo("PUNTOS",OY); valor(String(puntos||0),OY+18,"#ffd12e");
+  titulo("NIVEL",OY+60); valor(String(nivel||1),OY+78);
+  titulo("LÍNEAS",OY+120); valor(String(lineas||0),OY+138);
+  titulo("SIGUIENTES",OY+190);
+  if(siguientes) siguientes.forEach((t,i)=>mini(t,PX,OY+214+i*62,0.62));
+  titulo("GUARDADA (C)",OY+410);
+  ctx.strokeStyle="rgba(255,255,255,.15)"; ctx.strokeRect(PX-4,OY+430,92,66);
+  mini(guardada,PX+4,OY+444,0.62);
+  titulo("RÉCORD",OY+520); valor(String(leer()),OY+538,"#b6ff00");
+  if(!vivo && tablero && esperandoOtra!==null && pieza){
+    ctx.fillStyle="rgba(0,0,0,.72)"; ctx.fillRect(0,0,W,H);
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillStyle="#fff"; ctx.font="900 34px Segoe UI,sans-serif"; ctx.shadowColor="#ff3bd4"; ctx.shadowBlur=18; ctx.fillText("SE LLENÓ",W/2,H/2-60); ctx.shadowBlur=0;
+    ctx.fillStyle="#ffd12e"; ctx.font="800 26px Segoe UI,sans-serif"; ctx.fillText(puntos+" puntos",W/2,H/2-14);
+    ctx.fillStyle="#eaf6ff"; ctx.font="700 16px Segoe UI,sans-serif"; ctx.fillText(lineas+" líneas · nivel "+nivel,W/2,H/2+16);
+    ctx.fillStyle=finNuevo?"#b6ff00":"#7fc8e8"; ctx.fillText(finNuevo?"¡NUEVO RÉCORD!":"Récord: "+leer(),W/2,H/2+44);
+    ctx.fillStyle="#7fc8e8"; ctx.font="600 15px Segoe UI,sans-serif"; ctx.fillText("toca o aprieta ESPACIO para volver a jugar",W/2,H/2+84);
+  }
+}
+
+/* ---------- teclado (con repeticion propia para mover parejo) ---------- */
+addEventListener("keydown",e=>{
+  const k=e.key.toLowerCase();
+  if(esperandoOtra && (k===" "||k==="enter")){ e.preventDefault(); empezar(); return; }
+  if(!vivo) return;
+  if(k==="arrowleft"||k==="a"){ e.preventDefault(); mover(-1); }
+  else if(k==="arrowright"||k==="d"){ e.preventDefault(); mover(1); }
+  else if(k==="arrowdown"||k==="s"){ e.preventDefault(); if(bajar()){ puntos+=1; ultimaCaida=performance.now(); } }
+  else if(k==="arrowup"||k==="w"||k==="x"){ e.preventDefault(); if(!e.repeat) rotar(); }
+  else if(k===" "){ e.preventDefault(); if(!e.repeat) soltar(); }
+  else if(k==="c"||k==="shift"){ e.preventDefault(); guardarPieza(); }
+});
+
+/* ---------- gestos tactiles ---------- */
+let gesto=null;
+cv.addEventListener("pointerdown",e=>{
+  if(esperandoOtra){ empezar(); return; }
+  gesto={x:e.clientX,y:e.clientY,ux:e.clientX,uy:e.clientY,t:performance.now(),movio:false};
+  try{ cv.setPointerCapture(e.pointerId); }catch(x){}
+});
+cv.addEventListener("pointermove",e=>{
+  if(!gesto||!vivo) return;
+  const r=cv.getBoundingClientRect(), paso=C*(r.width/W);
+  while(e.clientX-gesto.ux>paso){ mover(1); gesto.ux+=paso; gesto.movio=true; }
+  while(gesto.ux-e.clientX>paso){ mover(-1); gesto.ux-=paso; gesto.movio=true; }
+  while(e.clientY-gesto.uy>paso){ if(bajar()) puntos+=1; gesto.uy+=paso; gesto.movio=true; }
+});
+cv.addEventListener("pointerup",e=>{
+  if(!gesto) return;
+  const dt=performance.now()-gesto.t, dy=e.clientY-gesto.y, dx=e.clientX-gesto.x;
+  if(dy>60 && dt<220 && Math.abs(dy)>Math.abs(dx)*2) soltar();
+  else if(dy<-50 && Math.abs(dy)>Math.abs(dx)*2) guardarPieza();
+  else if(!gesto.movio && Math.hypot(dx,dy)<12) rotar();
+  gesto=null;
+});
+$("empezar").onclick=empezar;
+
+$("stats").innerHTML="Récord de puntos: "+leer();
+dibujar();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>

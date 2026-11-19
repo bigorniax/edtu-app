@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Come Neón</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;background:#02030a;color:#eaf6ff}
+  #wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{display:block;max-width:100%;max-height:100%;border-radius:12px;touch-action:none;
+    box-shadow:0 0 28px rgba(59,123,255,.3),inset 0 0 40px rgba(59,123,255,.06)}
+  #menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(2,3,10,.92);text-align:center;padding:20px}
+  #menu h1{font-size:40px;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #fff,0 0 18px #ffd12e,0 0 40px #3b7bff}
+  #menu p{margin:14px 0 22px;color:#a9c4ff;line-height:1.6;font-size:16px;max-width:460px}
+  #menu button{cursor:pointer;padding:16px 42px;border-radius:14px;border:2px solid #ffd12e;background:rgba(0,0,0,.6);
+    color:#fff;font-size:20px;font-weight:900;letter-spacing:2px;box-shadow:0 0 14px #ffd12e;text-shadow:0 0 8px #ffd12e}
+  #menu button:hover{transform:scale(1.05)}
+  #menu .stats{margin-top:18px;color:#ffd12e;font-weight:800;text-shadow:0 0 8px #ffd12e;line-height:1.7}
+  #menu .teclas{margin-top:10px;color:#9aa;font-size:13px}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="456" height="584"></canvas>
+  <div id="menu">
+    <h1>COME NEÓN</h1>
+    <p>Cómete todos los puntos del laberinto sin que te atrapen los fantasmas. Las píldoras grandes los asustan: por un rato te los puedes comer. El túnel de los lados te lleva al otro extremo.</p>
+    <button id="empezar">JUGAR</button>
+    <div class="teclas">flechas o WASD · en el celular desliza el dedo hacia donde quieras ir</div>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+const T=24, OY=40, W=cv.width, H=cv.height;
+const CLAVE="edtu_come_mejor";
+const MAPA=[
+"###################",
+"#........#........#",
+"#o##.###.#.###.##o#",
+"#.................#",
+"#.##.#.#####.#.##.#",
+"#....#...#...#....#",
+"####.### # ###.####",
+"   #.#       #.#   ",
+"####.# ##-## #.####",
+"    .  #GGG#  .    ",
+"####.# ##### #.####",
+"   #.#       #.#   ",
+"####.# ##### #.####",
+"#........#........#",
+"#.##.###.#.###.##.#",
+"#o.#.....P.....#.o#",
+"##.#.#.#####.#.#.##",
+"#....#...#...#....#",
+"#.######.#.######.#",
+"#.................#",
+"###################"];
+const COLS=MAPA[0].length, FILAS=MAPA.length, FILA_TUNEL=9;
+const DIRS={izq:[-1,0],der:[1,0],arr:[0,-1],aba:[0,1]};
+
+function leer(){ try{ return parseInt(localStorage.getItem(CLAVE)||"0",10)||0; }catch(e){ return 0; } }
+function guardar(v){ try{ localStorage.setItem(CLAVE,String(v)); }catch(e){} }
+
+let audio=null;
+function tono(f,d,tipo,vol,subida){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
+  const o=audio.createOscillator(), g=audio.createGain(); o.type=tipo||"square"; const t=audio.currentTime;
+  o.frequency.setValueAtTime(f,t); if(subida) o.frequency.exponentialRampToValueAtTime(f*subida,t+d);
+  g.gain.setValueAtTime(vol||0.07,t); g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t+d); }catch(e){} }
+
+let puntos=[], quedan=0, score=0, vidas=3, nivel=1, come, fantasmas=[], estado="menu", raf=null, susto=0, cadena=0, cuadro=0, modoT=0, persigue=false, pausa=0, flotantes=[], esperandoOtra=false, finNuevo=false, wakka=0;
+
+function esPared(c,f){ if(f===FILA_TUNEL && (c<0||c>=COLS)) return false; if(c<0||c>=COLS||f<0||f>=FILAS) return true; const ch=MAPA[f][c]; return ch==="#"; }
+function bloqueaA(ent,c,f){ if(esPared(c,f)) return true; const ch=(MAPA[f]||"")[c]; if(ch==="-" ) return !(ent.ojos); if(ch==="G") return !(ent.ojos||ent.casa); return false; }
+
+function cargarPuntos(){
+  puntos=MAPA.map(r=>r.split("").map(ch=>ch==="."?1:ch==="o"?2:0)); quedan=0;
+  puntos.forEach(r=>r.forEach(v=>{ if(v) quedan++; }));
+}
+function posiciones(){
+  come={c:9,f:15,dir:[0,0],quiere:[-1,0],t:0,boca:0};
+  const datos=[["#ff3b5c",9,7,0,"rojo"],["#ff8fe0",9,9,2.5,"rosa"],["#0cf",8,9,5,"celeste"],["#ff9a1a",10,9,8,"naranjo"]];
+  fantasmas=datos.map(([col,c,f,sale,nombre])=>({col,c,f,dir:[-1,0],t:0,sale:sale*60,casa:f===9,ojos:false,asustado:false,nombre}));
+  susto=0; cadena=0; modoT=0; persigue=false; pausa=70;
+}
+function empezar(){
+  $("menu").style.display="none"; esperandoOtra=false;
+  score=0; vidas=3; nivel=1; flotantes=[]; cargarPuntos(); posiciones();
+  estado="jugando"; cancelAnimationFrame(raf); raf=requestAnimationFrame(paso);
+}
+
+function velCome(){ return Math.min(0.17,0.125+(nivel-1)*0.007); }
+function velFantasma(g){
+  if(g.ojos) return 0.25;
+  if(g.asustado) return 0.066;
+  if(g.f===FILA_TUNEL && (g.c<4||g.c>14)) return 0.07;
+  return Math.min(0.16,0.112+(nivel-1)*0.008);
+}
+function envolver(e){ if(e.c<0) e.c=COLS-1; if(e.c>=COLS) e.c=0; }
+
+function avanzaCome(){
+  const v=velCome();
+  // dar la vuelta en medio del pasillo
+  if(come.dir[0]===-come.quiere[0] && come.dir[1]===-come.quiere[1] && (come.dir[0]||come.dir[1])){
+    if(come.t>0){ come.c+=come.dir[0]; come.f+=come.dir[1]; envolver(come); come.t=1-come.t; }
+    come.dir=come.quiere.slice(); return;
+  }
+  if(come.t===0){
+    if(!esPared(come.c+come.quiere[0],come.f+come.quiere[1]) && MAPA[come.f+come.quiere[1]] && MAPA[come.f+come.quiere[1]][come.c+come.quiere[0]]!=="-") come.dir=come.quiere.slice();
+    const sc=come.c+come.dir[0], sf=come.f+come.dir[1];
+    if(esPared(sc,sf) || ((MAPA[sf]||"")[sc]==="-")) return;   // parado contra la pared
+  }
+  come.t+=v; come.boca+=0.25;
+  if(come.t>=1){ come.t-=1; come.c+=come.dir[0]; come.f+=come.dir[1]; envolver(come); comer();
+    const sc=come.c+come.dir[0], sf=come.f+come.dir[1];
+    const puedeGirar=!esPared(come.c+come.quiere[0],come.f+come.quiere[1]) && (MAPA[come.f+come.quiere[1]]||"")[come.c+come.quiere[0]]!=="-";
+    if(puedeGirar){ come.dir=come.quiere.slice(); }
+    else if(esPared(sc,sf)||((MAPA[sf]||"")[sc]==="-")) come.t=0;
+  }
+}
+function comer(){
+  if(come.c<0||come.c>=COLS) return;
+  const v=puntos[come.f][come.c]; if(!v) return;
+  puntos[come.f][come.c]=0; quedan--;
+  if(v===1){ score+=10; wakka=!wakka; tono(wakka?420:340,0.05,"square",0.03); }
+  else { score+=50; susto=Math.max(120,420-(nivel-1)*40); cadena=0; fantasmas.forEach(g=>{ if(!g.ojos&&!g.casa){ g.asustado=true; g.dir=[-g.dir[0],-g.dir[1]]; } }); tono(200,0.4,"sawtooth",0.05,3); }
+  if(quedan<=0){ estado="nivel"; pausa=120; [523,659,784,1047,1319].forEach((f,i)=>setTimeout(()=>tono(f,0.12,"triangle",0.07),i*90)); }
+}
+
+function objetivo(g){
+  if(g.ojos) return [9,7];
+  if(!persigue){ return {rojo:[COLS-2,0],rosa:[1,0],celeste:[COLS-1,FILAS],naranjo:[0,FILAS]}[g.nombre]; }
+  const d=come.dir;
+  if(g.nombre==="rojo") return [come.c,come.f];
+  if(g.nombre==="rosa") return [come.c+d[0]*4,come.f+d[1]*4];
+  if(g.nombre==="celeste"){ const r=fantasmas[0]; const px=come.c+d[0]*2, py=come.f+d[1]*2; return [px*2-r.c,py*2-r.f]; }
+  const dist=Math.hypot(g.c-come.c,g.f-come.f); return dist>8?[come.c,come.f]:[0,FILAS];
+}
+function eligeDir(g){
+  const op=[-g.dir[0],-g.dir[1]];
+  let opciones=Object.values(DIRS).filter(d=>!(d[0]===op[0]&&d[1]===op[1]) && !bloqueaA(g,g.c+d[0],g.f+d[1]));
+  if(!opciones.length) opciones=[op];
+  if(g.asustado){ g.dir=opciones[Math.floor(Math.random()*opciones.length)]; return; }
+  const [tx,ty]=objetivo(g);
+  let mejor=opciones[0], md=1e9;
+  opciones.forEach(d=>{ const dd=Math.hypot(g.c+d[0]-tx,g.f+d[1]-ty); if(dd<md){ md=dd; mejor=d; } });
+  g.dir=mejor;
+}
+function avanzaFantasma(g){
+  if(g.casa){
+    if(g.sale>0){ g.sale--; return; }
+    g.casa=false; g.c=9; g.f=7; g.t=0; g.dir=[-1,0]; return;
+  }
+  g.t+=velFantasma(g);
+  if(g.t>=1){
+    g.t-=1; g.c+=g.dir[0]; g.f+=g.dir[1]; envolver(g);
+    if(g.ojos && g.c===9 && g.f===7){ g.ojos=false; g.asustado=false; g.casa=true; g.c=9; g.f=9; g.sale=60; return; }
+    eligeDir(g);
+  }
+}
+
+function pos(e){ return [(e.c+e.dir[0]*e.t)*T+T/2, OY+(e.f+e.dir[1]*e.t)*T+T/2]; }
+
+function paso(){
+  raf=requestAnimationFrame(paso);
+  cuadro++;
+  if(estado==="jugando"){
+    if(pausa>0){ pausa--; dibujar(); return; }
+    // alternar entre ir a su esquina (descanso) y perseguir
+    modoT++; const ciclo=modoT%(60*27); const antes=persigue; persigue=ciclo>=60*7;
+    if(antes!==persigue) fantasmas.forEach(g=>{ if(!g.casa&&!g.ojos) g.dir=[-g.dir[0],-g.dir[1]]; });
+    if(susto>0){ susto--; if(susto===0) fantasmas.forEach(g=>g.asustado=false); }
+    avanzaCome();
+    fantasmas.forEach(avanzaFantasma);
+    if(estado!=="jugando"){ dibujar(); return; }
+    const [px,py]=pos(come);
+    for(const g of fantasmas){
+      if(g.casa||g.ojos) continue;
+      const [gx,gy]=pos(g);
+      if(Math.hypot(px-gx,py-gy)<T*0.65){
+        if(g.asustado){ g.asustado=false; g.ojos=true; cadena++; const p=200*Math.pow(2,cadena-1); score+=p; flotantes.push({x:gx,y:gy,t:p+"",vida:50}); tono(880,0.2,"sine",0.08,2); }
+        else { atrapado(); break; }
+      }
+    }
+  } else if(estado==="muerto"){
+    pausa--; if(pausa<=0){ if(vidas<=0) fin(); else { posiciones(); estado="jugando"; } }
+  } else if(estado==="nivel"){
+    pausa--; if(pausa<=0){ nivel++; cargarPuntos(); posiciones(); estado="jugando"; }
+  }
+  flotantes.forEach(f=>{ f.y-=0.5; f.vida--; }); flotantes=flotantes.filter(f=>f.vida>0);
+  dibujar();
+}
+function atrapado(){
+  vidas--; estado="muerto"; pausa=110;
+  tono(500,0.9,"triangle",0.08,0.2);
+}
+function fin(){
+  estado="fin"; finNuevo=score>leer(); if(finNuevo) guardar(score);
+  setTimeout(()=>{ esperandoOtra=true; },600);
+}
+
+function dibujaParedes(){
+  ctx.strokeStyle="#3b7bff"; ctx.lineWidth=2; ctx.shadowColor="#3b7bff"; ctx.shadowBlur=10;
+  ctx.beginPath();
+  for(let f=0;f<FILAS;f++) for(let c=0;c<COLS;c++){
+    if(MAPA[f][c]!=="#") continue;
+    const x=c*T, y=OY+f*T, m=4;
+    const libre=(cc,ff)=>ff>=0&&ff<FILAS&&cc>=0&&cc<COLS&&MAPA[ff][cc]!=="#";
+    if(libre(c,f-1)){ ctx.moveTo(x,y+m); ctx.lineTo(x+T,y+m); }
+    if(libre(c,f+1)){ ctx.moveTo(x,y+T-m); ctx.lineTo(x+T,y+T-m); }
+    if(libre(c-1,f)){ ctx.moveTo(x+m,y); ctx.lineTo(x+m,y+T); }
+    if(libre(c+1,f)){ ctx.moveTo(x+T-m,y); ctx.lineTo(x+T-m,y+T); }
+  }
+  ctx.stroke(); ctx.shadowBlur=0;
+  // puerta de la casa
+  ctx.strokeStyle="#ff8fe0"; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(9*T,OY+8*T+T/2); ctx.lineTo(10*T,OY+8*T+T/2); ctx.stroke();
+}
+function dibujaFantasma(g){
+  const [x,y]=g.casa?[g.c*T+T/2, OY+g.f*T+T/2+Math.sin(cuadro/8+g.c)*3]:pos(g);
+  const r=T*0.46;
+  if(!g.ojos){
+    let col=g.col;
+    if(g.asustado) col=(susto<100 && Math.floor(susto/10)%2)?"#ffffff":"#2b3bff";
+    ctx.fillStyle=col; ctx.shadowColor=col; ctx.shadowBlur=12;
+    ctx.beginPath(); ctx.arc(x,y-2,r,Math.PI,0); ctx.lineTo(x+r,y+r);
+    for(let i=0;i<4;i++){ const xx=x+r-(i+0.5)*(r*2/4); ctx.lineTo(xx,y+r-((i+Math.floor(cuadro/8))%2?5:0)); }
+    ctx.lineTo(x-r,y+r); ctx.closePath(); ctx.fill(); ctx.shadowBlur=0;
+  }
+  if(g.asustado && !g.ojos){ ctx.fillStyle="#fff"; ctx.fillRect(x-5,y-5,3,3); ctx.fillRect(x+2,y-5,3,3); return; }
+  const d=g.dir;
+  [-4,4].forEach(dx=>{ ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(x+dx,y-4,3.6,0,7); ctx.fill();
+    ctx.fillStyle="#0a1a5c"; ctx.beginPath(); ctx.arc(x+dx+d[0]*1.6,y-4+d[1]*1.6,1.8,0,7); ctx.fill(); });
+}
+function dibujar(){
+  ctx.fillStyle="#02030a"; ctx.fillRect(0,0,W,H);
+  dibujaParedes();
+  // puntos
+  for(let f=0;f<FILAS;f++) for(let c=0;c<COLS;c++){
+    const v=puntos[f]&&puntos[f][c]; if(!v) continue;
+    const x=c*T+T/2, y=OY+f*T+T/2;
+    if(v===1){ ctx.fillStyle="#ffd9a8"; ctx.fillRect(x-2,y-2,4,4); }
+    else if(Math.floor(cuadro/12)%2||estado!=="jugando"){ ctx.fillStyle="#ffd12e"; ctx.shadowColor="#ffd12e"; ctx.shadowBlur=12; ctx.beginPath(); ctx.arc(x,y,6,0,7); ctx.fill(); ctx.shadowBlur=0; }
+  }
+  if(come){
+    // comecocos
+    const [x,y]=pos(come);
+    let ang=Math.atan2(come.dir[1],come.dir[0]); if(!come.dir[0]&&!come.dir[1]) ang=Math.PI;
+    let abre=0.08+Math.abs(Math.sin(come.boca))*0.7;
+    if(estado==="muerto"){ abre=Math.min(Math.PI,(110-pausa)/110*Math.PI*1.05); ang=-Math.PI/2; }
+    ctx.fillStyle="#ffd12e"; ctx.shadowColor="#ffd12e"; ctx.shadowBlur=16;
+    ctx.beginPath(); ctx.moveTo(x,y); ctx.arc(x,y,T*0.45,ang+abre/2,ang+Math.PI*2-abre/2); ctx.closePath(); ctx.fill(); ctx.shadowBlur=0;
+    if(estado!=="muerto") fantasmas.forEach(dibujaFantasma);
+  }
+  flotantes.forEach(f=>{ ctx.fillStyle="#0cf"; ctx.font="900 14px Segoe UI,sans-serif"; ctx.textAlign="center"; ctx.fillText(f.t,f.x,f.y); });
+  // barra
+  ctx.textBaseline="middle"; ctx.font="900 17px Segoe UI,sans-serif";
+  ctx.textAlign="left"; ctx.fillStyle="#ffd12e"; ctx.fillText(String(score),12,20);
+  ctx.textAlign="center"; ctx.fillStyle="#a9c4ff"; ctx.font="800 14px Segoe UI,sans-serif"; ctx.fillText("NIVEL "+nivel+"   ·   récord "+leer(),W/2,20);
+  for(let i=0;i<vidas;i++){ const x=W-20-i*22, y=20; ctx.fillStyle="#ffd12e"; ctx.beginPath(); ctx.moveTo(x,y); ctx.arc(x,y,8,0.6,Math.PI*2-0.6); ctx.fill(); }
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  if(estado==="jugando" && pausa>0){ ctx.fillStyle="#ffd12e"; ctx.font="900 20px Segoe UI,sans-serif"; ctx.fillText("¡LISTO!",W/2,OY+11*T+T/2); }
+  if(estado==="nivel"){ ctx.fillStyle="#fff"; ctx.font="900 26px Segoe UI,sans-serif"; ctx.shadowColor="#3b7bff"; ctx.shadowBlur=16; ctx.fillText("¡NIVEL LIMPIO!",W/2,OY+11*T+T/2); ctx.shadowBlur=0; }
+  if(estado==="fin"){
+    ctx.fillStyle="rgba(0,0,0,.72)"; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle="#fff"; ctx.font="900 34px Segoe UI,sans-serif"; ctx.shadowColor="#ff3b5c"; ctx.shadowBlur=18; ctx.fillText("TE ATRAPARON",W/2,H/2-60); ctx.shadowBlur=0;
+    ctx.fillStyle="#ffd12e"; ctx.font="800 26px Segoe UI,sans-serif"; ctx.fillText(score+" puntos · nivel "+nivel,W/2,H/2-14);
+    ctx.fillStyle=finNuevo?"#b6ff00":"#7fc8e8"; ctx.font="700 17px Segoe UI,sans-serif"; ctx.fillText(finNuevo?"¡NUEVO RÉCORD!":"Récord: "+leer(),W/2,H/2+22);
+    ctx.fillStyle="#7fc8e8"; ctx.font="600 15px Segoe UI,sans-serif"; ctx.fillText("toca o aprieta ESPACIO para volver a jugar",W/2,H/2+62);
+  }
+}
+
+/* ---------- controles ---------- */
+const TECLA={arrowleft:"izq",a:"izq",arrowright:"der",d:"der",arrowup:"arr",w:"arr",arrowdown:"aba",s:"aba"};
+addEventListener("keydown",e=>{
+  const k=e.key.toLowerCase();
+  if(esperandoOtra && (k===" "||k==="enter")){ e.preventDefault(); empezar(); return; }
+  if(TECLA[k] && come){ e.preventDefault(); come.quiere=DIRS[TECLA[k]].slice(); }
+});
+let dedo=null;
+cv.addEventListener("pointerdown",e=>{ if(esperandoOtra){ empezar(); return; } dedo={x:e.clientX,y:e.clientY}; });
+cv.addEventListener("pointermove",e=>{
+  if(!dedo||!come) return;
+  const dx=e.clientX-dedo.x, dy=e.clientY-dedo.y;
+  if(Math.hypot(dx,dy)<22) return;
+  come.quiere=Math.abs(dx)>Math.abs(dy)?(dx>0?[1,0]:[-1,0]):(dy>0?[0,1]:[0,-1]);
+  dedo={x:e.clientX,y:e.clientY};
+});
+["pointerup","pointercancel"].forEach(t=>cv.addEventListener(t,()=>{ dedo=null; }));
+$("empezar").onclick=empezar;
+
+$("stats").innerHTML="Récord de puntos: "+leer();
+cargarPuntos(); dibujar();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>
