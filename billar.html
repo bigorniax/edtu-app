@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Billar Neón</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;background:#02030a;color:#eaf6ff}
+  #wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{display:block;max-width:100%;max-height:100%;border-radius:12px;touch-action:none;cursor:crosshair;
+    box-shadow:0 0 28px rgba(0,204,255,.2),inset 0 0 40px rgba(0,204,255,.05)}
+  #menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(2,3,10,.92);text-align:center;padding:20px}
+  #menu h1{font-size:40px;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #fff,0 0 18px #0cf,0 0 40px #b6ff00}
+  #menu p{margin:14px 0 22px;color:#a8dcef;line-height:1.6;font-size:16px;max-width:500px}
+  #menu button{cursor:pointer;padding:16px 42px;border-radius:14px;border:2px solid #0cf;background:rgba(0,0,0,.6);color:#fff;font-size:20px;font-weight:900;letter-spacing:2px;box-shadow:0 0 14px #0cf}
+  #menu .stats{margin-top:18px;color:#ffd12e;font-weight:800;line-height:1.7}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="720" height="460"></canvas>
+  <div id="menu">
+    <h1>BILLAR NEÓN</h1>
+    <p>Bola 8 contra la compu. Arrastra hacia atrás desde la bola blanca y suelta: mientras más lejos, más fuerte. La primera bola que metes decide si eres de las lisas o de las rayadas. Mete todas las tuyas y al final la negra. Si metes la blanca, el otro juega con bola en mano.</p>
+    <button id="empezar">JUGAR</button>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+const W=cv.width, H=cv.height;
+const MX=60, MY=70, MW=600, MH=320, R=10.5, RT=19;   // mesa y troneras
+const CLAVE="edtu_billar_mejor";
+function leer(){ try{ return parseInt(localStorage.getItem(CLAVE)||"0",10)||0; }catch(e){ return 0; } }
+function guardar(v){ try{ localStorage.setItem(CLAVE,String(v)); }catch(e){} }
+let audio=null;
+function tono(f,d,tipo,vol,subida){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
+  const o=audio.createOscillator(), g=audio.createGain(); o.type=tipo||"square"; const t=audio.currentTime;
+  o.frequency.setValueAtTime(f,t); if(subida) o.frequency.exponentialRampToValueAtTime(f*subida,t+d);
+  g.gain.setValueAtTime(vol||0.07,t); g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t+d); }catch(e){} }
+
+const TRONERAS=[[MX,MY],[MX+MW/2,MY-4],[MX+MW,MY],[MX,MY+MH],[MX+MW/2,MY+MH+4],[MX+MW,MY+MH]];
+const COLOR=["#fff","#ffd12e","#3b7bff","#ff3b5c","#b46bff","#ff8a1a","#2ee59d","#c2185b","#111","#ffd12e","#3b7bff","#ff3b5c","#b46bff","#ff8a1a","#2ee59d","#c2185b"];
+let bolas=[], turno="yo", grupo={yo:null,cpu:null}, enMano=false, moviendo=false, tiro=null, apunta=null, estado="menu", raf=null, msg="", tMsg=0, esperandoOtra=false, ganador=null;
+
+function rack(){
+  bolas=[{n:0,x:MX+MW*0.25,y:MY+MH/2,vx:0,vy:0,dentro:false}];
+  // triangulo: la 8 al centro, una lisa y una rayada en las esquinas de atras
+  const orden=[1,9,2,10,8,3,11,4,12,5,13,6,14,7,15];
+  let k=0; const x0=MX+MW*0.7;
+  for(let fila=0;fila<5;fila++) for(let i=0;i<=fila;i++){
+    const n=orden[k++]; bolas.push({n,x:x0+fila*R*1.75,y:MY+MH/2+(i-fila/2)*R*2.02,vx:0,vy:0,dentro:false});
+  }
+}
+const tipo=n=>n===0?"blanca":n===8?"negra":n<8?"lisas":"rayadas";
+function empezar(){
+  $("menu").style.display="none"; esperandoOtra=false;
+  rack(); turno="yo"; grupo={yo:null,cpu:null}; enMano=false; moviendo=false; ganador=null; aviso("TÚ ABRES");
+  estado="jugando"; cancelAnimationFrame(raf); raf=requestAnimationFrame(paso);
+}
+function aviso(t){ msg=t; tMsg=110; }
+const blanca=()=>bolas[0];
+
+function fisica(){
+  const sub=4; let algo=false;
+  for(let s=0;s<sub;s++){
+    for(const b of bolas){ if(b.dentro) continue; b.x+=b.vx/sub; b.y+=b.vy/sub; }
+    // bola contra bola
+    for(let i=0;i<bolas.length;i++) for(let j=i+1;j<bolas.length;j++){
+      const a=bolas[i], b=bolas[j]; if(a.dentro||b.dentro) continue;
+      const dx=b.x-a.x, dy=b.y-a.y, d=Math.hypot(dx,dy);
+      if(d<2*R && d>0){
+        const nx=dx/d, ny=dy/d, sobra=2*R-d; a.x-=nx*sobra/2; a.y-=ny*sobra/2; b.x+=nx*sobra/2; b.y+=ny*sobra/2;
+        const vr=(a.vx-b.vx)*nx+(a.vy-b.vy)*ny;
+        if(vr>0){ a.vx-=vr*nx*0.97; a.vy-=vr*ny*0.97; b.vx+=vr*nx*0.97; b.vy+=vr*ny*0.97;
+          if(tiro && !tiro.primera && (a.n===0||b.n===0)) tiro.primera=a.n===0?b.n:a.n;
+          if(vr>0.6) tono(900+Math.random()*200,0.03,"triangle",Math.min(0.08,vr*0.012)); }
+      }
+    }
+    // troneras y bandas
+    for(const b of bolas){
+      if(b.dentro) continue;
+      for(const [tx,ty] of TRONERAS) if(Math.hypot(b.x-tx,b.y-ty)<RT){ b.dentro=true; b.vx=b.vy=0; if(tiro) tiro.metidas.push(b.n); tono(200,0.15,"sine",0.07,0.6); break; }
+      if(b.dentro) continue;
+      if(b.x<MX+R){ b.x=MX+R; b.vx=-b.vx*0.78; } if(b.x>MX+MW-R){ b.x=MX+MW-R; b.vx=-b.vx*0.78; }
+      if(b.y<MY+R){ b.y=MY+R; b.vy=-b.vy*0.78; } if(b.y>MY+MH-R){ b.y=MY+MH-R; b.vy=-b.vy*0.78; }
+    }
+  }
+  for(const b of bolas){ if(b.dentro) continue; b.vx*=0.988; b.vy*=0.988; const v=Math.hypot(b.vx,b.vy); if(v<0.04){ b.vx=b.vy=0; } else algo=true; }
+  return algo;
+}
+
+function tirar(vx,vy){
+  const b=blanca(); b.vx=vx; b.vy=vy; moviendo=true; enMano=false;
+  tiro={primera:null,metidas:[]}; tono(140,0.08,"square",0.06);
+}
+function quedan(g){ return bolas.filter(b=>!b.dentro && tipo(b.n)===g).length; }
+function finTiro(){
+  moviendo=false;
+  const quien=turno, otro=quien==="yo"?"cpu":"yo", t=tiro; tiro=null;
+  const metioBlanca=t.metidas.includes(0), metioNegra=t.metidas.includes(8);
+  const propias=t.metidas.filter(n=>n!==0&&n!==8);
+  // definir grupos con la primera bola metida
+  if(!grupo[quien] && propias.length){ const g=tipo(propias[0]); grupo[quien]=g; grupo[otro]=g==="lisas"?"rayadas":"lisas"; aviso((quien==="yo"?"ERES ":"LA COMPU ES ")+g.toUpperCase()); }
+  const miGrupo=grupo[quien];
+  if(metioNegra){
+    const limpia=miGrupo && quedan(miGrupo)===0 && !metioBlanca;
+    terminar(limpia?quien:otro, limpia?"¡METIÓ LA NEGRA!":"LA NEGRA ANTES DE TIEMPO"); return;
+  }
+  let falta=false;
+  if(metioBlanca) falta=true;
+  else if(t.primera===null) falta=true;
+  else if(miGrupo && tipo(t.primera)!==miGrupo && !(quedan(miGrupo)===0 && t.primera===8)) falta=true;
+  if(metioBlanca){ const b=blanca(); b.dentro=false; b.x=MX+MW*0.25; b.y=MY+MH/2; b.vx=b.vy=0; libreBlanca(b); }
+  const sigue = !falta && propias.some(n=>!miGrupo || tipo(n)===miGrupo);
+  if(falta){ turno=otro; enMano=true; aviso(metioBlanca?"FALTA: SE METIÓ LA BLANCA":"FALTA"); }
+  else if(!sigue){ turno=otro; }
+  if(turno==="cpu") setTimeout(juegaCpu,900);
+}
+function libreBlanca(b){ // mover la blanca si quedo encima de otra
+  for(let k=0;k<50;k++){ if(!bolas.some(o=>o!==b&&!o.dentro&&Math.hypot(o.x-b.x,o.y-b.y)<2*R+1)) return; b.y+=R*2.2; if(b.y>MY+MH-R){ b.y=MY+R; b.x+=R*2.2; } }
+}
+function terminar(quien,porque){
+  estado="fin"; ganador=quien; aviso(porque);
+  if(quien==="yo"){ guardar(leer()+1); [523,659,784,1047].forEach((f,i)=>setTimeout(()=>tono(f,0.14,"triangle",0.07),i*90)); }
+  setTimeout(()=>esperandoOtra=true,800);
+}
+
+/* ---------- la compu: busca bola fantasma hacia cada tronera ---------- */
+function caminoLibre(x1,y1,x2,y2,ignorar){
+  const dx=x2-x1, dy=y2-y1, L=Math.hypot(dx,dy);
+  for(const o of bolas){ if(o.dentro||ignorar.includes(o.n)) continue;
+    const t=Math.max(0,Math.min(1,((o.x-x1)*dx+(o.y-y1)*dy)/(L*L))), px=x1+dx*t, py=y1+dy*t;
+    if(Math.hypot(o.x-px,o.y-py)<2*R-0.5) return false; }
+  return true;
+}
+function juegaCpu(){
+  if(estado!=="jugando"||turno!=="cpu") return;
+  const b=blanca(), g=grupo.cpu;
+  const objetivos=bolas.filter(o=>!o.dentro&&o.n!==0&&(g?(quedan(g)===0?o.n===8:tipo(o.n)===g):o.n!==8));
+  if(enMano){ // bola en mano: la pone en un buen lugar (simple: frente a una bola facil)
+    let mejor=null;
+    for(const o of objetivos) for(const [tx,ty] of TRONERAS){ const dx=o.x-tx, dy=o.y-ty, d=Math.hypot(dx,dy); const px=o.x+dx/d*90, py=o.y+dy/d*90;
+      if(px<MX+R||px>MX+MW-R||py<MY+R||py>MY+MH-R) continue; if(bolas.some(q=>!q.dentro&&q!==b&&Math.hypot(q.x-px,q.y-py)<2*R+2)) continue; mejor=[px,py]; break; }
+    if(mejor){ b.x=mejor[0]; b.y=mejor[1]; } enMano=false;
+  }
+  let mejor=null, mv=-1e9;
+  for(const o of objetivos) for(const [tx,ty] of TRONERAS){
+    const dx=tx-o.x, dy=ty-o.y, d=Math.hypot(dx,dy), gx=o.x-dx/d*2*R, gy=o.y-dy/d*2*R;   // bola fantasma
+    const ax=gx-b.x, ay=gy-b.y, da=Math.hypot(ax,ay); if(da<1) continue;
+    const corte=(ax*dx+ay*dy)/(da*d); if(corte<0.25) continue;                 // corte muy fino: imposible
+    if(!caminoLibre(b.x,b.y,gx,gy,[0,o.n])||!caminoLibre(o.x,o.y,tx,ty,[o.n])) continue;
+    const v=corte*2-(da+d)/500; if(v>mv){ mv=v; mejor={ax,ay,da,d,corte}; }
+  }
+  setTimeout(()=>{
+    if(estado!=="jugando") return;
+    let ang, pot;
+    if(mejor){ ang=Math.atan2(mejor.ay,mejor.ax)+(Math.random()-0.5)*0.05; pot=Math.min(17,4+(mejor.da+mejor.d)/45/Math.max(0.4,mejor.corte)); }
+    else { const o=objetivos[Math.floor(Math.random()*objetivos.length)]||bolas.find(q=>!q.dentro&&q.n!==0); ang=Math.atan2(o.y-b.y,o.x-b.x); pot=10; }
+    apuntaCpu={ang,pot,t:0};
+  },700);
+}
+let apuntaCpu=null;
+
+function paso(){
+  raf=requestAnimationFrame(paso);
+  if(estado==="jugando"){
+    if(apuntaCpu){ apuntaCpu.t++; if(apuntaCpu.t>45){ const a=apuntaCpu; apuntaCpu=null; tirar(Math.cos(a.ang)*a.pot,Math.sin(a.ang)*a.pot); } }
+    if(moviendo && !fisica()) finTiro();
+  }
+  if(tMsg>0) tMsg--;
+  dibujar();
+}
+
+function rayoAyuda(b,ang){
+  // hasta donde llega la linea de tiro y con que bola choca (bola fantasma)
+  const dx=Math.cos(ang), dy=Math.sin(ang); let tMin=1e9, choca=null;
+  for(const o of bolas){ if(o.dentro||o.n===0) continue; const fx=o.x-b.x, fy=o.y-b.y, t=fx*dx+fy*dy; if(t<=0) continue;
+    const p2=fx*fx+fy*fy-t*t; if(p2>4*R*R) continue; const tt=t-Math.sqrt(4*R*R-p2); if(tt<tMin){ tMin=tt; choca=o; } }
+  if(!choca){ let t=1e9; if(dx>0) t=Math.min(t,(MX+MW-R-b.x)/dx); if(dx<0) t=Math.min(t,(MX+R-b.x)/dx); if(dy>0) t=Math.min(t,(MY+MH-R-b.y)/dy); if(dy<0) t=Math.min(t,(MY+R-b.y)/dy); tMin=t; }
+  return {x:b.x+dx*tMin,y:b.y+dy*tMin,choca};
+}
+function dibujaBola(b){
+  const c=COLOR[b.n];
+  ctx.fillStyle=b.n>8?"#eaf6ff":c; ctx.shadowColor=b.n===8?"#888":c; ctx.shadowBlur=b.n===0?14:8; ctx.beginPath(); ctx.arc(b.x,b.y,R,0,7); ctx.fill(); ctx.shadowBlur=0;
+  if(b.n>8){ ctx.fillStyle=c; ctx.fillRect(b.x-R+1,b.y-R*0.5,2*R-2,R); }
+  if(b.n===8){ ctx.strokeStyle="#ccc"; ctx.lineWidth=1; ctx.stroke(); }
+  if(b.n>0){ ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(b.x,b.y,R*0.48,0,7); ctx.fill(); ctx.fillStyle="#02030a"; ctx.font="800 9px Segoe UI,sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(String(b.n),b.x,b.y+0.5); }
+}
+function dibujar(){
+  ctx.fillStyle="#02030a"; ctx.fillRect(0,0,W,H);
+  // mesa
+  ctx.fillStyle="#04140e"; ctx.fillRect(MX,MY,MW,MH);
+  ctx.strokeStyle="#0cf"; ctx.lineWidth=3; ctx.shadowColor="#0cf"; ctx.shadowBlur=14; ctx.strokeRect(MX-3,MY-3,MW+6,MH+6); ctx.shadowBlur=0;
+  ctx.strokeStyle="rgba(0,204,255,.12)"; ctx.beginPath(); ctx.moveTo(MX+MW*0.25,MY); ctx.lineTo(MX+MW*0.25,MY+MH); ctx.stroke();
+  TRONERAS.forEach(([x,y])=>{ ctx.fillStyle="#000"; ctx.beginPath(); ctx.arc(x,y,RT,0,7); ctx.fill(); ctx.strokeStyle="rgba(182,255,0,.6)"; ctx.lineWidth=2; ctx.stroke(); });
+  bolas.forEach(b=>{ if(!b.dentro) dibujaBola(b); });
+  // linea de tiro del jugador
+  const b=blanca();
+  if(apunta && estado==="jugando"){
+    const dx=apunta.x0-apunta.x, dy=apunta.y0-apunta.y, d=Math.hypot(dx,dy);
+    if(d>4){ const ang=Math.atan2(dy,dx), r=rayoAyuda(b,ang), pot=Math.min(18,d/9);
+      ctx.strokeStyle="rgba(255,255,255,.55)"; ctx.setLineDash([6,6]); ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(b.x,b.y); ctx.lineTo(r.x,r.y); ctx.stroke(); ctx.setLineDash([]);
+      ctx.strokeStyle="rgba(255,255,255,.7)"; ctx.beginPath(); ctx.arc(r.x,r.y,R,0,7); ctx.stroke();
+      if(r.choca){ const nx=r.choca.x-r.x, ny=r.choca.y-r.y, nd=Math.hypot(nx,ny); ctx.strokeStyle="rgba(255,209,46,.7)"; ctx.beginPath(); ctx.moveTo(r.choca.x,r.choca.y); ctx.lineTo(r.choca.x+nx/nd*70,r.choca.y+ny/nd*70); ctx.stroke(); }
+      // taco
+      ctx.strokeStyle="#ff8a1a"; ctx.lineWidth=5; ctx.shadowColor="#ff8a1a"; ctx.shadowBlur=10; const atras=14+pot*4;
+      ctx.beginPath(); ctx.moveTo(b.x-Math.cos(ang)*atras,b.y-Math.sin(ang)*atras); ctx.lineTo(b.x-Math.cos(ang)*(atras+200),b.y-Math.sin(ang)*(atras+200)); ctx.stroke(); ctx.shadowBlur=0;
+      ctx.fillStyle="rgba(255,255,255,.12)"; ctx.fillRect(MX,MY+MH+26,MW,8); ctx.fillStyle=pot>13?"#ff3b5c":pot>7?"#ffd12e":"#b6ff00"; ctx.fillRect(MX,MY+MH+26,MW*pot/18,8);
+    }
+  }
+  if(apuntaCpu){ const a=apuntaCpu; ctx.strokeStyle="#ff3bd4"; ctx.lineWidth=5; ctx.shadowColor="#ff3bd4"; ctx.shadowBlur=10; const atras=14+a.t*0.6;
+    ctx.beginPath(); ctx.moveTo(b.x-Math.cos(a.ang)*atras,b.y-Math.sin(a.ang)*atras); ctx.lineTo(b.x-Math.cos(a.ang)*(atras+200),b.y-Math.sin(a.ang)*(atras+200)); ctx.stroke(); ctx.shadowBlur=0; }
+  // barra de arriba
+  ctx.textBaseline="middle"; ctx.font="800 15px Segoe UI,sans-serif";
+  ctx.textAlign="left"; ctx.fillStyle=turno==="yo"?"#b6ff00":"#7a8597"; ctx.fillText("TÚ"+(grupo.yo?" · "+grupo.yo+" ("+quedan(grupo.yo)+")":""),MX,28);
+  ctx.textAlign="right"; ctx.fillStyle=turno==="cpu"?"#ff3bd4":"#7a8597"; ctx.fillText((grupo.cpu?grupo.cpu+" ("+quedan(grupo.cpu)+") · ":"")+"COMPU",MX+MW,28);
+  ctx.textAlign="center"; ctx.fillStyle="#ffd12e"; ctx.fillText("ganadas "+leer(),W/2,28);
+  if(enMano && turno==="yo" && !moviendo && estado==="jugando"){ ctx.fillStyle="#7fc8e8"; ctx.font="700 13px Segoe UI,sans-serif"; ctx.fillText("BOLA EN MANO: arrastra la blanca a donde quieras (o toca otra parte para tirar)",W/2,MY+MH+48); }
+  else if(turno==="yo" && !moviendo && estado==="jugando"){ ctx.fillStyle="#6f7a8c"; ctx.font="600 13px Segoe UI,sans-serif"; ctx.fillText("arrastra hacia atrás y suelta para tirar",W/2,MY+MH+48); }
+  if(tMsg>0){ ctx.globalAlpha=Math.min(1,tMsg/25); ctx.fillStyle="#fff"; ctx.font="900 26px Segoe UI,sans-serif"; ctx.shadowColor="#0cf"; ctx.shadowBlur=16; ctx.fillText(msg,W/2,MY+MH/2); ctx.shadowBlur=0; ctx.globalAlpha=1; }
+  if(estado==="fin"){
+    ctx.fillStyle="rgba(0,0,0,.7)"; ctx.fillRect(0,0,W,H); ctx.textAlign="center";
+    ctx.fillStyle="#fff"; ctx.font="900 34px Segoe UI,sans-serif"; ctx.shadowColor=ganador==="yo"?"#b6ff00":"#ff3bd4"; ctx.shadowBlur=18; ctx.fillText(ganador==="yo"?"¡GANASTE!":"GANÓ LA COMPU",W/2,H/2-40); ctx.shadowBlur=0;
+    ctx.fillStyle="#ffd12e"; ctx.font="700 17px Segoe UI,sans-serif"; ctx.fillText(msg,W/2,H/2);
+    ctx.fillStyle="#7fc8e8"; ctx.font="600 15px Segoe UI,sans-serif"; ctx.fillText("partidas ganadas: "+leer()+" · toca para jugar otra",W/2,H/2+40);
+  }
+}
+
+/* ---------- controles ---------- */
+function punto(e){ const r=cv.getBoundingClientRect(); return {x:(e.clientX-r.left)*(W/r.width), y:(e.clientY-r.top)*(H/r.height)}; }
+let moviendoBlanca=false;
+cv.addEventListener("pointerdown",e=>{
+  if(esperandoOtra){ empezar(); return; }
+  if(estado!=="jugando"||turno!=="yo"||moviendo||apuntaCpu) return;
+  const q=punto(e), b=blanca();
+  if(enMano && Math.hypot(q.x-b.x,q.y-b.y)<R*2.2){ moviendoBlanca=true; }
+  else apunta={x0:q.x,y0:q.y,x:q.x,y:q.y};
+  try{ cv.setPointerCapture(e.pointerId); }catch(x){}
+});
+cv.addEventListener("pointermove",e=>{
+  const q=punto(e);
+  if(moviendoBlanca){ const b=blanca(); const nx=Math.max(MX+R,Math.min(MX+MW-R,q.x)), ny=Math.max(MY+R,Math.min(MY+MH-R,q.y));
+    if(!bolas.some(o=>o!==b&&!o.dentro&&Math.hypot(o.x-nx,o.y-ny)<2*R)&&!TRONERAS.some(([tx,ty])=>Math.hypot(nx-tx,ny-ty)<RT+R)){ b.x=nx; b.y=ny; } return; }
+  if(apunta){ apunta.x=q.x; apunta.y=q.y; }
+});
+cv.addEventListener("pointerup",()=>{
+  if(moviendoBlanca){ moviendoBlanca=false; return; }
+  if(!apunta) return; const dx=apunta.x0-apunta.x, dy=apunta.y0-apunta.y, d=Math.hypot(dx,dy); apunta=null;
+  if(d<8) return; const pot=Math.min(18,d/9), ang=Math.atan2(dy,dx); tirar(Math.cos(ang)*pot,Math.sin(ang)*pot);
+});
+cv.addEventListener("pointercancel",()=>{ apunta=null; moviendoBlanca=false; });
+$("empezar").onclick=empezar;
+$("stats").innerHTML="Partidas ganadas: "+leer();
+rack(); dibujar();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>

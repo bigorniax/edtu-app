@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Dino Neón</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;background:#02030a;color:#eaf6ff}
+  #wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{display:block;max-width:100%;max-height:100%;border-radius:12px;touch-action:none;
+    box-shadow:0 0 28px rgba(182,255,0,.22),inset 0 0 40px rgba(182,255,0,.05)}
+  #menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(2,3,10,.92);text-align:center;padding:20px}
+  #menu h1{font-size:40px;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #fff,0 0 18px #b6ff00,0 0 40px #b6ff00}
+  #menu p{margin:14px 0 22px;color:#cfe8b0;line-height:1.6;font-size:16px;max-width:460px}
+  #menu button{cursor:pointer;padding:16px 42px;border-radius:14px;border:2px solid #b6ff00;background:rgba(0,0,0,.6);color:#fff;font-size:20px;font-weight:900;letter-spacing:2px;box-shadow:0 0 14px #b6ff00}
+  #menu .stats{margin-top:18px;color:#ffd12e;font-weight:800;line-height:1.7}
+  #menu .teclas{margin-top:10px;color:#9aa;font-size:13px}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="720" height="300"></canvas>
+  <div id="menu">
+    <h1>DINO NEÓN</h1>
+    <p>Corre todo lo que puedas. Salta los cactus y agáchate cuando vengan pájaros volando bajo. Cada vez va más rápido.</p>
+    <button id="empezar">JUGAR</button>
+    <div class="teclas">ESPACIO o ▲ para saltar · ▼ para agacharte · en el celular: toca arriba para saltar, abajo para agacharte</div>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+const W=cv.width, H=cv.height, PISO=240;
+const CLAVE="edtu_dino_mejor";
+function leer(){ try{ return parseInt(localStorage.getItem(CLAVE)||"0",10)||0; }catch(e){ return 0; } }
+function guardar(v){ try{ localStorage.setItem(CLAVE,String(v)); }catch(e){} }
+let audio=null;
+function tono(f,d,tipo,vol,subida){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
+  const o=audio.createOscillator(), g=audio.createGain(); o.type=tipo||"square"; const t=audio.currentTime;
+  o.frequency.setValueAtTime(f,t); if(subida) o.frequency.exponentialRampToValueAtTime(f*subida,t+d);
+  g.gain.setValueAtTime(vol||0.07,t); g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t+d); }catch(e){} }
+
+let dino, obst=[], vel, dist, prox, estado="menu", raf=null, nubes=[], estrellas=[], suelo=[], esperandoOtra=false, finNuevo=false, quiereSaltar=false, agacha=false, hito=100, flash=0;
+for(let i=0;i<40;i++) estrellas.push({x:Math.random()*W,y:Math.random()*PISO*0.7,r:Math.random()*1.5+0.3});
+for(let i=0;i<30;i++) suelo.push({x:Math.random()*W,w:2+Math.random()*10});
+
+function empezar(){
+  $("menu").style.display="none"; esperandoOtra=false;
+  dino={x:70,y:PISO,vy:0,enSuelo:true,paso:0}; obst=[]; vel=6.2; dist=0; prox=60; hito=100; nubes=[];
+  estado="jugando"; cancelAnimationFrame(raf); raf=requestAnimationFrame(paso);
+}
+function cajaDino(){ return agacha&&dino.enSuelo ? {x:dino.x-4,y:dino.y-26,w:52,h:26} : {x:dino.x+4,y:dino.y-50,w:34,h:50}; }
+function nuevoObstaculo(){
+  const p=Math.random(), puntos=dist/10;
+  if(puntos>300 && p<0.25){ const alto=[PISO-30,PISO-58,PISO-90][Math.floor(Math.random()*3)]; obst.push({tipo:"pajaro",x:W+20,y:alto,w:40,h:24,ala:0}); }
+  else { const n=1+Math.floor(Math.random()*Math.min(3,1+puntos/250)), grande=Math.random()<0.4; obst.push({tipo:"cactus",x:W+20,y:PISO,w:n*(grande?22:16)+(n-1)*4,h:grande?48:34,n,grande}); }
+  const minimo=Math.max(42,90-vel*3);
+  prox=minimo+Math.random()*70;
+}
+function choca(a,b){ return a.x<b.x+b.w && a.x+a.w>b.x && a.y<b.y+b.h && a.y+a.h>b.y; }
+function paso(){
+  raf=requestAnimationFrame(paso);
+  if(estado==="jugando"){
+    vel=Math.min(16,vel+0.0016); dist+=vel;
+    if(quiereSaltar && dino.enSuelo){ dino.vy=-13.2; dino.enSuelo=false; tono(560,0.07,"square",0.04,1.5); }
+    dino.vy+= agacha&&!dino.enSuelo ? 2.2 : 0.75;   // agacharse en el aire te baja rapido
+    dino.y+=dino.vy; if(dino.y>=PISO){ dino.y=PISO; dino.vy=0; dino.enSuelo=true; }
+    dino.paso+=vel*0.05;
+    prox--; if(prox<=0) nuevoObstaculo();
+    obst.forEach(o=>{ o.x-=vel+(o.tipo==="pajaro"?1:0); o.ala+=0.2; }); obst=obst.filter(o=>o.x>-80);
+    const c=cajaDino();
+    for(const o of obst){ const b=o.tipo==="cactus"?{x:o.x+3,y:o.y-o.h+4,w:o.w-6,h:o.h-4}:{x:o.x+4,y:o.y,w:o.w-8,h:o.h-6}; if(choca(c,b)){ fin(); break; } }
+    const pts=Math.floor(dist/10); if(pts>=hito){ hito+=100; flash=30; tono(880,0.08,"triangle",0.06); setTimeout(()=>tono(1175,0.1,"triangle",0.06),90); }
+    if(Math.random()<0.006) nubes.push({x:W+40,y:30+Math.random()*90,w:40+Math.random()*50});
+    nubes.forEach(n=>n.x-=vel*0.25); nubes=nubes.filter(n=>n.x>-120);
+    suelo.forEach(s=>{ s.x-=vel; if(s.x<-12){ s.x=W+Math.random()*40; s.w=2+Math.random()*10; } });
+  }
+  if(flash>0) flash--;
+  dibujar();
+}
+function fin(){ estado="fin"; const pts=Math.floor(dist/10); finNuevo=pts>leer(); if(finNuevo) guardar(pts); tono(140,0.4,"sawtooth",0.08,0.4); setTimeout(()=>esperandoOtra=true,500); }
+
+function dibujar(){
+  const pts=Math.floor(dist/10), noche=Math.floor(pts/700)%2===1;
+  ctx.fillStyle=noche?"#01010a":"#03070c"; ctx.fillRect(0,0,W,H);
+  if(noche){ ctx.fillStyle="rgba(255,255,255,.7)"; estrellas.forEach(s=>ctx.fillRect(s.x,s.y,s.r,s.r)); ctx.fillStyle="#eaf6ff"; ctx.shadowColor="#fff"; ctx.shadowBlur=20; ctx.beginPath(); ctx.arc(W-90,60,18,0,7); ctx.fill(); ctx.shadowBlur=0; }
+  ctx.strokeStyle="rgba(0,204,255,.25)"; ctx.lineWidth=2; nubes.forEach(n=>{ ctx.beginPath(); ctx.ellipse(n.x,n.y,n.w/2,10,0,0,7); ctx.stroke(); });
+  // suelo
+  ctx.strokeStyle="#b6ff00"; ctx.lineWidth=2; ctx.shadowColor="#b6ff00"; ctx.shadowBlur=8; ctx.beginPath(); ctx.moveTo(0,PISO+1); ctx.lineTo(W,PISO+1); ctx.stroke(); ctx.shadowBlur=0;
+  ctx.fillStyle="rgba(182,255,0,.35)"; suelo.forEach(s=>ctx.fillRect(s.x,PISO+8+(s.w%3)*5,s.w,2));
+  // obstaculos
+  obst.forEach(o=>{
+    if(o.tipo==="cactus"){ ctx.strokeStyle="#2ee59d"; ctx.fillStyle="rgba(46,229,157,.15)"; ctx.lineWidth=2.5; ctx.shadowColor="#2ee59d"; ctx.shadowBlur=10;
+      const cw=(o.w-(o.n-1)*4)/o.n;
+      for(let i=0;i<o.n;i++){ const x=o.x+i*(cw+4), h=o.h-(i%2)*6;
+        ctx.beginPath(); if(ctx.roundRect) ctx.roundRect(x+cw*0.3,PISO-h,cw*0.4,h,4); else ctx.rect(x+cw*0.3,PISO-h,cw*0.4,h); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x+cw*0.3,PISO-h*0.55); ctx.lineTo(x,PISO-h*0.55); ctx.lineTo(x,PISO-h*0.8); ctx.moveTo(x+cw*0.7,PISO-h*0.45); ctx.lineTo(x+cw,PISO-h*0.45); ctx.lineTo(x+cw,PISO-h*0.72); ctx.stroke(); }
+      ctx.shadowBlur=0;
+    } else {
+      ctx.strokeStyle="#ff3bd4"; ctx.lineWidth=2.5; ctx.shadowColor="#ff3bd4"; ctx.shadowBlur=10; const al=Math.sin(o.ala)*10;
+      ctx.beginPath(); ctx.moveTo(o.x,o.y+12); ctx.lineTo(o.x+40,o.y+12); ctx.moveTo(o.x+14,o.y+12); ctx.lineTo(o.x+22,o.y+12-10-al); ctx.lineTo(o.x+28,o.y+12); ctx.moveTo(o.x,o.y+12); ctx.lineTo(o.x-6,o.y+8); ctx.stroke(); ctx.shadowBlur=0;
+    }
+  });
+  // dino
+  if(dino){
+    const c=cajaDino(), col="#b6ff00"; ctx.strokeStyle=col; ctx.fillStyle="rgba(182,255,0,.14)"; ctx.lineWidth=2.5; ctx.shadowColor=col; ctx.shadowBlur=14;
+    if(agacha&&dino.enSuelo){ ctx.beginPath(); ctx.rect(c.x,c.y+4,c.w-10,c.h-8); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.rect(c.x+c.w-18,c.y,18,14); ctx.fill(); ctx.stroke(); }
+    else { ctx.beginPath(); ctx.rect(c.x,c.y+16,26,24); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.rect(c.x+14,c.y,22,18); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(c.x,c.y+22); ctx.lineTo(c.x-10,c.y+16); ctx.stroke(); }
+    ctx.shadowBlur=0;
+    // patas que corren
+    const pata=dino.enSuelo?Math.sin(dino.paso*2.5)*5:0; ctx.beginPath(); ctx.moveTo(c.x+8,c.y+c.h-8); ctx.lineTo(c.x+8+pata,c.y+c.h); ctx.moveTo(c.x+18,c.y+c.h-8); ctx.lineTo(c.x+18-pata,c.y+c.h); ctx.stroke();
+    ctx.fillStyle=estado==="fin"?"#ff3b5c":"#02030a"; const ox=agacha&&dino.enSuelo?c.x+c.w-8:c.x+28; const oy=agacha&&dino.enSuelo?c.y+4:c.y+5; ctx.fillRect(ox,oy,4,4);
+  }
+  // puntaje
+  ctx.textAlign="right"; ctx.textBaseline="top"; ctx.font="900 20px Segoe UI,sans-serif";
+  ctx.fillStyle=flash>0&&Math.floor(flash/5)%2?"#fff":"#b6ff00"; ctx.fillText(String(pts).padStart(5,"0"),W-16,14);
+  ctx.fillStyle="#7a8597"; ctx.font="700 14px Segoe UI,sans-serif"; ctx.fillText("RÉCORD "+String(leer()).padStart(5,"0"),W-120,18);
+  if(estado==="fin"){ ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillStyle="#fff"; ctx.font="900 30px Segoe UI,sans-serif"; ctx.shadowColor="#ff3b5c"; ctx.shadowBlur=16; ctx.fillText("¡CHOCASTE!",W/2,H/2-40); ctx.shadowBlur=0;
+    ctx.fillStyle=finNuevo?"#b6ff00":"#7fc8e8"; ctx.font="700 16px Segoe UI,sans-serif"; ctx.fillText((finNuevo?"¡NUEVO RÉCORD! ":"")+pts+" puntos · toca o aprieta ESPACIO",W/2,H/2-6); }
+}
+
+addEventListener("keydown",e=>{
+  const k=e.key;
+  if(esperandoOtra && (k===" "||k==="Enter"||k==="ArrowUp")){ e.preventDefault(); empezar(); return; }
+  if(k===" "||k==="ArrowUp"||k==="w"||k==="W"){ e.preventDefault(); quiereSaltar=true; }
+  if(k==="ArrowDown"||k==="s"||k==="S"){ e.preventDefault(); agacha=true; }
+});
+addEventListener("keyup",e=>{ const k=e.key; if(k===" "||k==="ArrowUp"||k==="w"||k==="W") quiereSaltar=false; if(k==="ArrowDown"||k==="s"||k==="S") agacha=false; });
+cv.addEventListener("pointerdown",e=>{ if(esperandoOtra){ empezar(); return; } const r=cv.getBoundingClientRect(), y=(e.clientY-r.top)*(H/r.height); if(y>H*0.6) agacha=true; else quiereSaltar=true; });
+["pointerup","pointercancel"].forEach(t=>cv.addEventListener(t,()=>{ quiereSaltar=false; agacha=false; }));
+$("empezar").onclick=empezar;
+$("stats").innerHTML="Récord: "+leer()+" puntos";
+dibujar();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>
