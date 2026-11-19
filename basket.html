@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Basket Neón</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;background:#02030a;color:#eaf6ff}
+  #wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{display:block;max-width:100%;max-height:100%;border-radius:12px;touch-action:none;cursor:crosshair;
+    box-shadow:0 0 28px rgba(255,138,26,.25),inset 0 0 40px rgba(255,138,26,.05)}
+  #menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(2,3,10,.92);text-align:center;padding:20px}
+  #menu h1{font-size:40px;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #fff,0 0 18px #ff8a1a,0 0 40px #ff8a1a}
+  #menu p{margin:14px 0 22px;color:#f3c79c;line-height:1.6;font-size:16px;max-width:460px}
+  #menu button{cursor:pointer;padding:16px 42px;border-radius:14px;border:2px solid #ff8a1a;background:rgba(0,0,0,.6);color:#fff;font-size:20px;font-weight:900;letter-spacing:2px;box-shadow:0 0 14px #ff8a1a}
+  #menu .stats{margin-top:18px;color:#ffd12e;font-weight:800;line-height:1.7}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="640" height="480"></canvas>
+  <div id="menu">
+    <h1>BASKET NEÓN</h1>
+    <p>60 segundos para encestar todo lo que puedas. Arrastra hacia atrás desde la pelota y suelta. Si entra limpia (sin tocar el aro) vale 3, si toca el aro vale 2. Tres seguidas y te prendes fuego: dobles puntos.</p>
+    <button id="empezar">JUGAR</button>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+const W=cv.width, H=cv.height, R=14, G=0.32, SUELO=H-30;
+const CLAVE="edtu_basket_mejor";
+function leer(){ try{ return parseInt(localStorage.getItem(CLAVE)||"0",10)||0; }catch(e){ return 0; } }
+function guardar(v){ try{ localStorage.setItem(CLAVE,String(v)); }catch(e){} }
+let audio=null;
+function tono(f,d,tipo,vol,subida){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
+  const o=audio.createOscillator(), g=audio.createGain(); o.type=tipo||"square"; const t=audio.currentTime;
+  o.frequency.setValueAtTime(f,t); if(subida) o.frequency.exponentialRampToValueAtTime(f*subida,t+d);
+  g.gain.setValueAtTime(vol||0.07,t); g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t+d); }catch(e){} }
+
+// aro: punta de adelante y de atras, y el tablero
+let aro={x:520,y:200,ancho:56,vx:0}, bola, puntos=0, racha=0, fuego=false, tiempo=60, t0=0, estado="menu", apunta=null, raf=null, partes=[], textos=[], esperandoOtra=false, finNuevo=false, red=0;
+
+function puntas(){ return [{x:aro.x-aro.ancho/2,y:aro.y},{x:aro.x+aro.ancho/2,y:aro.y}]; }
+function tablero(){ return {x:aro.x+aro.ancho/2+8,y1:aro.y-90,y2:aro.y+16}; }
+function nuevaBola(){
+  const lejos=Math.min(1,puntos/40);
+  bola={x:70+Math.random()*(150+lejos*120),y:SUELO-R-Math.random()*120,vx:0,vy:0,vuela:false,toco:false,adentro:false,listo:false,t:0};
+}
+function empezar(){
+  $("menu").style.display="none"; esperandoOtra=false;
+  puntos=0; racha=0; fuego=false; t0=performance.now(); tiempo=60; aro={x:520,y:200,ancho:56,vx:0}; partes=[]; textos=[];
+  nuevaBola(); estado="jugando"; cancelAnimationFrame(raf); raf=requestAnimationFrame(paso);
+}
+
+function rebotaPunto(p,rp){
+  const dx=bola.x-p.x, dy=bola.y-p.y, d=Math.hypot(dx,dy);
+  if(d<R+rp && d>0){ const nx=dx/d, ny=dy/d; bola.x=p.x+nx*(R+rp); bola.y=p.y+ny*(R+rp);
+    const vn=bola.vx*nx+bola.vy*ny; if(vn<0){ bola.vx-=1.55*vn*nx; bola.vy-=1.55*vn*ny; bola.toco=true; tono(300,0.04,"square",0.04); } }
+}
+function fisica(){
+  const sub=4;
+  for(let s=0;s<sub;s++){
+    bola.vy+=G/sub; bola.x+=bola.vx/sub; bola.y+=bola.vy/sub;
+    const antesY=bola.y-bola.vy/sub;
+    puntas().forEach(p=>rebotaPunto(p,4));
+    const tb=tablero();
+    if(bola.x+R>tb.x && bola.x-R<tb.x+6 && bola.y>tb.y1 && bola.y<tb.y2){ if(bola.vx>0){ bola.x=tb.x-R; bola.vx=-bola.vx*0.6; bola.toco=true; tono(220,0.05,"square",0.04); } }
+    // ¿cruzo el aro hacia abajo por dentro?
+    const [a,b]=puntas();
+    if(!bola.adentro && antesY<aro.y && bola.y>=aro.y && bola.x>a.x+4 && bola.x<b.x-4 && bola.vy>0){ bola.adentro=true; enceste(); }
+    if(bola.y>SUELO-R){ bola.y=SUELO-R; bola.vy=-bola.vy*0.5; bola.vx*=0.8; }
+    if(bola.x<R){ bola.x=R; bola.vx=-bola.vx*0.6; }
+  }
+  bola.t++;
+  if(bola.x>W+40 || bola.t>260 || (bola.y>=SUELO-R-1 && Math.abs(bola.vy)<1.2 && bola.t>40)){
+    if(!bola.adentro){ racha=0; fuego=false; }
+    nuevaBola();
+  }
+}
+function enceste(){
+  const limpia=!bola.toco; let p=limpia?3:2; racha++; if(racha>=3) fuego=true; if(fuego) p*=2;
+  puntos+=p; red=12;
+  textos.push({x:aro.x,y:aro.y-40,t:(limpia?"¡LIMPIA! ":"")+"+"+p+(fuego?" 🔥":""),vida:50});
+  [660,880,1100].forEach((f,i)=>setTimeout(()=>tono(f,0.1,"triangle",0.07),i*70));
+  for(let i=0;i<24;i++){ const ang=Math.random()*7, v=Math.random()*4+1; partes.push({x:aro.x,y:aro.y,vx:Math.cos(ang)*v,vy:Math.sin(ang)*v,vida:35,col:fuego?"#ff8a1a":"#ffd12e"}); }
+  if(puntos>=12) aro.vx=aro.vx||1.2;           // el aro empieza a moverse
+}
+
+function paso(){
+  raf=requestAnimationFrame(paso);
+  if(estado==="jugando"){
+    tiempo=Math.max(0,60-(performance.now()-t0)/1000);
+    if(aro.vx){ aro.x+=aro.vx*(1+Math.min(1.5,puntos/60)); if(aro.x<400||aro.x>570) aro.vx=-aro.vx; }
+    if(bola.vuela) fisica();
+    if(tiempo<=0 && !bola.vuela){ fin(); }
+    else if(tiempo<=0 && bola.vuela && bola.t>200){ fin(); }
+  }
+  if(red>0) red--;
+  partes.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=0.12; p.vida--; }); partes=partes.filter(p=>p.vida>0);
+  textos.forEach(t=>{ t.y-=0.7; t.vida--; }); textos=textos.filter(t=>t.vida>0);
+  dibujar();
+}
+function fin(){ estado="fin"; finNuevo=puntos>leer(); if(finNuevo) guardar(puntos); setTimeout(()=>esperandoOtra=true,600); tono(180,0.6,"sawtooth",0.07,0.5); }
+
+function fuerza(){ const dx=apunta.x0-apunta.x, dy=apunta.y0-apunta.y, d=Math.hypot(dx,dy), p=Math.min(19,d/7.5); return {vx:d?dx/d*p:0,vy:d?dy/d*p:0}; }
+function dibujar(){
+  ctx.fillStyle="#02030a"; ctx.fillRect(0,0,W,H);
+  // cancha
+  ctx.strokeStyle="rgba(255,138,26,.35)"; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(0,SUELO); ctx.lineTo(W,SUELO); ctx.stroke();
+  ctx.strokeStyle="rgba(255,138,26,.12)"; ctx.beginPath(); ctx.arc(aro.x,SUELO,300,Math.PI,Math.PI*1.5); ctx.stroke();
+  // tablero, poste y aro
+  const tb=tablero();
+  ctx.strokeStyle="#eaf6ff"; ctx.lineWidth=3; ctx.shadowColor="#0cf"; ctx.shadowBlur=12; ctx.strokeRect(tb.x,tb.y1,6,tb.y2-tb.y1); ctx.shadowBlur=0;
+  ctx.strokeStyle="rgba(234,246,255,.3)"; ctx.beginPath(); ctx.moveTo(tb.x+3,tb.y2); ctx.lineTo(tb.x+3,SUELO); ctx.stroke();
+  ctx.strokeStyle="rgba(0,204,255,.4)"; ctx.strokeRect(tb.x-24,aro.y-46,24,30);
+  // red
+  const [a,b]=puntas(), estira=red>0?10:0;
+  ctx.strokeStyle="rgba(234,246,255,.55)"; ctx.lineWidth=1.5;
+  for(let i=0;i<=4;i++){ const x=a.x+(b.x-a.x)*i/4; ctx.beginPath(); ctx.moveTo(x,aro.y); ctx.lineTo(aro.x+(x-aro.x)*0.55,aro.y+40+estira); ctx.stroke(); }
+  ctx.beginPath(); ctx.moveTo(aro.x-(aro.ancho*0.4),aro.y+20+estira/2); ctx.lineTo(aro.x+(aro.ancho*0.4),aro.y+20+estira/2); ctx.stroke();
+  // bola (detras del aro de adelante)
+  if(estado!=="menu"){
+    ctx.fillStyle=fuego?"#ff6a00":"#ff8a1a"; ctx.shadowColor=fuego?"#ffd12e":"#ff8a1a"; ctx.shadowBlur=fuego?26:14;
+    ctx.beginPath(); ctx.arc(bola.x,bola.y,R,0,7); ctx.fill(); ctx.shadowBlur=0;
+    ctx.strokeStyle="rgba(0,0,0,.5)"; ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(bola.x-R,bola.y); ctx.lineTo(bola.x+R,bola.y); ctx.moveTo(bola.x,bola.y-R); ctx.lineTo(bola.x,bola.y+R); ctx.stroke();
+    if(fuego && bola.vuela) for(let i=0;i<2;i++) partes.push({x:bola.x,y:bola.y,vx:(Math.random()-0.5),vy:(Math.random()-0.5),vida:18,col:"#ff8a1a"});
+  }
+  ctx.strokeStyle="#ff3b5c"; ctx.lineWidth=4; ctx.shadowColor="#ff3b5c"; ctx.shadowBlur=14; ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); ctx.shadowBlur=0;
+  // linea de tiro: solo los primeros puntos de la curva
+  if(apunta && estado==="jugando"){
+    const f=fuerza(); let x=bola.x, y=bola.y, vx=f.vx, vy=f.vy;
+    for(let i=0;i<14;i++){ for(let k=0;k<3;k++){ vy+=G; x+=vx; y+=vy; } ctx.fillStyle="rgba(255,209,46,"+(1-i/14)+")"; ctx.beginPath(); ctx.arc(x,y,3,0,7); ctx.fill(); }
+  }
+  partes.forEach(p=>{ ctx.globalAlpha=Math.max(0,p.vida/35); ctx.fillStyle=p.col; ctx.fillRect(p.x-2,p.y-2,4,4); }); ctx.globalAlpha=1;
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  textos.forEach(t=>{ ctx.globalAlpha=Math.min(1,t.vida/20); ctx.fillStyle="#ffd12e"; ctx.font="900 20px Segoe UI,sans-serif"; ctx.fillText(t.t,t.x,t.y); }); ctx.globalAlpha=1;
+  // marcador
+  ctx.font="900 28px Segoe UI,sans-serif"; ctx.fillStyle="#fff"; ctx.shadowColor="#ff8a1a"; ctx.shadowBlur=12; ctx.fillText(String(puntos),W/2,32); ctx.shadowBlur=0;
+  ctx.font="800 16px Segoe UI,sans-serif"; ctx.textAlign="left"; ctx.fillStyle=tiempo<10?"#ff3b5c":"#7fc8e8"; ctx.fillText("⏱ "+Math.ceil(tiempo),16,32);
+  ctx.textAlign="right"; ctx.fillStyle=fuego?"#ff8a1a":"#7fc8e8"; ctx.fillText(fuego?"🔥 EN LLAMAS":"racha "+racha,W-16,32);
+  if(estado==="fin"){
+    ctx.fillStyle="rgba(0,0,0,.72)"; ctx.fillRect(0,0,W,H); ctx.textAlign="center";
+    ctx.fillStyle="#fff"; ctx.font="900 34px Segoe UI,sans-serif"; ctx.shadowColor="#ff8a1a"; ctx.shadowBlur=18; ctx.fillText("¡TIEMPO!",W/2,H/2-60); ctx.shadowBlur=0;
+    ctx.fillStyle="#ffd12e"; ctx.font="800 26px Segoe UI,sans-serif"; ctx.fillText(puntos+" puntos",W/2,H/2-14);
+    ctx.fillStyle=finNuevo?"#b6ff00":"#7fc8e8"; ctx.font="700 17px Segoe UI,sans-serif"; ctx.fillText(finNuevo?"¡NUEVO RÉCORD!":"Récord: "+leer(),W/2,H/2+22);
+    ctx.fillStyle="#7fc8e8"; ctx.font="600 15px Segoe UI,sans-serif"; ctx.fillText("toca o aprieta ESPACIO para volver a jugar",W/2,H/2+62);
+  }
+}
+
+function punto(e){ const r=cv.getBoundingClientRect(); return {x:(e.clientX-r.left)*(W/r.width), y:(e.clientY-r.top)*(H/r.height)}; }
+cv.addEventListener("pointerdown",e=>{ if(esperandoOtra){ empezar(); return; } if(estado!=="jugando"||bola.vuela) return; const q=punto(e); apunta={x0:q.x,y0:q.y,x:q.x,y:q.y}; try{ cv.setPointerCapture(e.pointerId); }catch(x){} });
+cv.addEventListener("pointermove",e=>{ if(!apunta) return; const q=punto(e); apunta.x=q.x; apunta.y=q.y; });
+cv.addEventListener("pointerup",()=>{ if(!apunta) return; const f=fuerza(); apunta=null; if(Math.hypot(f.vx,f.vy)<2) return; bola.vx=f.vx; bola.vy=f.vy; bola.vuela=true; tono(260,0.06,"triangle",0.05); });
+cv.addEventListener("pointercancel",()=>{ apunta=null; });
+addEventListener("keydown",e=>{ if(esperandoOtra&&(e.key===" "||e.key==="Enter")){ e.preventDefault(); empezar(); } });
+$("empezar").onclick=empezar;
+$("stats").innerHTML="Récord de puntos: "+leer();
+dibujar();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>

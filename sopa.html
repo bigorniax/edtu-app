@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Sopa de Letras Neón</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;background:#02030a;color:#eaf6ff}
+  #wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{display:block;max-width:100%;max-height:100%;border-radius:12px;touch-action:none;
+    box-shadow:0 0 28px rgba(182,255,0,.2),inset 0 0 40px rgba(182,255,0,.05)}
+  #menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(2,3,10,.94);text-align:center;padding:20px}
+  #menu h1{font-size:38px;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #fff,0 0 18px #b6ff00,0 0 40px #0cf}
+  #menu p{margin:14px 0 22px;color:#cfe8b0;line-height:1.6;font-size:16px;max-width:460px}
+  #menu button{cursor:pointer;padding:16px 42px;border-radius:14px;border:2px solid #b6ff00;background:rgba(0,0,0,.6);color:#fff;font-size:20px;font-weight:900;letter-spacing:2px;box-shadow:0 0 14px #b6ff00}
+  #menu .stats{margin-top:18px;color:#ffd12e;font-weight:800;line-height:1.7}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="480" height="660"></canvas>
+  <div id="menu">
+    <h1>SOPA DE LETRAS</h1>
+    <p>Encuentra todas las palabras escondidas. Arrastra el dedo o el mouse desde la primera letra hasta la última. Pueden estar de lado, de arriba abajo o en diagonal. Desde la tercera sopa, también al revés.</p>
+    <button id="empezar">JUGAR</button>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+const W=cv.width, H=cv.height, N=12, C=W/N, GY=56;
+const CLAVE="edtu_sopa_mejor";
+const COLORES=["#b6ff00","#0cf","#ff3bd4","#ffd12e","#ff8a1a","#b46bff","#7fffd4","#ff5b6e","#8ab4ff","#ffe066"];
+
+const TEMAS={
+  "ANIMALES":["PERRO","GATO","CABALLO","DELFIN","TIBURON","ELEFANTE","JIRAFA","CONEJO","TORTUGA","ARAÑA","PINGUINO","CONDOR","PUMA","HUEMUL","BALLENA","LORO","ZORRO","LEON"],
+  "FRUTAS":["MANZANA","PLATANO","NARANJA","FRUTILLA","SANDIA","MELON","PIÑA","KIWI","UVA","PERA","CEREZA","DURAZNO","LIMON","MANGO","PALTA","FRAMBUESA","CIRUELA"],
+  "DEPORTES":["FUTBOL","TENIS","BASQUET","NATACION","RUGBY","VOLEIBOL","KARATE","CICLISMO","ESQUI","SURF","BOXEO","GOLF","HOCKEY","ATLETISMO","PATINAJE","REMO"],
+  "ESPACIO":["PLANETA","ESTRELLA","COMETA","LUNA","SOL","MARTE","SATURNO","JUPITER","GALAXIA","COHETE","ASTRONAUTA","ORBITA","METEORO","NEBULOSA","TIERRA","VENUS"],
+  "CHILE":["SANTIAGO","ANDES","VOLCAN","DESIERTO","PATAGONIA","EMPANADA","CUECA","COPIHUE","GLACIAR","ISLA","PASCUA","VALPARAISO","ATACAMA","PEBRE","MOTE","HUASO"],
+  "COLEGIO":["CUADERNO","LAPIZ","GOMA","MOCHILA","PIZARRA","PROFESOR","RECREO","LIBRO","REGLA","TIJERAS","ESTUCHE","CIENCIAS","HISTORIA","MUSICA","DIBUJO","PRUEBA"],
+  "COMPUTACION":["TECLADO","MOUSE","PANTALLA","CODIGO","ROBOT","INTERNET","JUEGO","ARCHIVO","CARPETA","PIXEL","PROGRAMA","BOTON","CONSOLA","SERVIDOR","WIFI","CHIP"],
+  "CUERPO":["CABEZA","BRAZO","PIERNA","CORAZON","PULMON","CEREBRO","HUESO","MANO","RODILLA","OREJA","NARIZ","BOCA","DIENTE","CODO","HOMBRO","ESPALDA"]
+};
+const LETRAS="AAAAABCDEEEEEFGHIIIIJKLLMNNÑOOOOPQRRSSSTTUUUVXYZ";
+
+function leer(){ try{ return parseInt(localStorage.getItem(CLAVE)||"0",10)||0; }catch(e){ return 0; } }
+function guardar(v){ try{ localStorage.setItem(CLAVE,String(v)); }catch(e){} }
+
+let audio=null;
+function tono(f,d,tipo,vol,subida){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
+  const o=audio.createOscillator(), g=audio.createGain(); o.type=tipo||"square"; const t=audio.currentTime;
+  o.frequency.setValueAtTime(f,t); if(subida) o.frequency.exponentialRampToValueAtTime(f*subida,t+d);
+  g.gain.setValueAtTime(vol||0.07,t); g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t+d); }catch(e){} }
+
+let grilla, palabras, tema, sel=null, encontradas=[], ronda=0, t0=0, listo=false, raf=null, chispas=[];
+
+function armar(){
+  ronda++;
+  const nombres=Object.keys(TEMAS); tema=nombres[Math.floor(Math.random()*nombres.length)];
+  const alReves=ronda>=3;
+  const dirs=[[1,0],[0,1],[1,1],[1,-1]].concat(alReves?[[-1,0],[0,-1],[-1,-1],[-1,1]]:[]);
+  const cantidad=Math.min(10,7+Math.floor(ronda/2));
+  for(let intento=0;intento<60;intento++){
+    grilla=Array.from({length:N},()=>Array(N).fill(""));
+    palabras=[];
+    const lista=TEMAS[tema].filter(p=>p.length<=N).sort(()=>Math.random()-0.5);
+    for(const p of lista){
+      if(palabras.length>=cantidad) break;
+      let puesta=false;
+      for(let k=0;k<200&&!puesta;k++){
+        const [dx,dy]=dirs[Math.floor(Math.random()*dirs.length)];
+        const x0=Math.floor(Math.random()*N), y0=Math.floor(Math.random()*N), x1=x0+dx*(p.length-1), y1=y0+dy*(p.length-1);
+        if(x1<0||x1>=N||y1<0||y1>=N) continue;
+        let ok=true; for(let i=0;i<p.length;i++){ const c=grilla[y0+dy*i][x0+dx*i]; if(c&&c!==p[i]){ ok=false; break; } }
+        if(!ok) continue;
+        for(let i=0;i<p.length;i++) grilla[y0+dy*i][x0+dx*i]=p[i];
+        palabras.push({p,x0,y0,x1,y1,hallada:false,col:COLORES[palabras.length%COLORES.length]}); puesta=true;
+      }
+    }
+    if(palabras.length>=cantidad) break;
+  }
+  for(let y=0;y<N;y++) for(let x=0;x<N;x++) if(!grilla[y][x]) grilla[y][x]=LETRAS[Math.floor(Math.random()*LETRAS.length)];
+  palabras.sort((a,b)=>a.p.localeCompare(b.p));
+  encontradas=[]; sel=null; listo=false; t0=performance.now(); chispas=[];
+}
+
+function celdaEn(px,py){ const x=Math.floor(px/C), y=Math.floor((py-GY)/C); if(x<0||x>=N||y<0||y>=N) return null; return [x,y]; }
+function lineaDe(a,b){
+  // la seleccion siempre es una linea recta: horizontal, vertical o diagonal exacta
+  let dx=b[0]-a[0], dy=b[1]-a[1];
+  if(dx===0&&dy===0) return [a];
+  const ax=Math.abs(dx), ay=Math.abs(dy);
+  if(ax>ay*2) dy=0; else if(ay>ax*2) dx=0; else { const m=Math.max(ax,ay); dx=Math.sign(dx)*m; dy=Math.sign(dy)*m; }
+  const n=Math.max(Math.abs(dx),Math.abs(dy)), sx=Math.sign(dx), sy=Math.sign(dy), out=[];
+  for(let i=0;i<=n;i++){ const x=a[0]+sx*i, y=a[1]+sy*i; if(x<0||x>=N||y<0||y>=N) break; out.push([x,y]); }
+  return out;
+}
+function revisar(celdas){
+  if(celdas.length<2) return;
+  const s=celdas.map(([x,y])=>grilla[y][x]).join(""), f=celdas[0], u=celdas[celdas.length-1];
+  const p=palabras.find(w=>!w.hallada && ((w.x0===f[0]&&w.y0===f[1]&&w.x1===u[0]&&w.y1===u[1])||(w.x0===u[0]&&w.y0===u[1]&&w.x1===f[0]&&w.y1===f[1])));
+  if(p){ p.hallada=true; encontradas.push(p); [660,880,1100].forEach((fq,i)=>setTimeout(()=>tono(fq,0.08,"sine",0.06),i*60));
+    celdas.forEach(([x,y])=>{ for(let k=0;k<4;k++) chispas.push({x:x*C+C/2,y:GY+y*C+C/2,vx:(Math.random()-0.5)*4,vy:(Math.random()-0.5)*4,vida:30,col:p.col}); });
+    if(palabras.every(w=>w.hallada)) ganar();
+  } else tono(180,0.08,"square",0.03);
+}
+function ganar(){
+  listo=true; guardar(leer()+1);
+  [523,659,784,1047,1319].forEach((f,i)=>setTimeout(()=>tono(f,0.14,"triangle",0.07),i*90));
+}
+
+function capsula(a,b,col,alfa){
+  const x1=a[0]*C+C/2, y1=GY+a[1]*C+C/2, x2=b[0]*C+C/2, y2=GY+b[1]*C+C/2;
+  ctx.globalAlpha=alfa; ctx.strokeStyle=col; ctx.lineCap="round"; ctx.lineWidth=C*0.78;
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); ctx.globalAlpha=1; ctx.lineCap="butt";
+}
+function dibujar(){
+  ctx.fillStyle="#02030a"; ctx.fillRect(0,0,W,H);
+  if(!grilla) return;
+  const seg=listo?0:Math.floor((performance.now()-t0)/1000);
+  ctx.textBaseline="middle"; ctx.font="900 18px Segoe UI,sans-serif"; ctx.textAlign="left"; ctx.fillStyle="#b6ff00"; ctx.fillText(tema,14,28);
+  ctx.textAlign="right"; ctx.fillStyle="#7fc8e8"; ctx.font="800 14px Segoe UI,sans-serif"; ctx.fillText((listo?"":Math.floor(seg/60)+":"+String(seg%60).padStart(2,"0")+"  ·  ")+encontradas.length+"/"+palabras.length,W-14,28);
+  encontradas.forEach(p=>capsula([p.x0,p.y0],[p.x1,p.y1],p.col,0.28));
+  if(sel){ const l=lineaDe(sel.a,sel.b); capsula(l[0],l[l.length-1],"#ffffff",0.22); }
+  ctx.textAlign="center"; ctx.font="800 22px Segoe UI,sans-serif";
+  for(let y=0;y<N;y++) for(let x=0;x<N;x++){
+    const enc=encontradas.find(p=>{ const n=Math.max(Math.abs(p.x1-p.x0),Math.abs(p.y1-p.y0)); for(let i=0;i<=n;i++){ if(p.x0+Math.sign(p.x1-p.x0)*i===x && p.y0+Math.sign(p.y1-p.y0)*i===y) return true; } return false; });
+    ctx.fillStyle=enc?"#fff":"#c5d3e0"; ctx.fillText(grilla[y][x],x*C+C/2,GY+y*C+C/2+1);
+  }
+  chispas.forEach(p=>{ ctx.globalAlpha=Math.max(0,p.vida/30); ctx.fillStyle=p.col; ctx.fillRect(p.x-2,p.y-2,4,4); }); ctx.globalAlpha=1;
+  // lista de palabras
+  const y0=GY+N*C+18; ctx.font="800 15px Segoe UI,sans-serif";
+  palabras.forEach((p,i)=>{ const col=i%3, fila=Math.floor(i/3), x=20+col*(W-40)/3, y=y0+fila*26;
+    ctx.textAlign="left"; ctx.fillStyle=p.hallada?p.col:"#9aa7b6"; ctx.fillText(p.p,x,y);
+    if(p.hallada){ const w=ctx.measureText(p.p).width; ctx.strokeStyle=p.col; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+w,y); ctx.stroke(); } });
+  if(listo){
+    ctx.fillStyle="rgba(0,0,0,.6)"; ctx.fillRect(0,GY+N*C/2-70,W,140); ctx.textAlign="center";
+    ctx.fillStyle="#fff"; ctx.font="900 32px Segoe UI,sans-serif"; ctx.shadowColor="#b6ff00"; ctx.shadowBlur=18; ctx.fillText("¡SOPA RESUELTA!",W/2,GY+N*C/2-20); ctx.shadowBlur=0;
+    ctx.fillStyle="#ffd12e"; ctx.font="700 16px Segoe UI,sans-serif"; ctx.fillText("sopas resueltas: "+leer()+" · toca para otra",W/2,GY+N*C/2+20);
+  }
+}
+function paso(){ raf=requestAnimationFrame(paso); chispas.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.vida--; }); chispas=chispas.filter(p=>p.vida>0); dibujar(); }
+
+function punto(e){ const r=cv.getBoundingClientRect(); return [(e.clientX-r.left)*(W/r.width),(e.clientY-r.top)*(H/r.height)]; }
+cv.addEventListener("pointerdown",e=>{ if(!grilla) return; if(listo){ armar(); return; } const c=celdaEn(...punto(e)); if(c){ sel={a:c,b:c}; tono(500,0.03,"triangle",0.03); try{ cv.setPointerCapture(e.pointerId); }catch(x){} } });
+cv.addEventListener("pointermove",e=>{ if(!sel) return; const c=celdaEn(...punto(e)); if(c) sel.b=c; });
+cv.addEventListener("pointerup",()=>{ if(!sel) return; revisar(lineaDe(sel.a,sel.b)); sel=null; });
+cv.addEventListener("pointercancel",()=>{ sel=null; });
+$("empezar").onclick=()=>{ $("menu").style.display="none"; ronda=0; armar(); cancelAnimationFrame(raf); raf=requestAnimationFrame(paso); };
+$("stats").innerHTML="Sopas resueltas: "+leer();
+dibujar();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>
