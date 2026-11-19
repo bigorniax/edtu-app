@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Sudoku Neón</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;background:#02030a;color:#eaf6ff}
+  #wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{display:block;max-width:100%;max-height:100%;border-radius:12px;touch-action:none;
+    box-shadow:0 0 28px rgba(180,107,255,.22),inset 0 0 40px rgba(180,107,255,.05)}
+  #menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(2,3,10,.94);text-align:center;padding:20px}
+  #menu h1{font-size:40px;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #fff,0 0 18px #b46bff,0 0 40px #b46bff}
+  #menu p{margin:14px 0 22px;color:#cbbdf0;line-height:1.6;font-size:16px;max-width:460px}
+  #menu .nivelBtn{cursor:pointer;margin:6px;padding:14px 30px;border-radius:14px;border:2px solid #b46bff;background:rgba(0,0,0,.6);color:#fff;font-size:18px;font-weight:900;letter-spacing:2px;box-shadow:0 0 12px #b46bff}
+  #menu .stats{margin-top:18px;color:#ffd12e;font-weight:800;line-height:1.7}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="480" height="680"></canvas>
+  <div id="menu">
+    <h1>SUDOKU NEÓN</h1>
+    <p>Completa la grilla para que cada fila, cada columna y cada cuadro de 3×3 tenga los números del 1 al 9 sin repetir. Todos los sudokus tienen una sola solución.</p>
+    <div><button class="nivelBtn" id="empezar" data-n="facil">FÁCIL</button><button class="nivelBtn" data-n="medio">MEDIO</button><button class="nivelBtn" data-n="dificil">DIFÍCIL</button></div>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+const W=cv.width, H=cv.height, C=50, GX=15, GY=56;
+const PISTAS={facil:40,medio:32,dificil:26};
+const NOMBRE={facil:"FÁCIL",medio:"MEDIO",dificil:"DIFÍCIL"};
+function leer(k){ try{ return parseInt(localStorage.getItem(k)||"0",10)||0; }catch(e){ return 0; } }
+function guardar(k,v){ try{ localStorage.setItem(k,String(v)); }catch(e){} }
+let audio=null;
+function tono(f,d,tipo,vol,subida){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
+  const o=audio.createOscillator(), g=audio.createGain(); o.type=tipo||"square"; const t=audio.currentTime;
+  o.frequency.setValueAtTime(f,t); if(subida) o.frequency.exponentialRampToValueAtTime(f*subida,t+d);
+  g.gain.setValueAtTime(vol||0.07,t); g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t+d); }catch(e){} }
+
+/* ---------- generar: llenar una grilla al azar y sacar numeros mientras siga habiendo UNA sola solucion ---------- */
+function puede(g,i,v){ const f=Math.floor(i/9), c=i%9, bf=f-f%3, bc=c-c%3;
+  for(let k=0;k<9;k++){ if(g[f*9+k]===v||g[k*9+c]===v) return false; if(g[(bf+Math.floor(k/3))*9+bc+k%3]===v) return false; } return true; }
+function llenar(g){
+  const i=g.indexOf(0); if(i<0) return true;
+  const nums=[1,2,3,4,5,6,7,8,9].sort(()=>Math.random()-0.5);
+  for(const v of nums) if(puede(g,i,v)){ g[i]=v; if(llenar(g)) return true; g[i]=0; }
+  return false;
+}
+function contarSoluciones(g,tope){
+  // elige la casilla con menos opciones: rapido
+  let mejor=-1, opciones=null;
+  for(let i=0;i<81;i++){ if(g[i]) continue; const op=[]; for(let v=1;v<=9;v++) if(puede(g,i,v)) op.push(v);
+    if(!op.length) return 0; if(!opciones||op.length<opciones.length){ mejor=i; opciones=op; if(op.length===1) break; } }
+  if(mejor<0) return 1;
+  let n=0; for(const v of opciones){ g[mejor]=v; n+=contarSoluciones(g,tope-n); g[mejor]=0; if(n>=tope) break; }
+  return n;
+}
+function generar(nivel){
+  const sol=Array(81).fill(0); llenar(sol);
+  const p=sol.slice(); const orden=[...Array(81).keys()].sort(()=>Math.random()-0.5);
+  let quedan=81;
+  for(const i of orden){
+    if(quedan<=PISTAS[nivel]) break;
+    const v=p[i]; p[i]=0;
+    if(contarSoluciones(p.slice(),2)!==1) p[i]=v; else quedan--;
+  }
+  return {sol, ini:p};
+}
+
+let sol, ini, val, notas, sel=-1, lapiz=false, errores=0, t0=0, ganado=false, nivel="facil", raf=null, chispas=[];
+function empezar(n){
+  nivel=n; $("menu").style.display="none";
+  const g=generar(n); sol=g.sol; ini=g.ini; val=ini.slice(); notas=Array.from({length:81},()=>new Set());
+  sel=-1; errores=0; t0=performance.now(); ganado=false; lapiz=false; chispas=[];
+  cancelAnimationFrame(raf); raf=requestAnimationFrame(paso);
+}
+function poner(v){
+  if(sel<0||ganado||ini[sel]) return;
+  if(v===0){ val[sel]=0; notas[sel].clear(); tono(300,0.04,"triangle",0.03); return; }
+  if(lapiz){ if(val[sel]) return; notas[sel].has(v)?notas[sel].delete(v):notas[sel].add(v); tono(700,0.03,"triangle",0.03); return; }
+  val[sel]=v; notas[sel].clear();
+  if(v!==sol[sel]){ errores++; tono(150,0.12,"square",0.05); }
+  else { tono(600+v*40,0.06,"sine",0.05);
+    // borrar ese numero de las notas de la misma fila, columna y cuadro
+    const f=Math.floor(sel/9), c=sel%9; for(let i=0;i<81;i++){ const ff=Math.floor(i/9), cc=i%9; if(ff===f||cc===c||(Math.floor(ff/3)===Math.floor(f/3)&&Math.floor(cc/3)===Math.floor(c/3))) notas[i].delete(v); }
+    if(val.every((x,i)=>x===sol[i])) ganar(); }
+}
+function pista(){ if(ganado) return; const vacias=[...Array(81).keys()].filter(i=>val[i]!==sol[i]); if(!vacias.length) return;
+  const i=sel>=0&&val[sel]!==sol[sel]?sel:vacias[Math.floor(Math.random()*vacias.length)]; sel=i; val[i]=sol[i]; notas[i].clear(); errores++; tono(880,0.1,"sine",0.05);
+  if(val.every((x,k)=>x===sol[k])) ganar(); }
+function ganar(){
+  ganado=true; const seg=Math.round((performance.now()-t0)/1000), k="edtu_sudoku_"+nivel; const m=leer(k); if(!m||seg<m) guardar(k,seg);
+  guardar("edtu_sudoku_mejor",leer("edtu_sudoku_mejor")+1);
+  [523,659,784,1047,1319].forEach((f,i)=>setTimeout(()=>tono(f,0.14,"triangle",0.07),i*90));
+  for(let i=0;i<100;i++){ const a=Math.random()*7, v=Math.random()*5+1; chispas.push({x:W/2,y:GY+225,vx:Math.cos(a)*v,vy:Math.sin(a)*v,vida:70,col:["#b46bff","#0cf","#ffd12e","#b6ff00"][i%4]}); }
+}
+
+const BOT=[]; // botones de abajo
+for(let v=1;v<=9;v++) BOT.push({v,x:GX+(v-1)*50,y:GY+460,w:46,h:52,txt:String(v)});
+BOT.push({v:0,x:GX,y:GY+522,w:142,h:44,txt:"BORRAR"},{v:"lapiz",x:GX+154,y:GY+522,w:142,h:44,txt:"LÁPIZ"},{v:"pista",x:GX+308,y:GY+522,w:142,h:44,txt:"PISTA"});
+function rect(x,y,w,h,r){ ctx.beginPath(); if(ctx.roundRect) ctx.roundRect(x,y,w,h,r); else ctx.rect(x,y,w,h); }
+function dibujar(){
+  ctx.fillStyle="#02030a"; ctx.fillRect(0,0,W,H);
+  if(!sol) return;
+  const seg=ganado?0:Math.floor((performance.now()-t0)/1000);
+  ctx.textBaseline="middle"; ctx.font="800 15px Segoe UI,sans-serif"; ctx.textAlign="left"; ctx.fillStyle="#b46bff"; ctx.fillText(NOMBRE[nivel],GX,28);
+  ctx.textAlign="center"; ctx.fillStyle=errores?"#ff5b6e":"#7a8597"; ctx.fillText("errores "+errores,W/2,28);
+  ctx.textAlign="right"; ctx.fillStyle="#7fc8e8"; ctx.fillText(ganado?"":Math.floor(seg/60)+":"+String(seg%60).padStart(2,"0"),W-GX,28);
+  const vs=sel>=0?val[sel]:0, fs=Math.floor(sel/9), cs=sel%9;
+  for(let i=0;i<81;i++){
+    const f=Math.floor(i/9), c=i%9, x=GX+c*C, y=GY+f*C;
+    let fondo="#070814";
+    if(sel>=0 && (f===fs||c===cs||(Math.floor(f/3)===Math.floor(fs/3)&&Math.floor(c/3)===Math.floor(cs/3)))) fondo="#0e0c22";
+    if(vs && val[i]===vs) fondo="#241640";
+    if(i===sel) fondo="#3a2366";
+    ctx.fillStyle=fondo; ctx.fillRect(x,y,C,C);
+    if(val[i]){ const malo=val[i]!==sol[i]; ctx.fillStyle=ini[i]?"#eaf6ff":malo?"#ff3b5c":"#b46bff"; ctx.font=(ini[i]?"800":"700")+" 26px Segoe UI,sans-serif"; ctx.textAlign="center"; ctx.fillText(String(val[i]),x+C/2,y+C/2+1); }
+    else if(notas[i].size){ ctx.fillStyle="#8f86a8"; ctx.font="600 11px Segoe UI,sans-serif"; ctx.textAlign="center"; notas[i].forEach(v=>{ ctx.fillText(String(v),x+8+((v-1)%3)*17,y+9+Math.floor((v-1)/3)*16); }); }
+  }
+  // lineas
+  for(let k=0;k<=9;k++){ ctx.strokeStyle=k%3===0?"#b46bff":"rgba(180,107,255,.22)"; ctx.lineWidth=k%3===0?2.5:1;
+    ctx.beginPath(); ctx.moveTo(GX+k*C,GY); ctx.lineTo(GX+k*C,GY+9*C); ctx.stroke(); ctx.beginPath(); ctx.moveTo(GX,GY+k*C); ctx.lineTo(GX+9*C,GY+k*C); ctx.stroke(); }
+  // botones
+  BOT.forEach(b=>{ const on=b.v==="lapiz"&&lapiz; const completo=typeof b.v==="number"&&b.v>0&&val.filter((x,i)=>x===b.v&&x===sol[i]).length===9;
+    ctx.fillStyle=on?"rgba(255,209,46,.2)":"rgba(255,255,255,.04)"; ctx.strokeStyle=on?"#ffd12e":completo?"rgba(180,107,255,.2)":"#b46bff"; ctx.lineWidth=1.5; rect(b.x,b.y,b.w,b.h,10); ctx.fill(); ctx.stroke();
+    ctx.fillStyle=completo?"rgba(255,255,255,.2)":"#fff"; ctx.font=(typeof b.v==="number"&&b.v>0?"800 24px":"800 14px")+" Segoe UI,sans-serif"; ctx.textAlign="center"; ctx.fillText(b.txt,b.x+b.w/2,b.y+b.h/2+1); });
+  chispas.forEach(p=>{ ctx.globalAlpha=Math.max(0,p.vida/70); ctx.fillStyle=p.col; ctx.fillRect(p.x-3,p.y-3,6,6); }); ctx.globalAlpha=1;
+  if(ganado){ ctx.fillStyle="rgba(0,0,0,.6)"; ctx.fillRect(0,GY+150,W,150); ctx.textAlign="center"; ctx.fillStyle="#fff"; ctx.font="900 32px Segoe UI,sans-serif"; ctx.shadowColor="#b46bff"; ctx.shadowBlur=18; ctx.fillText("¡SUDOKU RESUELTO!",W/2,GY+200); ctx.shadowBlur=0;
+    const m=leer("edtu_sudoku_"+nivel); ctx.fillStyle="#ffd12e"; ctx.font="700 16px Segoe UI,sans-serif"; ctx.fillText("mejor tiempo en "+NOMBRE[nivel]+": "+Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+" · toca para otro",W/2,GY+240); }
+}
+function paso(){ raf=requestAnimationFrame(paso); chispas.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=0.08; p.vida--; }); chispas=chispas.filter(p=>p.vida>0); dibujar(); }
+
+cv.addEventListener("pointerdown",e=>{
+  if(!sol) return; if(ganado){ empezar(nivel); return; }
+  const r=cv.getBoundingClientRect(), x=(e.clientX-r.left)*(W/r.width), y=(e.clientY-r.top)*(H/r.height);
+  if(x>=GX&&x<GX+9*C&&y>=GY&&y<GY+9*C){ sel=Math.floor((y-GY)/C)*9+Math.floor((x-GX)/C); tono(440,0.02,"triangle",0.02); return; }
+  const b=BOT.find(b=>x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h); if(!b) return;
+  if(b.v==="lapiz"){ lapiz=!lapiz; tono(520,0.04,"triangle",0.03); } else if(b.v==="pista") pista(); else poner(b.v);
+});
+addEventListener("keydown",e=>{
+  if(!sol||ganado) return; const k=e.key;
+  if(k>="1"&&k<="9"){ poner(+k); e.preventDefault(); }
+  else if(k==="Backspace"||k==="Delete"||k==="0"){ poner(0); e.preventDefault(); }
+  else if(k.toLowerCase()==="n"||k.toLowerCase()==="l"){ lapiz=!lapiz; }
+  else if(k.startsWith("Arrow")){ e.preventDefault(); if(sel<0) sel=40; else { let f=Math.floor(sel/9), c=sel%9; if(k==="ArrowUp") f=(f+8)%9; if(k==="ArrowDown") f=(f+1)%9; if(k==="ArrowLeft") c=(c+8)%9; if(k==="ArrowRight") c=(c+1)%9; sel=f*9+c; } }
+});
+document.querySelectorAll(".nivelBtn").forEach(b=>b.onclick=()=>empezar(b.dataset.n));
+const tiempos=["facil","medio","dificil"].map(n=>{ const m=leer("edtu_sudoku_"+n); return m?NOMBRE[n]+" "+Math.floor(m/60)+":"+String(m%60).padStart(2,"0"):null; }).filter(Boolean);
+$("stats").innerHTML="Sudokus resueltos: "+leer("edtu_sudoku_mejor")+(tiempos.length?"<br>mejores tiempos: "+tiempos.join(" · "):"");
+dibujar();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>

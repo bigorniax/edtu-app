@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Motos de Luz</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;background:#02030a;color:#eaf6ff}
+  #wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{display:block;max-width:100%;max-height:100%;border-radius:12px;touch-action:none;
+    box-shadow:0 0 28px rgba(0,204,255,.25),inset 0 0 40px rgba(0,204,255,.05)}
+  #menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(2,3,10,.92);text-align:center;padding:20px}
+  #menu h1{font-size:40px;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #fff,0 0 18px #0cf,0 0 40px #0cf}
+  #menu p{margin:14px 0 22px;color:#a8dcef;line-height:1.6;font-size:16px;max-width:470px}
+  #menu button{cursor:pointer;padding:16px 42px;border-radius:14px;border:2px solid #0cf;background:rgba(0,0,0,.6);color:#fff;font-size:20px;font-weight:900;letter-spacing:2px;box-shadow:0 0 14px #0cf}
+  #menu .stats{margin-top:18px;color:#ffd12e;font-weight:800;line-height:1.7}
+  #menu .teclas{margin-top:10px;color:#9aa;font-size:13px}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="640" height="504"></canvas>
+  <div id="menu">
+    <h1>MOTOS DE LUZ</h1>
+    <p>Tu moto deja una pared de luz. Las otras tres también. Si chocas con una pared o con una estela, quedas fuera. Gana la ronda el último que sigue andando. El primero en ganar 3 rondas gana el partido.</p>
+    <button id="empezar">JUGAR</button>
+    <div class="teclas">flechas o WASD para girar · en el celular desliza el dedo hacia donde quieras ir</div>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("cv"), ctx=cv.getContext("2d");
+const W=cv.width, H=cv.height, TOP=40, C=8, CW=W/C, CH=(H-TOP)/C;
+const CLAVE="edtu_motos_mejor";
+function leer(){ try{ return parseInt(localStorage.getItem(CLAVE)||"0",10)||0; }catch(e){ return 0; } }
+function guardar(v){ try{ localStorage.setItem(CLAVE,String(v)); }catch(e){} }
+let audio=null;
+function tono(f,d,tipo,vol,subida){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
+  const o=audio.createOscillator(), g=audio.createGain(); o.type=tipo||"square"; const t=audio.currentTime;
+  o.frequency.setValueAtTime(f,t); if(subida) o.frequency.exponentialRampToValueAtTime(f*subida,t+d);
+  g.gain.setValueAtTime(vol||0.07,t); g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t+d); }catch(e){} }
+
+const DIRS=[[1,0],[0,1],[-1,0],[0,-1]];
+const DATOS=[{nom:"TÚ",col:"#0cf"},{nom:"ROJA",col:"#ff3b5c"},{nom:"VERDE",col:"#b6ff00"},{nom:"AMARILLA",col:"#ffd12e"}];
+let grilla, motos, estado="menu", raf=null, acumulado=0, ultimo=0, tick=60, ronda=0, cuenta=0, pausa=0, msg="", ganadas=[0,0,0,0], chispas=[], esperandoOtra=false, finNuevo=false, colaGiros=[];
+
+function nuevaRonda(){
+  ronda++;
+  grilla=new Uint8Array(CW*CH);
+  const m=[[8,Math.floor(CH/2),0],[CW-9,Math.floor(CH/2),2],[Math.floor(CW/2),6,1],[Math.floor(CW/2),CH-7,3]];
+  motos=m.map(([x,y,d],i)=>({x,y,d,viva:true,i,col:DATOS[i].col}));
+  motos.forEach(mt=>grilla[mt.y*CW+mt.x]=mt.i+1);
+  colaGiros=[]; tick=Math.max(34,62-ronda*3); cuenta=150; msg="RONDA "+ronda; chispas=[];
+}
+function empezar(){
+  $("menu").style.display="none"; esperandoOtra=false;
+  ronda=0; ganadas=[0,0,0,0]; nuevaRonda(); estado="jugando"; ultimo=performance.now();
+  cancelAnimationFrame(raf); raf=requestAnimationFrame(paso);
+}
+const libre=(x,y)=>x>=0&&y>=0&&x<CW&&y<CH&&!grilla[y*CW+x];
+
+/* la compu: cuenta cuantas casillas libres puede alcanzar en cada direccion (hasta un tope) */
+function espacio(x,y,limite){
+  if(!libre(x,y)) return 0;
+  const vist=new Set([y*CW+x]), cola=[[x,y]]; let n=0;
+  while(cola.length && n<limite){ const [a,b]=cola.shift(); n++;
+    for(const [dx,dy] of DIRS){ const nx=a+dx, ny=b+dy, k=ny*CW+nx; if(libre(nx,ny)&&!vist.has(k)){ vist.add(k); cola.push([nx,ny]); } } }
+  return n;
+}
+function piensa(mt){
+  const yo=motos[0]; let mejor=mt.d, mv=-1e9;
+  for(const di of [mt.d,(mt.d+1)%4,(mt.d+3)%4]){
+    const [dx,dy]=DIRS[di], nx=mt.x+dx, ny=mt.y+dy;
+    if(!libre(nx,ny)) continue;
+    let v=espacio(nx,ny,420);
+    // un poco de ataque: acercarse a cortarle el paso al jugador
+    if(yo.viva){ const fx=yo.x+DIRS[yo.d][0]*6, fy=yo.y+DIRS[yo.d][1]*6; v-=Math.hypot(nx-fx,ny-fy)*0.6; }
+    let recto=0; for(let k=1;k<=4;k++) if(libre(mt.x+dx*k,mt.y+dy*k)) recto++; else break;
+    v+=recto*2 + (di===mt.d?3:0) + Math.random()*4;
+    if(v>mv){ mv=v; mejor=di; }
+  }
+  mt.d=mejor;
+}
+function avanzar(){
+  // giro del jugador (de a uno por paso, sin dar media vuelta)
+  const yo=motos[0];
+  while(colaGiros.length){ const d=colaGiros.shift(); if(d!==(yo.d+2)%4 && d!==yo.d){ yo.d=d; break; } }
+  motos.forEach(mt=>{ if(mt.viva && mt.i>0) piensa(mt); });
+  const destinos=motos.map(mt=>mt.viva?[mt.x+DIRS[mt.d][0],mt.y+DIRS[mt.d][1]]:null);
+  motos.forEach((mt,i)=>{
+    if(!mt.viva) return; const [nx,ny]=destinos[i];
+    const choqueFrente=destinos.some((d,j)=>j!==i&&d&&d[0]===nx&&d[1]===ny);
+    if(!libre(nx,ny)||choqueFrente){ mt.viva=false; explota(mt); }
+  });
+  motos.forEach((mt,i)=>{ if(!mt.viva) return; const [nx,ny]=destinos[i]; mt.x=nx; mt.y=ny; grilla[ny*CW+nx]=mt.i+1; });
+  const vivas=motos.filter(m=>m.viva);
+  if(!yo.viva && vivas.length>0 && !msg.startsWith("QUEDASTE")) msg="QUEDASTE FUERA…";
+  if(vivas.length<=1){
+    const g=vivas[0];
+    if(g){ ganadas[g.i]++; msg=(g.i===0?"¡GANASTE LA RONDA!":"GANÓ LA "+DATOS[g.i].nom); if(g.i===0) [660,880,1100].forEach((f,k)=>setTimeout(()=>tono(f,0.1,"triangle",0.07),k*80)); }
+    else msg="¡EMPATE!";
+    pausa=110;
+  }
+}
+function explota(mt){
+  tono(mt.i===0?120:200,0.4,"sawtooth",0.07,0.3);
+  for(let k=0;k<30;k++){ const a=Math.random()*7, v=Math.random()*4+1; chispas.push({x:mt.x*C+C/2,y:TOP+mt.y*C+C/2,vx:Math.cos(a)*v,vy:Math.sin(a)*v,vida:40,col:mt.col}); }
+  // su estela se apaga: deja espacio libre
+  setTimeout(()=>{ if(!grilla) return; for(let k=0;k<grilla.length;k++) if(grilla[k]===mt.i+1) grilla[k]=0; },700);
+}
+
+function paso(t){
+  raf=requestAnimationFrame(paso);
+  if(estado==="jugando"){
+    if(cuenta>0){ cuenta--; if(cuenta===0) msg=""; ultimo=t; }
+    else if(pausa>0){ pausa--; if(pausa===0){ const ganador=ganadas.findIndex(g=>g>=3); if(ganador>=0) fin(ganador); else nuevaRonda(); } }
+    else { acumulado+=t-ultimo; ultimo=t; const tk=motos[0].viva?tick:tick/4; let n=0; while(acumulado>=tk && n<12 && pausa===0){ acumulado-=tk; avanzar(); n++; } if(acumulado>tk*12) acumulado=0; }   // si quedaste fuera, el resto de la ronda va rapido
+  } else ultimo=t;
+  chispas.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.vx*=0.95; p.vy*=0.95; p.vida--; }); chispas=chispas.filter(p=>p.vida>0);
+  dibujar();
+}
+function fin(g){ estado="fin"; finNuevo=false; if(g===0){ guardar(leer()+1); finNuevo=true; } msg=g===0?"¡GANASTE EL PARTIDO!":"GANÓ LA MOTO "+DATOS[g].nom; setTimeout(()=>esperandoOtra=true,600); }
+
+function dibujar(){
+  ctx.fillStyle="#02030a"; ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle="rgba(0,204,255,.06)"; ctx.lineWidth=1;
+  for(let x=0;x<=CW;x+=4){ ctx.beginPath(); ctx.moveTo(x*C,TOP); ctx.lineTo(x*C,H); ctx.stroke(); }
+  for(let y=0;y<=CH;y+=4){ ctx.beginPath(); ctx.moveTo(0,TOP+y*C); ctx.lineTo(W,TOP+y*C); ctx.stroke(); }
+  ctx.strokeStyle="#0cf"; ctx.lineWidth=2; ctx.strokeRect(1,TOP+1,W-2,H-TOP-2);
+  if(grilla){
+    for(let y=0;y<CH;y++) for(let x=0;x<CW;x++){ const v=grilla[y*CW+x]; if(!v) continue; ctx.fillStyle=DATOS[v-1].col; ctx.globalAlpha=0.75; ctx.fillRect(x*C+1,TOP+y*C+1,C-2,C-2); }
+    ctx.globalAlpha=1;
+    motos.forEach(mt=>{ if(!mt.viva) return; ctx.fillStyle="#fff"; ctx.shadowColor=mt.col; ctx.shadowBlur=18; ctx.fillRect(mt.x*C-1,TOP+mt.y*C-1,C+2,C+2); ctx.shadowBlur=0; });
+  }
+  chispas.forEach(p=>{ ctx.globalAlpha=Math.max(0,p.vida/40); ctx.fillStyle=p.col; ctx.fillRect(p.x-2,p.y-2,4,4); }); ctx.globalAlpha=1;
+  // marcador
+  ctx.textBaseline="middle"; ctx.font="800 14px Segoe UI,sans-serif"; ctx.textAlign="left";
+  DATOS.forEach((d,i)=>{ const x=14+i*155; ctx.fillStyle=d.col; ctx.fillText(d.nom+"  "+"●".repeat(ganadas[i])+"○".repeat(Math.max(0,3-ganadas[i])),x,20); });
+  if(msg){ ctx.textAlign="center"; ctx.fillStyle="#fff"; ctx.font="900 28px Segoe UI,sans-serif"; ctx.shadowColor="#0cf"; ctx.shadowBlur=16; ctx.fillText(msg,W/2,TOP+(H-TOP)/2-20); ctx.shadowBlur=0;
+    if(cuenta>0){ ctx.font="900 40px Segoe UI,sans-serif"; ctx.fillStyle="#ffd12e"; ctx.fillText(String(Math.ceil(cuenta/50)),W/2,TOP+(H-TOP)/2+30); } }
+  if(estado==="fin"){ ctx.fillStyle="rgba(0,0,0,.55)"; ctx.fillRect(0,0,W,H); ctx.textAlign="center"; ctx.fillStyle="#fff"; ctx.font="900 32px Segoe UI,sans-serif"; ctx.fillText(msg,W/2,H/2-20);
+    ctx.fillStyle="#ffd12e"; ctx.font="700 16px Segoe UI,sans-serif"; ctx.fillText("partidos ganados: "+leer()+" · toca o aprieta ESPACIO",W/2,H/2+20); }
+}
+
+const TECLA={arrowright:0,d:0,arrowdown:1,s:1,arrowleft:2,a:2,arrowup:3,w:3};
+addEventListener("keydown",e=>{
+  const k=e.key.toLowerCase();
+  if(esperandoOtra&&(k===" "||k==="enter")){ e.preventDefault(); empezar(); return; }
+  if(TECLA[k]!==undefined){ e.preventDefault(); if(colaGiros.length<3) colaGiros.push(TECLA[k]); }
+});
+let dedo=null;
+cv.addEventListener("pointerdown",e=>{ if(esperandoOtra){ empezar(); return; } dedo={x:e.clientX,y:e.clientY}; });
+cv.addEventListener("pointermove",e=>{ if(!dedo) return; const dx=e.clientX-dedo.x, dy=e.clientY-dedo.y; if(Math.hypot(dx,dy)<24) return;
+  colaGiros.push(Math.abs(dx)>Math.abs(dy)?(dx>0?0:2):(dy>0?1:3)); dedo={x:e.clientX,y:e.clientY}; });
+["pointerup","pointercancel"].forEach(t=>cv.addEventListener(t,()=>{ dedo=null; }));
+$("empezar").onclick=empezar;
+$("stats").innerHTML="Partidos ganados: "+leer();
+dibujar();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>
