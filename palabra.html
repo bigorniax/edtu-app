@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDTU · Palabra Neón</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;font-family:"Segoe UI",system-ui,sans-serif;user-select:none;background:#02030a;color:#eaf6ff}
+  body{overflow-y:auto}
+  #juego{max-width:500px;margin:0 auto;padding:12px 10px 20px;display:flex;flex-direction:column;align-items:center;min-height:100%}
+  .arriba{width:100%;display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  .arriba h2{font-size:20px;letter-spacing:3px;text-shadow:0 0 10px #0cf}
+  #modo{font-size:12px;color:#7fc8e8;letter-spacing:1px;font-weight:700}
+  #tablero{display:grid;grid-template-rows:repeat(6,1fr);gap:6px;margin:6px 0 10px}
+  .fila{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+  .fila.sacude{animation:sacude .4s}
+  @keyframes sacude{20%,60%{transform:translateX(-6px)}40%,80%{transform:translateX(6px)}}
+  .letra{width:56px;height:56px;border:2px solid rgba(255,255,255,.14);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:900;text-transform:uppercase;transition:transform .15s}
+  .letra.llena{border-color:rgba(255,255,255,.4);transform:scale(1.05)}
+  .letra.verde{background:rgba(182,255,0,.22);border-color:#b6ff00;color:#eaffc0;box-shadow:0 0 14px rgba(182,255,0,.45)}
+  .letra.amarilla{background:rgba(255,209,46,.2);border-color:#ffd12e;color:#fff2c0;box-shadow:0 0 14px rgba(255,209,46,.4)}
+  .letra.gris{background:#15161c;border-color:#2a2c36;color:#777}
+  .letra.voltea{animation:voltea .45s ease both}
+  @keyframes voltea{0%{transform:rotateX(0)}50%{transform:rotateX(90deg)}100%{transform:rotateX(0)}}
+  #msg{min-height:26px;font-weight:800;color:#ffd12e;text-align:center;margin-bottom:6px}
+  #teclado{width:100%;display:flex;flex-direction:column;gap:6px}
+  .tfila{display:flex;justify-content:center;gap:5px}
+  .tecla{flex:1;max-width:42px;height:50px;border-radius:8px;border:1px solid rgba(0,204,255,.35);background:#0b0d16;color:#eaf6ff;font-size:15px;font-weight:800;cursor:pointer}
+  .tecla.ancha{max-width:68px;font-size:12px}
+  .tecla.verde{background:rgba(182,255,0,.3);border-color:#b6ff00}
+  .tecla.amarilla{background:rgba(255,209,46,.28);border-color:#ffd12e}
+  .tecla.gris{background:#15161c;color:#555;border-color:#22242c}
+  #botones{margin-top:12px;display:flex;gap:10px}
+  #botones button{cursor:pointer;padding:10px 16px;border-radius:10px;border:1.5px solid #0cf;background:rgba(0,0,0,.6);color:#fff;font-weight:800;font-size:13px}
+  #menu{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(2,3,10,.94);text-align:center;padding:20px;z-index:5}
+  #menu h1{font-size:40px;letter-spacing:4px;color:#fff;text-shadow:0 0 6px #fff,0 0 18px #0cf,0 0 40px #b6ff00}
+  #menu p{margin:14px 0 22px;color:#a8dcef;line-height:1.6;font-size:16px;max-width:460px}
+  #menu button{cursor:pointer;margin:6px;padding:14px 30px;border-radius:14px;border:2px solid #0cf;background:rgba(0,0,0,.6);color:#fff;font-size:18px;font-weight:900;letter-spacing:1px;box-shadow:0 0 12px #0cf}
+  #menu .stats{margin-top:18px;color:#ffd12e;font-weight:800;line-height:1.7}
+  @media (max-width:380px){ .letra{width:48px;height:48px;font-size:24px} }
+</style>
+</head>
+<body>
+<div id="juego">
+  <div class="arriba"><h2>PALABRA</h2><div id="modo"></div></div>
+  <div id="tablero"></div>
+  <div id="msg"></div>
+  <div id="teclado"></div>
+  <div id="botones"><button id="bOtra">OTRA PALABRA</button><button id="bMenu">MENÚ</button></div>
+</div>
+<div id="menu">
+  <h1>PALABRA NEÓN</h1>
+  <p>Adivina la palabra de 5 letras en 6 intentos. Después de cada intento, las letras se pintan: <b style="color:#b6ff00">verde</b> si está en su lugar, <b style="color:#ffd12e">amarillo</b> si está en la palabra pero en otro lugar, y gris si no está.</p>
+  <div><button id="empezar">PALABRA DEL DÍA</button><button id="libre">MODO LIBRE</button></div>
+  <div class="stats" id="stats"></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const CLAVE="edtu_palabra_mejor";   // palabras adivinadas
+function leerN(k){ try{ return parseInt(localStorage.getItem(k)||"0",10)||0; }catch(e){ return 0; } }
+function guardarN(k,v){ try{ localStorage.setItem(k,String(v)); }catch(e){} }
+function leerS(k){ try{ return localStorage.getItem(k)||""; }catch(e){ return ""; } }
+function guardarS(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+let audio=null;
+function tono(f,d,tipo,vol,subida){ try{ if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
+  const o=audio.createOscillator(), g=audio.createGain(); o.type=tipo||"square"; const t=audio.currentTime;
+  o.frequency.setValueAtTime(f,t); if(subida) o.frequency.exponentialRampToValueAtTime(f*subida,t+d);
+  g.gain.setValueAtTime(vol||0.07,t); g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t+d); }catch(e){} }
+
+const EXCLUIR=new Set(["NUBEA","MAIZE","POROT","WIFIS","OLEAS","RIOSS","UVASS","ESTES","CHINO","DRONE"]);   // no son palabras o mejor no usarlas
+const PALABRAS=("ARBOL AVION BARCO BRAZO BURRO CABRA CAMPO CARNE CARTA CERDO CIELO CINCO CLASE COMER CORTO CREMA CUEVA DULCE ENERO FLORA FOCAS FRUTA FUEGO GALLO GANSO GENTE "+
+ "GLOBO GORRA GOTAS GRANO GRUPO HIELO HOJAS HONGO HUEVO HUMOR ISLAS JUEGO JUGAR LAPIZ LECHE LENTO LIBRO LIMON LLAVE LUCES MANGO MANOS MARCO MELON MESAS METRO MONOS "+
+ "MONTE MOTOR MUNDO MUSEO NADAR NARIZ NIEVE NOCHE NUBES NUEVO OVEJA PADRE PALTA PAPEL PARED PATIO PATOS PECES PEINE PERLA PERRO PIANO PIEZA PILAS PIZZA PLATO PLAYA "+
+ "PLAZA POLLO PULPO PUNTO QUESO RADIO RAMAS RANAS RATON REINA RELOJ RISAS ROBOT ROCAS ROSAS RUEDA RUIDO SALSA SALTO SELVA SIETE SILLA SUELO TARDE TECHO TIGRE TORRE "+
+ "TRIGO TRUCO VACAS VALLE VELAS VERDE VIAJE VUELO YOGUR ZORRO BOTON LUNAS MARTE PLUMA TENIS BALON GOLES ARENA BOTAS CAJAS CALOR AMIGO ABRIL MARZO JUNIO JULIO LUNES "+
+ "OTOÑO MAGIA HADAS NINJA LETRA VOCAL SUMAR CIFRA CEBRA KOALA LLAMA CISNE CABLE DATOS CLAVE NIVEL VIDAS PODER BRAVO LISTO FELIZ GRITO BANDA RITMO NOTAS COLOR NEGRO "+
+ "DADOS NAIPE CARRO PISTA MAPAS TREN? FAROS BICHO CAMAS SOFAS TAZAS VASOS OLLAS FERIA FIEST? DUCHA JABON TOALL? CEPIL? PASTA SOPAS ARROZ POROT MAIZE TORTA GALLE? "+
+ "HELAD? MIELE? BANCO CALLE CERRO VOLCA? DESIE? PRADO SENDA CAMIN? RUTAS NORTE ESTES OESTE DIBUJ? PINTA FOTOS VIDEO ACTOR TEATR? CIRCO PAYAS? MAGOS TRUCO PELOTA "+
+ "SALUD MEDIC? DIETA FUERT? CORRE SALTA NADAN CANTO BAILE HIMNO PATRIA BANDE? ESCUDO CONDO? HUEMU? COPIH? CUECA PEBRE HUASO CHILE CHINO LLAMA ALPAC? VICUN? GUANA? "+
+ "MOUSE PIXEL CHIPS DISCO REDES WIFIS CODIG? NUBEA ROBOT DRONE CARGA BATER? PANEL BOMBA LASER RAYOS TRUEN? LLUVI? VIENT? NIEVE SOLAR LUNAR PLANE? COMET? ASTRO ORBIT? "+
+ "TIERR? MARES OLEAS RIOSS LAGOS PECES TIBUR? BALLE? DELFI? PULPO CANGR? ALMEJ? ERIZO FOCAS PINGU? GAVIO? CUERV? AGUIL? HALCO? BUHOS LOROS PAVOS GALLI? PATOS GANSO "+
+ "QUESO PANES TORTA DULCE SALAD? AZUCA? CACAO MENTA FRESA CEREZ? NUECE? PERAS MANGO PIÑAS UVASS KIWIS LIMON TOMAT? PAPAS CEBOL? CHOCL? ZAPAL? APIOS AJIES").split(/\s+/)
+ .filter(w=>/^[A-ZÑ]{5}$/.test(w) && !EXCLUIR.has(w));
+const LISTA=[...new Set(PALABRAS)];
+
+let secreta="", intentos=[], actual="", fin=false, modo="dia", estadoTeclas={}, ocupado=false;
+function palabraDelDia(){ const d=new Date(); const n=Math.floor((Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())-Date.UTC(2026,0,1))/86400000); return LISTA[((n*7919)%LISTA.length+LISTA.length)%LISTA.length]; }
+function hoy(){ const d=new Date(); return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate(); }
+
+function armarTablero(){
+  const t=$("tablero"); t.innerHTML="";
+  for(let f=0;f<6;f++){ const fila=document.createElement("div"); fila.className="fila"; for(let c=0;c<5;c++){ const l=document.createElement("div"); l.className="letra"; fila.appendChild(l); } t.appendChild(fila); }
+}
+const FILAS_T=["QWERTYUIOP","ASDFGHJKLÑ","⏎ZXCVBNM⌫"];
+function armarTeclado(){
+  const k=$("teclado"); k.innerHTML="";
+  FILAS_T.forEach(f=>{ const d=document.createElement("div"); d.className="tfila";
+    [...f].forEach(ch=>{ const b=document.createElement("button"); b.className="tecla"+(ch==="⏎"||ch==="⌫"?" ancha":""); b.textContent=ch==="⏎"?"ENVIAR":ch==="⌫"?"BORRAR":ch; b.dataset.k=ch;
+      b.onclick=()=>teclear(ch==="⏎"?"ENTER":ch==="⌫"?"BACK":ch); d.appendChild(b); }); k.appendChild(d); });
+}
+function pintarTeclas(){ document.querySelectorAll(".tecla").forEach(b=>{ const e=estadoTeclas[b.dataset.k]; b.classList.remove("verde","amarilla","gris"); if(e) b.classList.add(e); }); }
+function pintarActual(){
+  const fila=$("tablero").children[intentos.length]; if(!fila) return;
+  [...fila.children].forEach((l,i)=>{ l.textContent=actual[i]||""; l.classList.toggle("llena",!!actual[i]); });
+}
+function msg(t){ $("msg").textContent=t||""; }
+
+function evaluar(intento){
+  const res=Array(5).fill("gris"), quedan={};
+  for(let i=0;i<5;i++){ if(intento[i]===secreta[i]) res[i]="verde"; else quedan[secreta[i]]=(quedan[secreta[i]]||0)+1; }
+  for(let i=0;i<5;i++){ if(res[i]==="verde") continue; if(quedan[intento[i]]>0){ res[i]="amarilla"; quedan[intento[i]]--; } }
+  return res;
+}
+function teclear(k){
+  if(fin||ocupado) return;
+  if(k==="BACK"){ actual=actual.slice(0,-1); pintarActual(); return; }
+  if(k==="ENTER"){
+    if(actual.length<5){ sacude(); msg("Faltan letras"); return; }
+    if(!/[AEIOU]/.test(actual)){ sacude(); msg("Esa palabra no tiene vocales"); return; }
+    enviar(); return;
+  }
+  if(/^[A-ZÑ]$/.test(k) && actual.length<5){ actual+=k; tono(500,0.02,"triangle",0.02); pintarActual(); msg(""); }
+}
+function sacude(){ const fila=$("tablero").children[intentos.length]; fila.classList.remove("sacude"); void fila.offsetWidth; fila.classList.add("sacude"); tono(150,0.08,"square",0.03); }
+function enviar(){
+  const intento=actual, res=evaluar(intento), fila=$("tablero").children[intentos.length];
+  intentos.push(intento); actual=""; ocupado=true;
+  res.forEach((r,i)=>setTimeout(()=>{ const l=fila.children[i]; l.classList.add("voltea"); setTimeout(()=>l.classList.add(r),200); tono(r==="verde"?880:r==="amarilla"?660:300,0.06,"sine",0.05);
+    const k=intento[i], antes=estadoTeclas[k]; if(r==="verde"||(r==="amarilla"&&antes!=="verde")||(!antes)) estadoTeclas[k]=r; },i*260));
+  setTimeout(()=>{ ocupado=false; pintarTeclas();
+    if(intento===secreta){ fin=true; const frases=["¡GENIAL!","¡INCREÍBLE!","¡MUY BIEN!","¡BIEN!","¡BUENA!","¡UFF, JUSTO!"]; msg(frases[intentos.length-1]+" La adivinaste en "+intentos.length);
+      guardarN(CLAVE,leerN(CLAVE)+1); guardarN("edtu_palabra_racha",leerN("edtu_palabra_racha")+1); if(modo==="dia") guardarS("edtu_palabra_dia",hoy()+"|"+intentos.join(","));
+      [523,659,784,1047].forEach((f,i)=>setTimeout(()=>tono(f,0.14,"triangle",0.07),i*90)); }
+    else if(intentos.length>=6){ fin=true; msg("Era: "+secreta); guardarN("edtu_palabra_racha",0); if(modo==="dia") guardarS("edtu_palabra_dia",hoy()+"|"+intentos.join(",")); tono(160,0.5,"sawtooth",0.06,0.5); }
+  },5*260+250);
+}
+function empezar(m){
+  modo=m; $("menu").style.display="none"; intentos=[]; actual=""; fin=false; estadoTeclas={}; msg("");
+  armarTablero(); armarTeclado();
+  if(m==="dia"){ secreta=palabraDelDia(); $("modo").textContent="PALABRA DEL DÍA";
+    const g=leerS("edtu_palabra_dia"); if(g.startsWith(hoy()+"|")){ // ya jugada hoy: mostrar lo que hiciste
+      g.split("|")[1].split(",").forEach(p=>{ actual=p; const res=evaluar(p), fila=$("tablero").children[intentos.length]; [...fila.children].forEach((l,i)=>{ l.textContent=p[i]; l.classList.add(res[i]); estadoTeclas[p[i]]=estadoTeclas[p[i]]==="verde"?"verde":res[i]; }); intentos.push(p); });
+      actual=""; fin=true; pintarTeclas(); msg("Ya jugaste la palabra de hoy · prueba el modo libre"); } }
+  else { let s; do{ s=LISTA[Math.floor(Math.random()*LISTA.length)]; } while(s===secreta && LISTA.length>1); secreta=s; $("modo").textContent="MODO LIBRE"; }
+}
+addEventListener("keydown",e=>{ if($("menu").style.display!=="none") return; const k=e.key;
+  if(k==="Enter"){ e.preventDefault(); teclear("ENTER"); } else if(k==="Backspace"){ e.preventDefault(); teclear("BACK"); }
+  else if(/^[a-zñA-ZÑ]$/.test(k)) teclear(k.toUpperCase()); });
+$("empezar").onclick=()=>empezar("dia"); $("libre").onclick=()=>empezar("libre");
+$("bOtra").onclick=()=>empezar("libre"); $("bMenu").onclick=()=>{ $("menu").style.display="flex"; pintaStats(); };
+function pintaStats(){ $("stats").innerHTML="Palabras adivinadas: "+leerN(CLAVE)+" · racha: "+leerN("edtu_palabra_racha"); }
+pintaStats(); armarTablero(); armarTeclado();
+
+/* 🖱️ Botones laterales del mouse: avisan a EDTU para volver atrás */
+["mousedown","mouseup","auxclick"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(e.button===3||e.button===4){ e.preventDefault(); e.stopPropagation();
+      if(ev==="mouseup"&&e.button===3){ try{ window.parent.postMessage({edtuAtras:1},"*"); }catch(x){} } }
+  }, true);
+});
+</script>
+</body>
+</html>
